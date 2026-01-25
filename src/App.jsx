@@ -15,7 +15,7 @@ import {
   Download,
 } from 'lucide-react';
 
-// API Constant
+// API Constant (Updated)
 const API_URL = 'https://script.google.com/macros/s/AKfycbzq7I4yROJqWqRAQA0PlF_GbCUdyhvNHy3ybD8V5rtYc4Vdt4a-D5LKR1HxLZjGiOO-1g/exec';
 
 // Default settings
@@ -27,6 +27,11 @@ const DEFAULT_SETTINGS = {
 };
 
 function App() {
+  // History State (Moved inside component)
+  const [historyList, setHistoryList] = useState([]); 
+  const [showHistoryModal, setShowHistoryModal] = useState(false); 
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false); 
+
   // Settings state
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
