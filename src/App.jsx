@@ -37,9 +37,14 @@ function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempSettings, setTempSettings] = useState(DEFAULT_SETTINGS);
   
-  // Branch codes mapping state
-  const [branchCodesMapping, setBranchCodesMapping] = useState([]);
-  const [isLoadingBranchCodes, setIsLoadingBranchCodes] = useState(false);
+  // Branch defaults state (Unit Price, Manager Name, Currency, Payment Method)
+  const [branchDefaults, setBranchDefaults] = useState({});
+  const [isLoadingBranchDefaults, setIsLoadingBranchDefaults] = useState(false);
+  
+  // Branch-specific default values
+  const [defaultUnitPrice, setDefaultUnitPrice] = useState('');
+  const [defaultCurrency, setDefaultCurrency] = useState(DEFAULT_SETTINGS.currencies[0]);
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(DEFAULT_SETTINGS.paymentMethods[0]);
 
   // Header information state
   const [branchName, setBranchName] = useState('');
@@ -71,18 +76,18 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Load branch codes from Google Sheets on mount
+  // Load settings and branch defaults from Google Sheets on mount
   useEffect(() => {
-    loadBranchCodesFromServer();
     loadSettingsFromServer();
+    loadBranchDefaultsFromServer();
   }, []);
   
-  // Load branch codes from Google Sheets
-  const loadBranchCodesFromServer = async () => {
-    setIsLoadingBranchCodes(true);
+  // Load branch defaults from Google Sheets
+  const loadBranchDefaultsFromServer = async () => {
+    setIsLoadingBranchDefaults(true);
     try {
-      const url = `${API_URL}?action=getBranchCodes`;
-      console.log('Loading branch codes from:', url);
+      const url = `${API_URL}?action=getBranchDefaults`;
+      console.log('Loading branch defaults from:', url);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -91,19 +96,50 @@ function App() {
       
       if (response.ok) {
         const result = await response.json();
-        console.log('Branch codes response:', result);
+        console.log('Branch defaults response:', result);
         
         if (result.status === 'success' && result.data) {
-          setBranchCodesMapping(result.data);
-          console.log('Loaded branch codes:', result.data);
+          setBranchDefaults(result.data);
+          console.log('Loaded branch defaults:', result.data);
         } else {
-          console.error('Failed to load branch codes:', result.message);
+          console.error('Failed to load branch defaults:', result.message);
         }
       }
     } catch (error) {
-      console.error('Error loading branch codes:', error);
+      console.error('Error loading branch defaults:', error);
     } finally {
-      setIsLoadingBranchCodes(false);
+      setIsLoadingBranchDefaults(false);
+    }
+  };
+  
+  // Save branch defaults to Google Sheets
+  const saveBranchDefaults = async (branchName, defaults) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'saveBranchDefaults',
+          branchName: branchName,
+          defaults: defaults,
+        }),
+        mode: 'cors',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.status === 'success') {
+          console.log('Branch defaults saved successfully for:', branchName);
+          // Reload branch defaults
+          await loadBranchDefaultsFromServer();
+        } else {
+          console.error('Failed to save branch defaults:', result.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving branch defaults:', error);
     }
   };
   
@@ -266,19 +302,20 @@ function App() {
   };
 
   // Add cost item
+  // Add cost item with branch defaults
   const addCostItem = () => {
     setCostItems([
       ...costItems,
       {
         id: Date.now(),
         itemName: (settings?.itemNames || DEFAULT_SETTINGS.itemNames)[0],
-        unitPrice: '',
-        currency: (settings?.currencies || DEFAULT_SETTINGS.currencies)[0],
+        unitPrice: defaultUnitPrice || '',
+        currency: defaultCurrency || (settings?.currencies || DEFAULT_SETTINGS.currencies)[0],
         quantity: '',
         estimatedCost: 0,
         actualCost: '',
         basis: '',
-        paymentMethod: (settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods)[0],
+        paymentMethod: defaultPaymentMethod || (settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods)[0],
         contract: null,
         contractBase64: '',
         contractFileName: '',
@@ -531,15 +568,29 @@ function App() {
                     const selectedBranch = e.target.value;
                     setBranchName(selectedBranch);
                     
-                    // Auto-match branch code from Google Sheets
-                    if (selectedBranch && branchCodesMapping.length > 0) {
-                      const matchingBranch = branchCodesMapping.find(
-                        (b) => b.branchName === selectedBranch
-                      );
-                      if (matchingBranch) {
-                        setBranchCode(matchingBranch.branchCode);
-                        console.log('Auto-matched branch code:', matchingBranch.branchCode);
-                      }
+                    // Auto-load branch defaults from Google Sheets
+                    if (selectedBranch && branchDefaults[selectedBranch]) {
+                      const defaults = branchDefaults[selectedBranch];
+                      setManagerName(defaults.managerName || '');
+                      setDefaultUnitPrice(defaults.unitPrice || '');
+                      setDefaultCurrency(defaults.currency || DEFAULT_SETTINGS.currencies[0]);
+                      setDefaultPaymentMethod(defaults.paymentMethod || DEFAULT_SETTINGS.paymentMethods[0]);
+                      
+                      // Update all cost items with new defaults
+                      setCostItems(costItems.map(item => ({
+                        ...item,
+                        unitPrice: defaults.unitPrice || item.unitPrice,
+                        currency: defaults.currency || item.currency,
+                        paymentMethod: defaults.paymentMethod || item.paymentMethod,
+                      })));
+                      
+                      console.log('Loaded branch defaults:', defaults);
+                    } else {
+                      // Clear defaults if no saved data
+                      setManagerName('');
+                      setDefaultUnitPrice('');
+                      setDefaultCurrency(DEFAULT_SETTINGS.currencies[0]);
+                      setDefaultPaymentMethod(DEFAULT_SETTINGS.paymentMethods[0]);
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -556,11 +607,9 @@ function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Branch Code <span className="text-red-500">*</span>
-                  {branchName && branchCodesMapping.length > 0 && (
-                    <span className="text-xs text-blue-600 ml-2">
-                      (Auto-matched from {branchName})
-                    </span>
-                  )}
+                  <span className="text-xs text-gray-500 ml-2">
+                    (Security verification - known only to branch manager)
+                  </span>
                 </label>
                 <input
                   type="password"
@@ -574,11 +623,25 @@ function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Manager Name <span className="text-red-500">*</span>
+                  <span className="text-xs text-blue-600 ml-2">
+                    (Auto-saved per branch)
+                  </span>
                 </label>
                 <input
                   type="text"
                   value={managerName}
                   onChange={(e) => setManagerName(e.target.value)}
+                  onBlur={() => {
+                    // Auto-save when Manager Name changes
+                    if (branchName && managerName) {
+                      saveBranchDefaults(branchName, {
+                        managerName: managerName,
+                        unitPrice: defaultUnitPrice,
+                        currency: defaultCurrency,
+                        paymentMethod: defaultPaymentMethod,
+                      });
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g., John Doe"
                   required
@@ -664,6 +727,9 @@ function App() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Unit Price
+                        <span className="text-xs text-blue-600 ml-2">
+                          (Auto-saved per branch)
+                        </span>
                       </label>
                       <input
                         type="number"
@@ -671,6 +737,18 @@ function App() {
                         onChange={(e) =>
                           updateCostItem(item.id, 'unitPrice', e.target.value)
                         }
+                        onBlur={() => {
+                          // Auto-save when Unit Price changes
+                          if (branchName && item.unitPrice) {
+                            setDefaultUnitPrice(item.unitPrice);
+                            saveBranchDefaults(branchName, {
+                              managerName: managerName,
+                              unitPrice: item.unitPrice,
+                              currency: item.currency,
+                              paymentMethod: item.paymentMethod,
+                            });
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="0"
                         min="0"
@@ -682,12 +760,25 @@ function App() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Currency
+                        <span className="text-xs text-blue-600 ml-2">
+                          (Auto-saved per branch)
+                        </span>
                       </label>
                       <select
                         value={item.currency}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'currency', e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateCostItem(item.id, 'currency', e.target.value);
+                          // Auto-save when Currency changes
+                          if (branchName) {
+                            setDefaultCurrency(e.target.value);
+                            saveBranchDefaults(branchName, {
+                              managerName: managerName,
+                              unitPrice: item.unitPrice,
+                              currency: e.target.value,
+                              paymentMethod: item.paymentMethod,
+                            });
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
                         {(settings?.currencies || DEFAULT_SETTINGS.currencies).map((curr) => (
@@ -776,12 +867,25 @@ function App() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Payment Method
+                        <span className="text-xs text-blue-600 ml-2">
+                          (Auto-saved per branch)
+                        </span>
                       </label>
                       <select
                         value={item.paymentMethod}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'paymentMethod', e.target.value)
-                        }
+                        onChange={(e) => {
+                          updateCostItem(item.id, 'paymentMethod', e.target.value);
+                          // Auto-save when Payment Method changes
+                          if (branchName) {
+                            setDefaultPaymentMethod(e.target.value);
+                            saveBranchDefaults(branchName, {
+                              managerName: managerName,
+                              unitPrice: item.unitPrice,
+                              currency: item.currency,
+                              paymentMethod: e.target.value,
+                            });
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                       >
                         {(settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods).map((method) => (

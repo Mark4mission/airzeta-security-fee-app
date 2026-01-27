@@ -5,6 +5,7 @@
 const SHEET_NAME = 'Submissions';
 const BRANCH_CODES_SHEET = 'BranchCodes';
 const SETTINGS_SHEET = 'Settings';
+const BRANCH_DEFAULTS_SHEET = 'BranchDefaults';
 
 function doGet(e) {
   try {
@@ -26,6 +27,8 @@ function doGet(e) {
         return handleGetSettings();
       case 'getBranchCodes':
         return handleGetBranchCodes();
+      case 'getBranchDefaults':
+        return handleGetBranchDefaults();
       case 'getHistory':
         return handleGetHistory(params);
       default:
@@ -38,6 +41,7 @@ function doGet(e) {
             'GET action=load': 'Load previous data',
             'GET action=getSettings': 'Get settings',
             'GET action=getBranchCodes': 'Get branch codes',
+            'GET action=getBranchDefaults': 'Get branch defaults',
             'GET action=getHistory': 'Get submission history'
           }
         });
@@ -72,6 +76,8 @@ function doPost(e) {
         return handleSubmit(data);
       case 'saveSettings':
         return handleSaveSettings(data);
+      case 'saveBranchDefaults':
+        return handleSaveBranchDefaults(data);
       default:
         return handleSubmit(data); // Default to submit for backward compatibility
     }
@@ -266,6 +272,119 @@ function handleSaveSettings(data) {
     });
   } catch (error) {
     Logger.log('SaveSettings error: ' + error.toString());
+    return createJsonResponse({
+      status: 'error',
+      message: error.toString()
+    });
+  }
+}
+
+// ========================================
+// BRANCH DEFAULTS HANDLERS
+// ========================================
+
+function handleGetBranchDefaults() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let defaultsSheet = ss.getSheetByName(BRANCH_DEFAULTS_SHEET);
+    
+    // Create defaults sheet if it doesn't exist
+    if (!defaultsSheet) {
+      defaultsSheet = ss.insertSheet(BRANCH_DEFAULTS_SHEET);
+      defaultsSheet.appendRow(['Branch Name', 'Manager Name', 'Unit Price', 'Currency', 'Payment Method']);
+      
+      // Add sample data
+      defaultsSheet.appendRow(['Seoul Branch', 'John Doe', 50000, 'KRW', 'Wire Transfer']);
+      defaultsSheet.appendRow(['Tokyo Branch', 'Yuki Tanaka', 60000, 'JPY', 'ICH']);
+      defaultsSheet.appendRow(['New York Branch', 'Mike Smith', 80, 'USD', 'Credit Card']);
+      defaultsSheet.appendRow(['London Branch', 'James Brown', 70, 'GBP', 'Wire Transfer']);
+      defaultsSheet.appendRow(['Singapore Branch', 'Lee Wei', 90, 'SGD', 'Wire Transfer']);
+      
+      Logger.log('Created BranchDefaults sheet with sample data');
+    }
+    
+    // Read defaults
+    const data = defaultsSheet.getDataRange().getValues();
+    const headers = data[0];
+    const defaults = {};
+    
+    for (let i = 1; i < data.length; i++) {
+      const branchName = data[i][0];
+      defaults[branchName] = {
+        managerName: data[i][1] || '',
+        unitPrice: data[i][2] || '',
+        currency: data[i][3] || 'KRW',
+        paymentMethod: data[i][4] || 'Wire Transfer'
+      };
+    }
+    
+    Logger.log('Loaded branch defaults: ' + JSON.stringify(defaults));
+    
+    return createJsonResponse({
+      status: 'success',
+      data: defaults
+    });
+  } catch (error) {
+    Logger.log('GetBranchDefaults error: ' + error.toString());
+    return createJsonResponse({
+      status: 'error',
+      message: error.toString()
+    });
+  }
+}
+
+function handleSaveBranchDefaults(data) {
+  try {
+    if (!data.branchName || !data.defaults) {
+      throw new Error('Missing branchName or defaults data');
+    }
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let defaultsSheet = ss.getSheetByName(BRANCH_DEFAULTS_SHEET);
+    
+    // Create sheet if doesn't exist
+    if (!defaultsSheet) {
+      defaultsSheet = ss.insertSheet(BRANCH_DEFAULTS_SHEET);
+      defaultsSheet.appendRow(['Branch Name', 'Manager Name', 'Unit Price', 'Currency', 'Payment Method']);
+    }
+    
+    // Find existing row for this branch
+    const dataRange = defaultsSheet.getDataRange();
+    const values = dataRange.getValues();
+    let rowIndex = -1;
+    
+    for (let i = 1; i < values.length; i++) {
+      if (values[i][0] === data.branchName) {
+        rowIndex = i + 1; // Sheet rows are 1-indexed
+        break;
+      }
+    }
+    
+    const rowData = [
+      data.branchName,
+      data.defaults.managerName || '',
+      data.defaults.unitPrice || '',
+      data.defaults.currency || 'KRW',
+      data.defaults.paymentMethod || 'Wire Transfer'
+    ];
+    
+    if (rowIndex > 0) {
+      // Update existing row
+      defaultsSheet.getRange(rowIndex, 1, 1, 5).setValues([rowData]);
+      Logger.log('Updated branch defaults for: ' + data.branchName);
+    } else {
+      // Add new row
+      defaultsSheet.appendRow(rowData);
+      Logger.log('Added branch defaults for: ' + data.branchName);
+    }
+    
+    return createJsonResponse({
+      status: 'success',
+      message: 'Branch defaults saved successfully',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    Logger.log('SaveBranchDefaults error: ' + error.toString());
     return createJsonResponse({
       status: 'error',
       message: error.toString()
