@@ -36,6 +36,10 @@ function App() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempSettings, setTempSettings] = useState(DEFAULT_SETTINGS);
+  
+  // Branch codes mapping state
+  const [branchCodesMapping, setBranchCodesMapping] = useState([]);
+  const [isLoadingBranchCodes, setIsLoadingBranchCodes] = useState(false);
 
   // Header information state
   const [branchName, setBranchName] = useState('');
@@ -67,25 +71,104 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Load settings from localStorage on mount
+  // Load branch codes from Google Sheets on mount
   useEffect(() => {
-    const savedSettings = localStorage.getItem('branchSecuritySettings');
-    if (savedSettings) {
-      try {
-        const parsed = JSON.parse(savedSettings);
-        setSettings(parsed);
-        setTempSettings(parsed);
-      } catch (e) {
-        console.error('Failed to load settings:', e);
-      }
-    }
+    loadBranchCodesFromServer();
+    loadSettingsFromServer();
   }, []);
+  
+  // Load branch codes from Google Sheets
+  const loadBranchCodesFromServer = async () => {
+    setIsLoadingBranchCodes(true);
+    try {
+      const url = `${API_URL}?action=getBranchCodes`;
+      console.log('Loading branch codes from:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Branch codes response:', result);
+        
+        if (result.status === 'success' && result.data) {
+          setBranchCodesMapping(result.data);
+          console.log('Loaded branch codes:', result.data);
+        } else {
+          console.error('Failed to load branch codes:', result.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading branch codes:', error);
+    } finally {
+      setIsLoadingBranchCodes(false);
+    }
+  };
+  
+  // Load settings from Google Sheets
+  const loadSettingsFromServer = async () => {
+    try {
+      const url = `${API_URL}?action=getSettings`;
+      console.log('Loading settings from:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Settings response:', result);
+        
+        if (result.status === 'success' && result.data) {
+          setSettings(result.data);
+          setTempSettings(result.data);
+          console.log('Loaded settings:', result.data);
+        } else {
+          console.log('Using default settings');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      console.log('Using default settings');
+    }
+  };
 
-  // Save settings
-  const saveSettings = () => {
-    setSettings(tempSettings);
-    localStorage.setItem('branchSecuritySettings', JSON.stringify(tempSettings));
-    setShowSettingsModal(false);
+  // Save settings to Google Sheets
+  const saveSettings = async () => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'saveSettings',
+          settings: tempSettings,
+        }),
+        mode: 'cors',
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.status === 'success') {
+          setSettings(tempSettings);
+          setShowSettingsModal(false);
+          alert('Settings saved successfully to Google Sheets!');
+        } else {
+          alert('Failed to save settings: ' + result.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      alert('Failed to save settings. Using local storage as fallback.');
+      // Fallback to localStorage
+      setSettings(tempSettings);
+      localStorage.setItem('branchSecuritySettings', JSON.stringify(tempSettings));
+      setShowSettingsModal(false);
+    }
   };
 
   // Update temp settings
@@ -444,7 +527,21 @@ function App() {
                 </label>
                 <select
                   value={branchName}
-                  onChange={(e) => setBranchName(e.target.value)}
+                  onChange={(e) => {
+                    const selectedBranch = e.target.value;
+                    setBranchName(selectedBranch);
+                    
+                    // Auto-match branch code from Google Sheets
+                    if (selectedBranch && branchCodesMapping.length > 0) {
+                      const matchingBranch = branchCodesMapping.find(
+                        (b) => b.branchName === selectedBranch
+                      );
+                      if (matchingBranch) {
+                        setBranchCode(matchingBranch.branchCode);
+                        console.log('Auto-matched branch code:', matchingBranch.branchCode);
+                      }
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   required
                 >
@@ -459,6 +556,11 @@ function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Branch Code <span className="text-red-500">*</span>
+                  {branchName && branchCodesMapping.length > 0 && (
+                    <span className="text-xs text-blue-600 ml-2">
+                      (Auto-matched from {branchName})
+                    </span>
+                  )}
                 </label>
                 <input
                   type="password"
