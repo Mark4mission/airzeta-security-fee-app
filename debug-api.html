@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔍 Advanced API Debugger</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .header h1 { font-size: 32px; margin-bottom: 10px; }
+    .header p { opacity: 0.9; }
+    .content { padding: 30px; }
+    .section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      border-left: 4px solid #667eea;
+    }
+    .section h2 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 20px;
+    }
+    .input-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #555;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    textarea { min-height: 100px; font-family: 'Courier New', monospace; }
+    .button-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    button {
+      padding: 14px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
+    .btn-success { background: #10b981; color: white; }
+    .btn-success:hover { background: #059669; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #6b7280; color: white; }
+    .btn-secondary:hover { background: #4b5563; }
+    button:disabled {
+      background: #d1d5db;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .result.success {
+      background: #d1fae5;
+      border: 2px solid #10b981;
+      color: #065f46;
+    }
+    .result.error {
+      background: #fee2e2;
+      border: 2px solid #ef4444;
+      color: #991b1b;
+    }
+    .result.info {
+      background: #dbeafe;
+      border: 2px solid #3b82f6;
+      color: #1e40af;
+    }
+    .result.warning {
+      background: #fef3c7;
+      border: 2px solid #f59e0b;
+      color: #92400e;
+    }
+    .loader {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .step {
+      background: white;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+    .step h3 {
+      color: #667eea;
+      margin-bottom: 8px;
+      font-size: 16px;
+    }
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+    .checklist li {
+      padding: 8px 0;
+      padding-left: 30px;
+      position: relative;
+    }
+    .checklist li:before {
+      content: '☐';
+      position: absolute;
+      left: 0;
+      font-size: 20px;
+      color: #667eea;
+    }
+    .code-block {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    .code-block code {
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔍 Advanced API Debugger</h1>
+      <p>Comprehensive testing and troubleshooting tool for Google Apps Script API</p>
+    </div>
+    
+    <div class="content">
+      <!-- API Configuration -->
+      <div class="section">
+        <h2>⚙️ API Configuration</h2>
+        <div class="input-group">
+          <label>API Endpoint URL:</label>
+          <input type="text" id="apiUrl" value="https://script.google.com/macros/s/AKfycbzq7I4yROJqWqRAQA0PlF_GbCUdyhvNHy3ybD8V5rtYc4Vdt4a-D5LKR1HxLZjGiOO-1g/exec" placeholder="Enter your Google Apps Script Web App URL">
+        </div>
+        <div class="button-group">
+          <button class="btn-primary" onclick="testConnection()">
+            <span>🔌</span> Test Connection
+          </button>
+          <button class="btn-success" onclick="testSubmit()">
+            <span>📤</span> Test Submit Data
+          </button>
+          <button class="btn-primary" onclick="testLoadData()">
+            <span>📥</span> Test Load Data
+          </button>
+          <button class="btn-secondary" onclick="clearResults()">
+            <span>🗑️</span> Clear Results
+          </button>
+        </div>
+      </div>
+
+      <!-- Test Data -->
+      <div class="section">
+        <h2>📋 Test Data Configuration</h2>
+        <div class="input-group">
+          <label>Branch Name:</label>
+          <input type="text" id="branchName" value="Seoul Branch" placeholder="Enter branch name">
+        </div>
+        <div class="input-group">
+          <label>Branch Code:</label>
+          <input type="text" id="branchCode" value="SEOUL2024" placeholder="Enter branch code">
+        </div>
+        <div class="input-group">
+          <label>Manager Name:</label>
+          <input type="text" id="managerName" value="Test Manager" placeholder="Enter manager name">
+        </div>
+        <div class="input-group">
+          <label>Target Month:</label>
+          <input type="month" id="targetMonth" value="2024-01">
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="section">
+        <h2>📊 Test Results</h2>
+        <div id="results"></div>
+      </div>
+
+      <!-- Troubleshooting Guide -->
+      <div class="section">
+        <h2>🛠️ Troubleshooting Guide</h2>
+        
+        <div class="step">
+          <h3>Step 1: Verify Apps Script Deployment</h3>
+          <ul class="checklist">
+            <li>Open your Google Apps Script editor</li>
+            <li>Click "Deploy" → "Manage deployments"</li>
+            <li>Verify "Web app" deployment exists</li>
+            <li>Check "Execute as: Me"</li>
+            <li>Check "Who has access: Anyone"</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>Step 2: Check CORS Headers in Apps Script</h3>
+          <p>Your doPost and doGet functions must include:</p>
+          <div class="code-block">
+            <code>return ContentService
+  .createTextOutput(JSON.stringify(result))
+  .setMimeType(ContentService.MimeType.JSON);</code>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Step 3: Verify BranchCodes Sheet</h3>
+          <ul class="checklist">
+            <li>Check if "BranchCodes" sheet exists</li>
+            <li>Verify headers: Branch Name | Branch Code</li>
+            <li>Add test entry: Seoul Branch | SEOUL2024</li>
+          </ul>
+        </div>
+
+        <div class="step">
+          <h3>Step 4: Test in Apps Script Editor</h3>
+          <p>Run this test function in Apps Script:</p>
+          <div class="code-block">
+            <code>function testAPI() {
+  const testData = {
+    postData: {
+      contents: JSON.stringify({
+        branchName: 'Seoul Branch',
+        branchCode: 'SEOUL2024',
+        managerName: 'Test Manager',
+        targetMonth: '2024-01',
+        costItems: []
+      })
+    }
+  };
+  
+  const result = doPost(testData);
+  Logger.log(result.getContent());
+}</code>
+          </div>
+        </div>
+
+        <div class="step">
+          <h3>Step 5: Check Apps Script Logs</h3>
+          <ul class="checklist">
+            <li>In Apps Script editor, click "Execution log" (left sidebar)</li>
+            <li>Look for error messages</li>
+            <li>Verify data is being received</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let testCounter = 0;
+
+    function addResult(message, type = 'info') {
+      const results = document.getElementById('results');
+      const timestamp = new Date().toLocaleTimeString();
+      const resultDiv = document.createElement('div');
+      resultDiv.className = `result ${type}`;
+      resultDiv.textContent = `[${timestamp}] ${message}`;
+      results.appendChild(resultDiv);
+      results.scrollTop = results.scrollHeight;
+    }
+
+    function clearResults() {
+      document.getElementById('results').innerHTML = '';
+      addResult('Results cleared', 'info');
+    }
+
+    async function testConnection() {
+      const apiUrl = document.getElementById('apiUrl').value.trim();
+      
+      if (!apiUrl) {
+        addResult('❌ Error: API URL is empty', 'error');
+        return;
+      }
+
+      addResult('🔄 Testing connection to API...', 'info');
+
+      try {
+        // Test 1: CORS Mode
+        addResult('Test 1: Trying CORS mode...', 'info');
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+          
+          addResult(`✅ CORS Response Status: ${response.status}`, 'success');
+          const text = await response.text();
+          addResult(`Response Body: ${text.substring(0, 200)}...`, 'info');
+        } catch (corsError) {
+          addResult(`⚠️ CORS Error: ${corsError.message}`, 'warning');
+          
+          // Test 2: NO-CORS Mode
+          addResult('Test 2: Trying NO-CORS mode...', 'info');
+          const noCorsResponse = await fetch(apiUrl, {
+            method: 'GET',
+            mode: 'no-cors',
+          });
+          addResult('✅ NO-CORS request sent (response opaque)', 'success');
+          addResult('⚠️ Cannot read response in no-cors mode. Check Google Sheets manually.', 'warning');
+        }
+      } catch (error) {
+        addResult(`❌ Connection test failed: ${error.message}`, 'error');
+        addResult('💡 Suggestions:\n1. Check if Apps Script is deployed as Web App\n2. Verify "Anyone" access permission\n3. Check URL is correct', 'warning');
+      }
+    }
+
+    async function testSubmit() {
+      const apiUrl = document.getElementById('apiUrl').value.trim();
+      const branchName = document.getElementById('branchName').value.trim();
+      const branchCode = document.getElementById('branchCode').value.trim();
+      const managerName = document.getElementById('managerName').value.trim();
+      const targetMonth = document.getElementById('targetMonth').value;
+
+      if (!apiUrl || !branchName || !branchCode || !managerName || !targetMonth) {
+        addResult('❌ Error: All fields are required', 'error');
+        return;
+      }
+
+      testCounter++;
+      const testData = {
+        branchName,
+        branchCode,
+        managerName,
+        targetMonth,
+        costItems: [
+          {
+            itemName: 'Labor Cost',
+            unitPrice: 1000,
+            currency: 'KRW',
+            quantity: 10,
+            estimatedCost: 10000,
+            actualCost: 9500,
+            basis: 'Test submission from debugger',
+            paymentMethod: 'Wire Transfer',
+            contractFileName: '',
+            contractBase64: '',
+            note: `Test #${testCounter} - ${new Date().toISOString()}`
+          }
+        ],
+        timestamp: new Date().toISOString()
+      };
+
+      addResult('📤 Submitting test data...', 'info');
+      addResult(`Request Data:\n${JSON.stringify(testData, null, 2)}`, 'info');
+
+      try {
+        // Try with JSON Content-Type first
+        addResult('Attempt 1: Using application/json...', 'info');
+        const response1 = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(testData)
+        });
+
+        if (response1.ok) {
+          const result = await response1.json();
+          addResult(`✅ Success (JSON)!\nStatus: ${response1.status}\nResponse: ${JSON.stringify(result, null, 2)}`, 'success');
+          addResult('🎉 Check your Google Sheets - data should be added!', 'success');
+          return;
+        } else {
+          addResult(`⚠️ JSON request failed: ${response1.status}`, 'warning');
+        }
+      } catch (error1) {
+        addResult(`⚠️ JSON request error: ${error1.message}`, 'warning');
+      }
+
+      try {
+        // Fallback to text/plain
+        addResult('Attempt 2: Using text/plain (CORS workaround)...', 'info');
+        const response2 = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+          },
+          body: JSON.stringify(testData)
+        });
+
+        const result2 = await response2.text();
+        addResult(`✅ Request sent (text/plain)!\nResponse: ${result2}`, 'success');
+        addResult('Please check your Google Sheets manually to verify data was added.', 'info');
+      } catch (error2) {
+        addResult(`⚠️ text/plain error: ${error2.message}`, 'warning');
+        
+        // Final fallback to no-cors
+        try {
+          addResult('Attempt 3: Using no-cors mode...', 'info');
+          await fetch(apiUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: {
+              'Content-Type': 'text/plain',
+            },
+            body: JSON.stringify(testData)
+          });
+          addResult('✅ Request sent in no-cors mode', 'success');
+          addResult('⚠️ Cannot verify response. Please check Google Sheets manually.', 'warning');
+        } catch (error3) {
+          addResult(`❌ All attempts failed: ${error3.message}`, 'error');
+          addResult('💡 Troubleshooting:\n1. Verify Apps Script deployment\n2. Check BranchCodes sheet has Seoul Branch | SEOUL2024\n3. Run testAPI() function in Apps Script editor\n4. Check Apps Script execution logs', 'warning');
+        }
+      }
+    }
+
+    async function testLoadData() {
+      const apiUrl = document.getElementById('apiUrl').value.trim();
+      const branchName = document.getElementById('branchName').value.trim();
+      const branchCode = document.getElementById('branchCode').value.trim();
+      const targetMonth = document.getElementById('targetMonth').value;
+
+      if (!apiUrl || !branchName || !branchCode || !targetMonth) {
+        addResult('❌ Error: Branch Name, Code, and Target Month are required', 'error');
+        return;
+      }
+
+      const url = `${apiUrl}?action=load&branchName=${encodeURIComponent(branchName)}&branchCode=${encodeURIComponent(branchCode)}&targetMonth=${encodeURIComponent(targetMonth)}`;
+      
+      addResult('📥 Loading previous data...', 'info');
+      addResult(`Request URL: ${url}`, 'info');
+
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          addResult(`✅ Success!\nStatus: ${response.status}\nResponse: ${JSON.stringify(result, null, 2)}`, 'success');
+        } else {
+          addResult(`⚠️ Response status: ${response.status}`, 'warning');
+          const text = await response.text();
+          addResult(`Response: ${text}`, 'info');
+        }
+      } catch (error) {
+        addResult(`❌ Load failed: ${error.message}`, 'error');
+        addResult('💡 Check if:\n1. Data exists for this branch/month\n2. Branch code is correct\n3. Apps Script doGet() function is implemented', 'warning');
+      }
+    }
+
+    // Initialize
+    addResult('🚀 Advanced API Debugger Ready', 'success');
+    addResult('Click "Test Connection" to start debugging', 'info');
+  </script>
+</body>
+</html>
