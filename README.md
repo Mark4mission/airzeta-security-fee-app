@@ -2,6 +2,28 @@
 
 A modern web application for managing and submitting branch security costs to Google Sheets.
 
+## 🌐 Live Application
+
+**https://mark4mission.github.io/airzeta-security-fee-app/**
+
+## 🎉 New in Version 1.1.0
+
+### ✨ Enhanced Features
+- 🔄 **Improved Error Handling** - Request timeouts and better error messages
+- ⏳ **Loading States** - Visual feedback during operations
+- 📱 **PWA Support** - Install as a mobile/desktop app
+- 🔌 **Offline Support** - Service Worker caching for offline access
+- ⚡ **Better Performance** - Optimized loading and caching
+
+### 🛡️ Reliability Improvements
+- Request timeout protection (10s for settings, 15s for data, 30s for submit)
+- AbortController for clean timeout handling
+- CORS fallback mechanism
+- Detailed error messages with emoji indicators
+- Network status awareness
+
+---
+
 ## 🚀 Quick Deploy
 
 **Built and ready to deploy!** The production build is in the `dist` folder.
@@ -48,6 +70,18 @@ vercel --prod
 - Real-time cost calculation
 - File upload support (PDF contracts)
 - Settings management
+
+✅ **Progressive Web App (NEW!)**
+- 📱 Install on mobile and desktop
+- 🔌 Offline support with Service Worker
+- ⚡ Fast loading with smart caching
+- 🔄 Automatic updates
+
+✅ **Enhanced Reliability (NEW!)**
+- ⏱️ Request timeout protection
+- 🎯 Better error messages
+- 🔄 Automatic retry suggestions
+- 📊 Loading state indicators
 
 ---
 
@@ -348,6 +382,35 @@ Settings are saved to browser's localStorage.
 - **Icons**: Lucide React
 - **Backend**: Google Apps Script
 - **Database**: Google Sheets
+- **PWA**: Service Worker + Web App Manifest
+
+---
+
+## 📱 Install as Progressive Web App
+
+### Desktop (Chrome/Edge/Brave)
+1. Visit the app URL
+2. Look for the install icon (⊕) in the address bar
+3. Click "Install"
+4. App opens in its own window
+
+### iOS (Safari)
+1. Open the app in Safari
+2. Tap the Share button (□↑)
+3. Scroll and tap "Add to Home Screen"
+4. Tap "Add"
+
+### Android (Chrome)
+1. Open the app in Chrome
+2. Tap the menu (⋮)
+3. Tap "Add to Home Screen"
+4. Tap "Add"
+
+### Benefits of PWA Installation
+- ⚡ Faster loading with offline cache
+- 📱 Native app-like experience
+- 🔔 Works offline (read-only)
+- 🎯 Quick access from home screen
 
 ---
 
