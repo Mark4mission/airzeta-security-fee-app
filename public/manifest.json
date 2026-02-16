@@ -1,0 +1,26 @@
+{
+  "name": "Branch Security Cost Submission System",
+  "short_name": "Security Costs",
+  "description": "Modern web application for managing and submitting branch security costs to Google Sheets",
+  "start_url": "/airzeta-security-fee-app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/airzeta-security-fee-app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/airzeta-security-fee-app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "screenshots": []
+}

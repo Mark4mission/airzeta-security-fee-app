@@ -236,7 +236,7 @@ function App() {
   // Load previous data
   const loadPreviousData = async () => {
     if (!branchName || !branchCode || !targetMonth) {
-      alert('Please enter Branch Name, Branch Code, and Target Month to load previous data.');
+      alert('⚠️ Please enter Branch Name, Branch Code, and Target Month to load previous data.');
       return;
     }
 
@@ -247,11 +247,16 @@ function App() {
       
       console.log('Loading data from:', url);
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
       const response = await fetch(url, {
         method: 'GET',
         mode: 'cors',
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
       console.log('Load response status:', response.status);
 
       if (response.ok) {
@@ -280,22 +285,26 @@ function App() {
           }));
           
           setCostItems(loadedItems);
-          alert('Previous data loaded successfully!');
+          alert('✅ Previous data loaded successfully!');
         } else if (result.status === 'error') {
           if (result.message.includes('Invalid branch code')) {
-            alert('Invalid branch code. Please check your credentials.');
+            alert('❌ Invalid branch code. Please check your credentials.');
           } else {
-            alert(`Error: ${result.message}`);
+            alert(`❌ Error: ${result.message}`);
           }
         } else {
-          alert('No previous data found for this branch and month.');
+          alert('ℹ️ No previous data found for this branch and month.');
         }
       } else {
         throw new Error(`Failed to load data: ${response.status}`);
       }
     } catch (error) {
       console.error('Load error:', error);
-      alert('Failed to load previous data. The feature may require CORS support from Google Apps Script.\n\nPlease ensure:\n1. The script is deployed as a web app\n2. Access is set to "Anyone"\n3. The doGet function is implemented');
+      if (error.name === 'AbortError') {
+        alert('⏱️ Request timeout. The server is taking too long to respond. Please try again.');
+      } else {
+        alert('❌ Failed to load previous data.\n\nPossible causes:\n• Internet connection issue\n• Google Apps Script not responding\n• CORS configuration issue\n\nPlease ensure:\n1. Your internet connection is stable\n2. The Google Apps Script is deployed as a web app\n3. Access is set to "Anyone"');
+      }
     } finally {
       setIsLoading(false);
     }
