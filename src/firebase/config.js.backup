@@ -1,0 +1,39 @@
+// src/firebase/config.js
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
+
+// ========================================
+// Firebase 설정
+// ========================================
+const firebaseConfig = {
+  apiKey: "AIzaSyC1WRvtCRCkQbsPQ28Zjrr16kfdPIrZeYo",
+  authDomain: "airzeta-security-system.firebaseapp.com",
+  projectId: "airzeta-security-system",
+  storageBucket: "airzeta-security-system.appspot.com",
+  messagingSenderId: "803391050005",
+  appId: "1:803391050005:web:b79b059aad13ddeaf5591c"
+};
+
+// ========================================
+// Firebase 초기화
+// ========================================
+const app = initializeApp(firebaseConfig);
+
+// 서비스 인스턴스 생성
+export const db = getFirestore(app);  // Firestore Database
+export const auth = getAuth(app);     // Authentication
+export const storage = getStorage(app); // Storage
+
+// 앱 인스턴스 내보내기
+export default app;
+
+// ========================================
+// 연결 테스트용 함수 (선택사항)
+// ========================================
+export const testFirebaseConnection = () => {
+  console.log('🔥 Firebase initialized successfully!');
+  console.log('Project ID:', firebaseConfig.projectId);
+  return true;
+};

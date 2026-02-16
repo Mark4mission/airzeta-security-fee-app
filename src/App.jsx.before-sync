@@ -1,0 +1,1187 @@
+// src/App.jsx
+import React, { useState, useEffect } from 'react';
+import { 
+  Settings as SettingsIcon,  // 이름 변경 (컴포넌트와 충돌 방지)
+  Upload, 
+  DollarSign, 
+  AlertCircle, 
+  CheckCircle, 
+  Loader,
+  Plus,
+  Trash2,
+  Download,
+  Calendar
+} from 'lucide-react';
+import { 
+  submitSecurityCost, 
+  getSecurityCostsByBranch,
+  getAllBranches 
+} from './firebase/collections';
+import Settings from './components/Settings';  // Settings 컴포넌트 import
+import './App.css';
+
+// ========================================
+// AIRZETA 브랜드 컬러
+// ========================================
+const COLORS = {
+  primary: '#1B3A7D',      // 네이비 블루
+  secondary: '#E94560',    // 코랄 핑크
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  background: '#F8FAFC',
+  cardBg: '#FFFFFF',
+  border: '#E2E8F0'
+};
+
+// ========================================
+// 기본 설정값
+// ========================================
+const DEFAULT_SETTINGS = {
+  branches: [
+    { branchName: 'Seoul Branch', branchCode: 'SEL2024', active: true },
+    { branchName: 'Tokyo Branch', branchCode: 'TYO2024', active: true },
+    { branchName: 'New York Branch', branchCode: 'NYC2024', active: true }
+  ],
+  costItems: [
+    'Security Personnel',
+    'CCTV System',
+    'Access Control',
+    'Security Training',
+    'Equipment Maintenance',
+    'Emergency Response',
+    'Other'
+  ],
+  currencies: ['USD', 'KRW', 'JPY', 'EUR', 'GBP'],
+  paymentMethods: [
+    'Bank Transfer',
+    'Credit Card',
+    'Cash',
+    'Check',
+    'Other'
+  ]
+};
+
+function App() {
+  // ========================================
+  // State 관리
+  // ========================================
+  const [formData, setFormData] = useState({
+    branchName: '',
+    branchCode: '',
+    managerName: '',
+    targetMonth: '',
+    items: [
+      {
+        itemName: '',
+        unitPrice: '',
+        currency: 'USD',
+        quantity: 1,
+        estimatedCost: 0,
+        actualCost: '',
+        basis: '',
+        paymentMethod: '',
+        contractFile: null,
+        note: ''
+      }
+    ]
+  });
+
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('airzeta-settings');
+    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+  });
+
+  const [branches, setBranches] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(true);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [showSettings, setShowSettings] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // ========================================
+  // 초기 로드: 지점 목록 가져오기
+  // ========================================
+  useEffect(() => {
+    loadBranches();
+  }, []);
+
+const loadBranches = async () => {
+  try {
+    const result = await getAllBranches();
+    if (result.success && result.data.length > 0) {
+      const branchNames = result.data.map(b => b.branchName);
+      setBranches(branchNames);
+      
+      // Settings에도 반영 (Branch Code 포함)
+      const branchesWithCodes = result.data.map(b => ({
+        branchName: b.branchName,
+        branchCode: b.branchCode,
+        active: b.active !== false
+      }));
+      
+      setSettings(prev => ({
+        ...prev,
+        branches: branchesWithCodes
+      }));
+    } else {
+      // Firebase 데이터 없으면 Settings의 branches에서 이름만 추출
+      const branchNames = settings.branches.map(b => b.branchName);
+      setBranches(branchNames);
+    }
+  } catch (error) {
+    console.error('Error loading branches:', error);
+    const branchNames = settings.branches.map(b => b.branchName);
+    setBranches(branchNames);
+  } finally {
+    setLoadingBranches(false);
+  }
+};
+
+
+  // ========================================
+  // 설정 저장
+  // ========================================
+  useEffect(() => {
+    localStorage.setItem('airzeta-settings', JSON.stringify(settings));
+  }, [settings]);
+
+  // ========================================
+  // 메시지 자동 제거
+  // ========================================
+  useEffect(() => {
+    if (message.text) {
+      const timer = setTimeout(() => {
+        setMessage({ type: '', text: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // ========================================
+  // 현재 월 기본값 설정
+  // ========================================
+  useEffect(() => {
+    if (!formData.targetMonth) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      setFormData(prev => ({
+        ...prev,
+        targetMonth: `${year}-${month}`
+      }));
+    }
+  }, [formData.targetMonth]);
+
+  // ========================================
+  // Settings 저장 핸들러
+  // ========================================
+  const handleSaveSettings = (newSettings) => {
+  setSettings(newSettings);
+  localStorage.setItem('airzeta-settings', JSON.stringify(newSettings));
+  
+  // branches state 업데이트 (Branch Name만 추출)
+  const branchNames = newSettings.branches.map(b => b.branchName);
+  setBranches(branchNames);
+  
+  setShowSettings(false);
+  showMessage('success', '✅ Settings saved successfully!');
+  };
+
+  // ========================================
+  // 폼 필드 변경 핸들러
+  // ========================================
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...formData.items];
+    newItems[index] = {
+      ...newItems[index],
+      [field]: value
+    };
+
+    // 자동 계산: unitPrice * quantity = estimatedCost
+    if (field === 'unitPrice' || field === 'quantity') {
+      const unitPrice = parseFloat(newItems[index].unitPrice) || 0;
+      const quantity = parseFloat(newItems[index].quantity) || 0;
+      newItems[index].estimatedCost = unitPrice * quantity;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      items: newItems
+    }));
+  };
+
+  // ========================================
+  // 항목 추가/삭제
+  // ========================================
+  const addItem = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          itemName: '',
+          unitPrice: '',
+          currency: 'USD',
+          quantity: 1,
+          estimatedCost: 0,
+          actualCost: '',
+          basis: '',
+          paymentMethod: '',
+          contractFile: null,
+          note: ''
+        }
+      ]
+    }));
+  };
+
+  const removeItem = (index) => {
+    if (formData.items.length === 1) {
+      showMessage('error', 'At least one cost item is required');
+      return;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  // ========================================
+  // 비용 계산
+  // ========================================
+  const calculateTotalCost = (type) => {
+    return formData.items.reduce((total, item) => {
+      const cost = type === 'estimated' 
+        ? (item.estimatedCost || 0)
+        : (parseFloat(item.actualCost) || 0);
+      return total + cost;
+    }, 0);
+  };
+
+  // ========================================
+  // 메시지 표시 헬퍼
+  // ========================================
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+  };
+
+  // ========================================
+  // 이전 데이터 로드
+  // ========================================
+  const handleLoadPreviousData = async () => {
+    if (!formData.branchName || !formData.branchCode) {
+      showMessage('error', 'Please select Branch Name and enter Branch Code first');
+      return;
+    }
+
+    if (!formData.targetMonth) {
+      showMessage('error', 'Please select Target Month first');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await getSecurityCostsByBranch(
+        formData.branchCode,
+        formData.targetMonth
+      );
+
+      if (result.success && result.data.length > 0) {
+        const latestData = result.data[0];
+        
+        setFormData(prev => ({
+          ...prev,
+          managerName: latestData.managerName || prev.managerName,
+          items: latestData.items || prev.items
+        }));
+
+        showMessage('success', `✅ Loaded previous data from ${new Date(latestData.submittedAt).toLocaleDateString()}`);
+      } else {
+        showMessage('info', 'No previous data found for this branch and month');
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      showMessage('error', `Failed to load data: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================================
+  // 데이터 제출
+  // ========================================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // 유효성 검사
+    if (!formData.branchName || !formData.branchCode || !formData.targetMonth) {
+      showMessage('error', 'Please fill in all required fields (Branch, Code, Month)');
+      return;
+    }
+
+    if (!formData.managerName) {
+      showMessage('error', 'Please enter Manager Name');
+      return;
+    }
+
+    const hasValidItem = formData.items.some(item => 
+      item.itemName && item.unitPrice && item.quantity
+    );
+
+    if (!hasValidItem) {
+      showMessage('error', 'Please fill in at least one cost item completely');
+      return;
+    }
+
+    setLoading(true);
+    setSubmitSuccess(false);
+    
+    try {
+      const submissionData = {
+        branchName: formData.branchName,
+        branchCode: formData.branchCode,
+        managerName: formData.managerName,
+        targetMonth: formData.targetMonth,
+        items: formData.items.filter(item => item.itemName),
+        totalEstimatedCost: calculateTotalCost('estimated'),
+        totalActualCost: calculateTotalCost('actual'),
+        submissionId: `${formData.branchCode}-${formData.targetMonth}-${Date.now()}`
+      };
+
+      console.log('🚀 Submitting data:', submissionData);
+
+      const result = await submitSecurityCost(submissionData);
+
+      if (result.success) {
+        setSubmitSuccess(true);
+        showMessage('success', `✅ Data submitted successfully! Document ID: ${result.id}`);
+        
+        // 페이지 상단으로 스크롤
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
+        // 3초 후 성공 상태 해제
+        setTimeout(() => {
+          setSubmitSuccess(false);
+        }, 3000);
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
+    } catch (error) {
+      console.error('❌ Submission error:', error);
+      showMessage('error', `❌ Submission failed: ${error.message}`);
+      setSubmitSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================================
+  // 폼 초기화
+  // ========================================
+  const resetForm = () => {
+    setFormData({
+      branchName: '',
+      branchCode: '',
+      managerName: '',
+      targetMonth: '',
+      items: [
+        {
+          itemName: '',
+          unitPrice: '',
+          currency: 'USD',
+          quantity: 1,
+          estimatedCost: 0,
+          actualCost: '',
+          basis: '',
+          paymentMethod: '',
+          contractFile: null,
+          note: ''
+        }
+      ]
+    });
+  };
+
+  // ========================================
+  // UI 렌더링
+  // ========================================
+  return (
+    <div style={{ 
+      minHeight: '100vh', 
+      background: COLORS.background,
+      padding: '20px'
+    }}>
+      {/* 헤더 */}
+      <header style={{
+        background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary}dd 100%)`,
+        color: 'white',
+        padding: '24px 32px',
+        borderRadius: '16px',
+        marginBottom: '32px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 4px 20px rgba(27, 58, 125, 0.15)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <img 
+            src="https://www.genspark.ai/api/files/s/FPOlrONd" 
+            alt="AIRZETA Logo" 
+            style={{ height: '48px' }}
+          />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '28px', fontWeight: '700' }}>
+              Security Cost Management
+            </h1>
+            <p style={{ margin: '5px 0 0 0', opacity: 0.95, fontSize: '15px' }}>
+              Branch Security Cost Submission Portal
+            </p>
+          </div>
+        </div>
+        
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          style={{
+            background: COLORS.secondary,
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '10px',
+            color: 'white',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '15px',
+            fontWeight: '600',
+            transition: 'all 0.3s',
+            boxShadow: '0 2px 8px rgba(233, 69, 96, 0.3)'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+          onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <SettingsIcon size={20} />
+          Settings
+        </button>
+      </header>
+
+      {/* 메시지 알림 */}
+      {message.text && (
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          marginBottom: '24px',
+          background: message.type === 'success' 
+            ? '#D1FAE5' 
+            : message.type === 'error' 
+            ? '#FEE2E2' 
+            : '#DBEAFE',
+          color: message.type === 'success' 
+            ? '#065F46' 
+            : message.type === 'error' 
+            ? '#991B1B' 
+            : '#1E40AF',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          animation: 'slideDown 0.3s ease-out'
+        }}>
+          {message.type === 'success' ? (
+            <CheckCircle size={24} />
+          ) : (
+            <AlertCircle size={24} />
+          )}
+          <span style={{ flex: 1, fontSize: '15px' }}>{message.text}</span>
+        </div>
+      )}
+
+      {/* 메인 폼 */}
+      <form onSubmit={handleSubmit}>
+        {/* 기본 정보 섹션 */}
+        <section style={{
+          background: COLORS.cardBg,
+          padding: '32px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          border: `1px solid ${COLORS.border}`
+        }}>
+          <h2 style={{ 
+            color: COLORS.primary,
+            fontSize: '22px',
+            fontWeight: '700',
+            borderLeft: `5px solid ${COLORS.secondary}`,
+            paddingLeft: '16px',
+            marginBottom: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <DollarSign size={24} />
+            Basic Information
+          </h2>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '24px'
+          }}>
+            {/* Branch Name */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: COLORS.primary,
+                fontWeight: '600',
+                fontSize: '14px'
+              }}>
+                Branch Name *
+              </label>
+              {loadingBranches ? (
+                <div style={{ 
+                  padding: '12px',
+                  background: COLORS.background,
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <Loader size={16} className="spin" />
+                  Loading branches...
+                </div>
+              ) : (
+                <select
+                  value={formData.branchName}
+                  onChange={(e) => handleInputChange('branchName', e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `2px solid ${COLORS.border}`,
+                    borderRadius: '10px',
+                    fontSize: '15px',
+                    background: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <option value="">Select Branch</option>
+                  {branches.map(branch => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Branch Code */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: COLORS.primary,
+                fontWeight: '600',
+                fontSize: '14px'
+              }}>
+                Branch Code (Password) *
+              </label>
+              <input
+                type="password"
+                value={formData.branchCode}
+                onChange={(e) => handleInputChange('branchCode', e.target.value.toUpperCase())}
+                placeholder="e.g., SEL2024"
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: `2px solid ${COLORS.border}`,
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  transition: 'all 0.2s'
+                }}
+              />
+            </div>
+
+            {/* Manager Name */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: COLORS.primary,
+                fontWeight: '600',
+                fontSize: '14px'
+              }}>
+                Manager Name *
+              </label>
+              <input
+                type="text"
+                value={formData.managerName}
+                onChange={(e) => handleInputChange('managerName', e.target.value)}
+                placeholder="e.g., John Smith"
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: `2px solid ${COLORS.border}`,
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  transition: 'all 0.2s'
+                }}
+              />
+            </div>
+
+            {/* Target Month */}
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                color: COLORS.primary,
+                fontWeight: '600',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Calendar size={16} />
+                Target Month *
+              </label>
+              <input
+                type="month"
+                value={formData.targetMonth}
+                onChange={(e) => handleInputChange('targetMonth', e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  border: `2px solid ${COLORS.border}`,
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  transition: 'all 0.2s'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Load Previous Data 버튼 */}
+          <button
+            type="button"
+            onClick={handleLoadPreviousData}
+            disabled={loading || !formData.branchName || !formData.branchCode || !formData.targetMonth}
+            style={{
+              marginTop: '24px',
+              padding: '12px 24px',
+              background: loading ? '#9CA3AF' : COLORS.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '15px',
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              transition: 'all 0.3s'
+            }}
+          >
+            {loading ? (
+              <>
+                <Loader size={18} className="spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <Download size={18} />
+                Load Previous Data
+              </>
+            )}
+          </button>
+        </section>
+
+        {/* 비용 항목 섹션 */}
+        <section style={{
+          background: COLORS.cardBg,
+          padding: '32px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          border: `1px solid ${COLORS.border}`
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '28px'
+          }}>
+            <h2 style={{ 
+              color: COLORS.primary,
+              fontSize: '22px',
+              fontWeight: '700',
+              borderLeft: `5px solid ${COLORS.secondary}`,
+              paddingLeft: '16px',
+              margin: 0
+            }}>
+              Cost Items
+            </h2>
+            
+            <button
+              type="button"
+              onClick={addItem}
+              style={{
+                padding: '10px 20px',
+                background: COLORS.secondary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.3s'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <Plus size={18} />
+              Add Item
+            </button>
+          </div>
+
+          {/* 비용 항목 리스트 */}
+          {formData.items.map((item, index) => (
+            <div
+              key={index}
+              style={{
+                padding: '24px',
+                background: COLORS.background,
+                borderRadius: '12px',
+                marginBottom: '20px',
+                border: `2px solid ${COLORS.border}`,
+                position: 'relative'
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '-12px',
+                left: '20px',
+                background: COLORS.secondary,
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '700'
+              }}>
+                Item {index + 1}
+              </div>
+
+              {formData.items.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeItem(index)}
+                  style={{
+                    position: 'absolute',
+                    top: '20px',
+                    right: '20px',
+                    background: COLORS.error,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Trash2 size={16} />
+                  Remove
+                </button>
+              )}
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '20px',
+                marginTop: '16px'
+              }}>
+                {/* Item Name */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Item Name *
+                  </label>
+                  <select
+                    value={item.itemName}
+                    onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      background: 'white'
+                    }}
+                  >
+                    <option value="">Select Item</option>
+                    {settings.costItems.map(costItem => (
+                      <option key={costItem} value={costItem}>{costItem}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Unit Price */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Unit Price *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={item.unitPrice}
+                    onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                {/* Currency */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Currency *
+                  </label>
+                  <select
+                    value={item.currency}
+                    onChange={(e) => handleItemChange(index, 'currency', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      background: 'white'
+                    }}
+                  >
+                    {settings.currencies.map(curr => (
+                      <option key={curr} value={curr}>{curr}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={item.quantity}
+                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                {/* Estimated Cost */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Estimated Cost
+                  </label>
+                  <input
+                    type="text"
+                    value={item.estimatedCost.toFixed(2)}
+                    readOnly
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      background: '#F3F4F6',
+                      color: COLORS.primary,
+                      fontWeight: '700'
+                    }}
+                  />
+                </div>
+
+                {/* Actual Cost */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Actual Cost
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={item.actualCost}
+                    onChange={(e) => handleItemChange(index, 'actualCost', e.target.value)}
+                    placeholder="Leave empty if not confirmed"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                {/* Payment Method */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Payment Method
+                  </label>
+                  <select
+                    value={item.paymentMethod}
+                    onChange={(e) => handleItemChange(index, 'paymentMethod', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      background: 'white'
+                    }}
+                  >
+                    <option value="">Select Method</option>
+                    {settings.paymentMethods.map(method => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Basis */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Basis / Reference
+                  </label>
+                  <input
+                    type="text"
+                    value={item.basis}
+                    onChange={(e) => handleItemChange(index, 'basis', e.target.value)}
+                    placeholder="e.g., Contract #12345"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px'
+                    }}
+                  />
+                </div>
+
+                {/* Note */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    color: COLORS.primary,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>
+                    Note
+                  </label>
+                  <textarea
+                    value={item.note}
+                    onChange={(e) => handleItemChange(index, 'note', e.target.value)}
+                    placeholder="Additional information..."
+                    rows="2"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: `2px solid ${COLORS.border}`,
+                      borderRadius: '10px',
+                      fontSize: '15px',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* 총계 섹션 */}
+        <section style={{
+          background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primary}dd 100%)`,
+          color: 'white',
+          padding: '28px 32px',
+          borderRadius: '16px',
+          marginBottom: '24px',
+          boxShadow: '0 4px 20px rgba(27, 58, 125, 0.15)'
+        }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '24px'
+          }}>
+            <div>
+              <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>
+                Total Estimated Cost
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                {calculateTotalCost('estimated').toFixed(2)}
+              </div>
+            </div>
+            
+            <div>
+              <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>
+                Total Actual Cost
+              </div>
+              <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                {calculateTotalCost('actual').toFixed(2)}
+              </div>
+            </div>
+            
+            <div>
+              <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '8px' }}>
+                Difference
+              </div>
+              <div style={{ 
+                fontSize: '32px', 
+                fontWeight: '700',
+                color: calculateTotalCost('actual') > calculateTotalCost('estimated') 
+                  ? '#FCD34D' 
+                  : '#86EFAC'
+              }}>
+                {(calculateTotalCost('actual') - calculateTotalCost('estimated')).toFixed(2)}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 제출 버튼 */}
+        <button
+          type="submit"
+          disabled={loading || submitSuccess}
+          style={{
+            width: '100%',
+            padding: '18px',
+            background: submitSuccess
+              ? COLORS.success
+              : loading 
+              ? '#9CA3AF'
+              : `linear-gradient(135deg, ${COLORS.secondary} 0%, ${COLORS.secondary}dd 100%)`,
+            color: 'white',
+            border: 'none',
+            borderRadius: '12px',
+            fontSize: '18px',
+            fontWeight: '700',
+            cursor: (loading || submitSuccess) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            boxShadow: (loading || submitSuccess) ? 'none' : '0 4px 20px rgba(233, 69, 96, 0.3)',
+            transform: submitSuccess ? 'scale(1.02)' : 'scale(1)'
+          }}
+          onMouseOver={(e) => {
+            if (!loading && !submitSuccess) e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseOut={(e) => {
+            if (!loading && !submitSuccess) e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          {submitSuccess ? (
+            <>
+              <CheckCircle size={24} />
+              Data Submitted Successfully!
+            </>
+          ) : loading ? (
+            <>
+              <Loader size={24} className="spin" />
+              Submitting Data...
+            </>
+          ) : (
+            <>
+              <Upload size={24} />
+              Submit Security Cost Data
+            </>
+          )}
+        </button>
+      </form>
+
+      {/* Settings 컴포넌트 */}
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        currentSettings={settings}
+        onSave={handleSaveSettings}
+      />
+    </div>
+  );
+}
+
+export default App;
