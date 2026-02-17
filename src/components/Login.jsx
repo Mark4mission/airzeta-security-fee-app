@@ -11,6 +11,7 @@ const COLORS = {
 
 // Firebase Console 승인된 도메인 설정 직접 링크
 const FIREBASE_AUTH_DOMAINS_URL = 'https://console.firebase.google.com/project/airzeta-security-system/authentication/settings';
+const GCP_CREDENTIALS_URL = 'https://console.cloud.google.com/apis/credentials?project=airzeta-security-system';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -58,11 +59,11 @@ function Login() {
     try {
       const result = await loginWithGoogle();
       if (result === null) {
-        return; // signInWithRedirect 실행 중
+        return;
       }
     } catch (err) {
       const msg = err.message || '';
-      if (msg.includes('승인되지 않았습니다') || msg.includes('unauthorized')) {
+      if (msg.includes('도메인') || msg.includes('unauthorized') || msg.includes('Cloud Console')) {
         setIsDomainError(true);
       }
       setError(msg || 'Google 로그인에 실패했습니다.');
@@ -135,6 +136,25 @@ function Login() {
             {isDomainError && (
               <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${isDomainError ? '#fbbf24' : '#fca5a5'}` }}>
                 <a 
+                  href={GCP_CREDENTIALS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    color: '#1d4ed8',
+                    fontWeight: '600',
+                    textDecoration: 'underline',
+                    fontSize: '0.8rem',
+                    marginBottom: '0.4rem'
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  Google Cloud Console 열기 (OAuth 설정)
+                </a>
+                <br />
+                <a 
                   href={FIREBASE_AUTH_DOMAINS_URL}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -149,11 +169,8 @@ function Login() {
                   }}
                 >
                   <ExternalLink size={14} />
-                  Firebase Console에서 도메인 추가하기
+                  Firebase Console 열기 (승인된 도메인)
                 </a>
-                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
-                  추가할 도메인: <strong style={{ color: '#111827', userSelect: 'all' }}>{window.location.hostname}</strong>
-                </p>
               </div>
             )}
           </div>
