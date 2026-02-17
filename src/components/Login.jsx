@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Shield, LogIn, Loader, Mail } from 'lucide-react';
-import { loginUser, loginWithGoogle } from '../firebase/auth';
+import React, { useState, useEffect } from 'react';
+import { Shield, LogIn, Loader, ExternalLink } from 'lucide-react';
+import { loginUser, loginWithGoogle, initGoogleRedirectResult } from '../firebase/auth';
 
 const COLORS = {
   primary: '#1B3A7D',
@@ -9,15 +9,36 @@ const COLORS = {
   background: '#f3f4f6'
 };
 
+// Firebase Console 승인된 도메인 설정 직접 링크
+const FIREBASE_AUTH_DOMAINS_URL = 'https://console.firebase.google.com/project/airzeta-security-system/authentication/settings';
+
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isDomainError, setIsDomainError] = useState(false);
+
+  // Google Redirect 결과 처리 (signInWithRedirect 후 페이지 리로드 시)
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await initGoogleRedirectResult();
+        if (result) {
+          console.log('[Login] Google redirect 로그인 성공:', result.email);
+        }
+      } catch (err) {
+        console.error('[Login] Redirect 결과 에러:', err);
+      }
+    };
+    
+    checkRedirectResult();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setIsDomainError(false);
     setLoading(true);
 
     try {
@@ -31,16 +52,20 @@ function Login() {
 
   const handleGoogleLogin = async () => {
     setError('');
+    setIsDomainError(false);
     setLoading(true);
 
     try {
-      await loginWithGoogle();
-    } catch (err) {
-      if (err.message === 'Google sign-in was cancelled') {
-        setError('Google sign-in was cancelled. Please try again.');
-      } else {
-        setError(err.message || 'Google sign-in failed. Please try again.');
+      const result = await loginWithGoogle();
+      if (result === null) {
+        return; // signInWithRedirect 실행 중
       }
+    } catch (err) {
+      const msg = err.message || '';
+      if (msg.includes('승인되지 않았습니다') || msg.includes('unauthorized')) {
+        setIsDomainError(true);
+      }
+      setError(msg || 'Google 로그인에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -96,13 +121,41 @@ function Login() {
           <div style={{
             padding: '0.75rem',
             marginBottom: '1rem',
-            background: '#fee2e2',
-            border: '1px solid #ef4444',
+            background: isDomainError ? '#fef3c7' : '#fee2e2',
+            border: `1px solid ${isDomainError ? '#f59e0b' : '#ef4444'}`,
             borderRadius: '0.5rem',
-            color: '#991b1b',
-            fontSize: '0.875rem'
+            color: isDomainError ? '#92400e' : '#991b1b',
+            fontSize: '0.8rem',
+            whiteSpace: 'pre-line',
+            maxHeight: '280px',
+            overflowY: 'auto',
+            lineHeight: '1.5'
           }}>
             {error}
+            {isDomainError && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${isDomainError ? '#fbbf24' : '#fca5a5'}` }}>
+                <a 
+                  href={FIREBASE_AUTH_DOMAINS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    color: '#1d4ed8',
+                    fontWeight: '600',
+                    textDecoration: 'underline',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  Firebase Console에서 도메인 추가하기
+                </a>
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+                  추가할 도메인: <strong style={{ color: '#111827', userSelect: 'all' }}>{window.location.hostname}</strong>
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -271,7 +324,7 @@ function Login() {
             fontWeight: '500',
             textAlign: 'center'
           }}>
-            🛡️ Aviation Security Team
+            Aviation Security Team
           </p>
           <p style={{
             margin: '0.25rem 0 0 0',
