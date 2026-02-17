@@ -5,7 +5,8 @@ import { serverTimestamp } from 'firebase/firestore';
 import { 
   getAllBranches, 
   getSecurityCostsByBranch, 
-  submitSecurityCost 
+  submitSecurityCost,
+  loadSettingsFromFirestore 
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -98,22 +99,42 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Branch 데이터 로드 (인증 후에만 실행)
+  // Branch 데이터 로드 (인증 후에만 실행) - Firestore에서 전체 Settings 로드
   useEffect(() => {
-    const loadBranches = async () => {
+    const loadSettings = async () => {
       // 인증이 완료되고 사용자가 있을 때만 실행
       if (!authLoading && currentUser) {
         try {
-          const branchesData = await getAllBranches();
-          if (branchesData.length > 0) {
-            setSettings(prev => ({ ...prev, branches: branchesData }));
+          console.log('[App] Firestore에서 Settings 로드 시작...');
+          const firestoreSettings = await loadSettingsFromFirestore();
+          
+          // Firestore에 데이터가 있으면 사용, 없으면 기본값/localStorage 유지
+          const merged = { ...settings };
+          
+          if (firestoreSettings.branches && firestoreSettings.branches.length > 0) {
+            merged.branches = firestoreSettings.branches;
           }
+          if (firestoreSettings.costItems && firestoreSettings.costItems.length > 0) {
+            merged.costItems = firestoreSettings.costItems;
+          }
+          if (firestoreSettings.currencies && firestoreSettings.currencies.length > 0) {
+            merged.currencies = firestoreSettings.currencies;
+          }
+          if (firestoreSettings.paymentMethods && firestoreSettings.paymentMethods.length > 0) {
+            merged.paymentMethods = firestoreSettings.paymentMethods;
+          }
+          
+          setSettings(merged);
+          console.log('[App] Settings 로드 완료:', {
+            branches: merged.branches.length,
+            costItems: merged.costItems.length
+          });
         } catch (error) {
-          console.error('Error loading branches:', error);
+          console.error('[App] Firestore Settings 로드 실패, localStorage 사용:', error);
         }
       }
     };
-    loadBranches();
+    loadSettings();
   }, [authLoading, currentUser]); // 의존성 배열 추가
 
   // Settings 변경사항을 localStorage에 저장
