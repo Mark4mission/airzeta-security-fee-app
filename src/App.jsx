@@ -163,11 +163,20 @@ function App() {
   // branch_user 자동 지점 설정
   useEffect(() => {
     if (currentUser && currentUser.role === 'branch_user' && currentUser.branchName) {
+      console.log('[App] branch_user 자동 설정:', currentUser.branchName);
+      console.log('[App] settings.branches:', settings.branches.map(b => b.name));
+      
       setBranchName(currentUser.branchName);
-      const branch = settings.branches.find(b => b.name === currentUser.branchName);
+      // name 또는 id(문서 ID)로 매칭 시도
+      const branch = settings.branches.find(
+        b => b.name === currentUser.branchName || b.id === currentUser.branchName
+      );
       if (branch) {
         setCurrency(branch.currency || 'USD');
         setManagerName(branch.manager || '');
+        console.log('[App] 브랜치 매칭 성공:', branch.name, branch.manager);
+      } else {
+        console.warn('[App] 브랜치 매칭 실패. branchName:', currentUser.branchName);
       }
     }
   }, [currentUser, settings.branches]);

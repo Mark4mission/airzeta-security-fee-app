@@ -34,6 +34,7 @@ function Settings({ settings, onSave, onClose }) {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [addUserMode, setAddUserMode] = useState('existing'); // 'existing' or 'new'
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
@@ -73,34 +74,71 @@ function Settings({ settings, onSave, onClose }) {
 
   const handleAddUser = async (e) => {
     e.preventDefault();
-    if (!newUser.email || !newUser.password || !newUser.branchName) {
-      setMessage({ type: 'error', text: 'Please fill all fields' });
-      return;
-    }
+    
+    if (addUserMode === 'existing') {
+      // 기존 Google 로그인 사용자의 브랜치/역할 배정
+      if (!newUser.email || !newUser.branchName) {
+        setMessage({ type: 'error', text: 'Please fill email and branch fields' });
+        return;
+      }
+      
+      try {
+        // Firestore에서 해당 이메일의 사용자 문서 찾기
+        const querySnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
+        const existingUser = querySnapshot.docs.find(d => d.data().email === newUser.email);
+        
+        if (existingUser) {
+          // 기존 사용자 업데이트
+          await updateDoc(doc(db, COLLECTIONS.USERS, existingUser.id), {
+            branchName: newUser.branchName,
+            role: newUser.role,
+            active: true,
+            updatedAt: new Date()
+          });
+          setMessage({ type: 'success', text: `User ${newUser.email} updated with branch ${newUser.branchName}` });
+        } else {
+          setMessage({ type: 'error', text: `User ${newUser.email} not found. They need to login with Google first.` });
+          return;
+        }
+        
+        setShowAddUser(false);
+        setNewUser({ email: '', password: '', branchName: '', role: 'branch_user' });
+        loadUsers();
+      } catch (error) {
+        console.error('Error updating user:', error);
+        setMessage({ type: 'error', text: error.message });
+      }
+    } else {
+      // 새 이메일/비밀번호 사용자 생성 (기존 방식)
+      if (!newUser.email || !newUser.password || !newUser.branchName) {
+        setMessage({ type: 'error', text: 'Please fill all fields' });
+        return;
+      }
 
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        newUser.email,
-        newUser.password
-      );
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          newUser.email,
+          newUser.password
+        );
 
-      await addDoc(collection(db, COLLECTIONS.USERS), {
-        uid: userCredential.user.uid,
-        email: newUser.email,
-        branchName: newUser.branchName,
-        role: newUser.role,
-        active: true,
-        createdAt: new Date()
-      });
+        await addDoc(collection(db, COLLECTIONS.USERS), {
+          uid: userCredential.user.uid,
+          email: newUser.email,
+          branchName: newUser.branchName,
+          role: newUser.role,
+          active: true,
+          createdAt: new Date()
+        });
 
-      setMessage({ type: 'success', text: 'User added successfully' });
-      setShowAddUser(false);
-      setNewUser({ email: '', password: '', branchName: '', role: 'branch_user' });
-      loadUsers();
-    } catch (error) {
-      console.error('Error adding user:', error);
-      setMessage({ type: 'error', text: error.message });
+        setMessage({ type: 'success', text: 'User added successfully' });
+        setShowAddUser(false);
+        setNewUser({ email: '', password: '', branchName: '', role: 'branch_user' });
+        loadUsers();
+      } catch (error) {
+        console.error('Error adding user:', error);
+        setMessage({ type: 'error', text: error.message });
+      }
     }
   };
 
@@ -755,7 +793,7 @@ function Settings({ settings, onSave, onClose }) {
                 <h3 style={{ margin: 0, color: COLORS.text.primary }}>User Management</h3>
                 {!showAddUser && !editingUser && (
                   <button
-                    onClick={() => setShowAddUser(true)}
+                    onClick={() => { loadUsers(); setShowAddUser(true); setAddUserMode('existing'); }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -783,43 +821,113 @@ function Settings({ settings, onSave, onClose }) {
                   borderRadius: '0.5rem',
                   marginBottom: '1.5rem'
                 }}>
-                  <h4 style={{ marginTop: 0, color: COLORS.text.primary }}>Add New User</h4>
+                  {/* Mode Toggle */}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAddUserMode('existing')}
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        background: addUserMode === 'existing' ? COLORS.primary : 'white',
+                        color: addUserMode === 'existing' ? 'white' : COLORS.text.primary,
+                        border: `2px solid ${addUserMode === 'existing' ? COLORS.primary : COLORS.text.light}`,
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      Assign Google User to Branch
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddUserMode('new')}
+                      style={{
+                        flex: 1,
+                        padding: '0.75rem',
+                        background: addUserMode === 'new' ? COLORS.primary : 'white',
+                        color: addUserMode === 'new' ? 'white' : COLORS.text.primary,
+                        border: `2px solid ${addUserMode === 'new' ? COLORS.primary : COLORS.text.light}`,
+                        borderRadius: '0.5rem',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      Create Email/Password User
+                    </button>
+                  </div>
+
+                  <h4 style={{ marginTop: 0, color: COLORS.text.primary }}>
+                    {addUserMode === 'existing' 
+                      ? 'Assign Google User to Branch' 
+                      : 'Create New Email/Password User'}
+                  </h4>
+                  
+                  {addUserMode === 'existing' && (
+                    <p style={{ fontSize: '0.8rem', color: COLORS.text.secondary, marginBottom: '1rem' }}>
+                      Google로 이미 로그인한 사용자의 이메일을 입력하고, 브랜치와 역할을 지정하세요.
+                    </p>
+                  )}
+                  
                   <form onSubmit={handleAddUser}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
                           Email *
                         </label>
-                        <input
-                          type="email"
-                          required
-                          value={newUser.email}
-                          onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                          style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem'
-                          }}
-                        />
+                        {addUserMode === 'existing' ? (
+                          <select
+                            required
+                            value={newUser.email}
+                            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: `1px solid ${COLORS.text.light}`,
+                              borderRadius: '0.375rem'
+                            }}
+                          >
+                            <option value="">Select existing user</option>
+                            {users.filter(u => !u.branchName).map(u => (
+                              <option key={u.id} value={u.email}>{u.email} ({u.role})</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="email"
+                            required
+                            value={newUser.email}
+                            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: `1px solid ${COLORS.text.light}`,
+                              borderRadius: '0.375rem'
+                            }}
+                          />
+                        )}
                       </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
-                          Password *
-                        </label>
-                        <input
-                          type="password"
-                          required
-                          value={newUser.password}
-                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                          style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem'
-                          }}
-                        />
-                      </div>
+                      {addUserMode === 'new' && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+                            Password *
+                          </label>
+                          <input
+                            type="password"
+                            required={addUserMode === 'new'}
+                            value={newUser.password}
+                            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                            style={{
+                              width: '100%',
+                              padding: '0.5rem',
+                              border: `1px solid ${COLORS.text.light}`,
+                              borderRadius: '0.375rem'
+                            }}
+                          />
+                        </div>
+                      )}
                       <div>
                         <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
                           Branch *
@@ -879,7 +987,7 @@ function Settings({ settings, onSave, onClose }) {
                           fontWeight: 'bold'
                         }}
                       >
-                        Create User
+                        {addUserMode === 'existing' ? 'Assign Branch' : 'Create User'}
                       </button>
                       <button
                         type="button"

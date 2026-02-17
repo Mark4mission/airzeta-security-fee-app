@@ -219,15 +219,21 @@ export const loadSettingsFromFirestore = async () => {
     
     // 1. branches 로드 (branchCodes 컬렉션)
     const branchesSnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
-    const branches = branchesSnapshot.docs.map(d => ({
-      name: d.data().branchName || d.id,
-      manager: d.data().manager || '',
-      currency: d.data().currency || 'USD',
-      paymentMethod: d.data().paymentMethod || '',
-      branchCode: d.data().branchCode || '',
-      ...d.data(),
-      id: d.id
-    }));
+    const branches = branchesSnapshot.docs.map(d => {
+      const data = d.data();
+      // name 필드: 문서 ID를 우선 사용 (Settings UI에서 저장할 때 문서 ID = branch name)
+      // 기존 데이터에서 branchName이 "Atlanta" 등 다른 이름일 수 있으므로
+      // 문서 ID를 기본 name으로 사용
+      return {
+        ...data,
+        name: d.id,  // 문서 ID가 곧 branch name
+        manager: data.manager || '',
+        currency: data.currency || 'USD',
+        paymentMethod: data.paymentMethod || '',
+        branchCode: data.branchCode || '',
+        id: d.id
+      };
+    });
     
     // 2. settings 문서 로드
     const settingsRef = doc(db, 'settings', SETTINGS_DOC_ID);
