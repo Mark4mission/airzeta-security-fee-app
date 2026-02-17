@@ -1,1205 +1,1104 @@
-import { useState, useEffect } from 'react';
-import {
-  Plus,
-  Trash2,
-  Send,
-  AlertTriangle,
-  CheckCircle2,
-  Loader2,
-  Building2,
-  FileText,
-  Upload,
-  Settings,
-  X,
-  Save,
-  Download,
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2 } from 'lucide-react';
+import './App.css';
+import { serverTimestamp } from 'firebase/firestore';
+import { 
+  getAllBranches, 
+  getSecurityCostsByBranch, 
+  submitSecurityCost 
+} from './firebase/collections';
+import { 
+  listenToAuthChanges, 
+  logoutUser, 
+  isAdmin 
+} from './firebase/auth';
+import Settings from './components/Settings';
+import Login from './components/Login';
 
-// API Constant (Updated)
-const API_URL = 'https://script.google.com/macros/s/AKfycbzq7I4yROJqWqRAQA0PlF_GbCUdyhvNHy3ybD8V5rtYc4Vdt4a-D5LKR1HxLZjGiOO-1g/exec';
+// 색상 상수
+const COLORS = {
+  primary: '#1B3A7D',
+  secondary: '#E94560',
+  success: '#10b981',
+  error: '#ef4444',
+  warning: '#f59e0b',
+  info: '#3b82f6',
+  background: '#f3f4f6',
+  surface: '#ffffff',
+  text: {
+    primary: '#1f2937',
+    secondary: '#6b7280',
+    light: '#9ca3af'
+  }
+};
 
-// Default settings
+// 통화 기호 매핑
+const CURRENCY_SYMBOLS = {
+  USD: '$',
+  EUR: '€',
+  KRW: '₩',
+  JPY: '¥',
+  SGD: 'S$',
+  HKD: 'HK$',
+  THB: '฿'
+};
+
+// 기본 설정값
 const DEFAULT_SETTINGS = {
-  branchNames: ['Seoul Branch', 'Tokyo Branch', 'New York Branch', 'London Branch', 'Singapore Branch'],
-  itemNames: ['Labor Cost', 'Maintenance', 'Equipment', 'Software License', 'Other'],
-  currencies: ['KRW', 'USD', 'EUR', 'JPY', 'CNY'],
-  paymentMethods: ['Wire Transfer', 'ICH', 'Credit Card', 'Cash'],
+  branches: [
+    { name: 'Seoul Branch', address: '123 Gangnam-gu, Seoul', manager: 'Kim Min-soo', phone: '+82-2-1234-5678', currency: 'KRW' },
+    { name: 'Tokyo Branch', address: '456 Shibuya, Tokyo', manager: 'Tanaka Yuki', phone: '+81-3-1234-5678', currency: 'JPY' },
+    { name: 'Singapore Branch', address: '789 Marina Bay, Singapore', manager: 'Lee Wei Ming', phone: '+65-1234-5678', currency: 'SGD' },
+    { name: 'Hong Kong Branch', address: '321 Central, Hong Kong', manager: 'Wong Ka Fai', phone: '+852-1234-5678', currency: 'HKD' },
+    { name: 'Bangkok Branch', address: '654 Sukhumvit, Bangkok', manager: 'Somchai Prasert', phone: '+66-2-1234-5678', currency: 'THB' }
+  ],
+  costItems: [
+    { name: 'Security Personnel Wages', category: 'Labor', description: 'Monthly wages for security staff', defaultRate: 1000 },
+    { name: 'Equipment Maintenance', category: 'Equipment', description: 'CCTV, sensors, alarm systems', defaultRate: 500 },
+    { name: 'Uniforms & Supplies', category: 'Supplies', description: 'Security uniforms and gear', defaultRate: 200 },
+    { name: 'Training & Certification', category: 'Training', description: 'Staff training programs', defaultRate: 300 },
+    { name: 'Insurance Premiums', category: 'Insurance', description: 'Liability insurance', defaultRate: 400 }
+  ],
+  currencies: ['USD', 'EUR', 'KRW', 'JPY', 'SGD', 'HKD', 'THB'],
+  paymentMethods: ['Bank Transfer', 'Credit Card', 'Cash', 'Check', 'Online Payment']
 };
 
 function App() {
-  // History State (Moved inside component)
-  const [historyList, setHistoryList] = useState([]); 
-  const [showHistoryModal, setShowHistoryModal] = useState(false); 
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false); 
+  // 인증 관련 상태
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // Settings state
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [tempSettings, setTempSettings] = useState(DEFAULT_SETTINGS);
-  
-  // Branch defaults state (Unit Price, Manager Name, Currency, Payment Method)
-  const [branchDefaults, setBranchDefaults] = useState({});
-  const [isLoadingBranchDefaults, setIsLoadingBranchDefaults] = useState(false);
-  
-  // Branch-specific default values
-  const [defaultUnitPrice, setDefaultUnitPrice] = useState('');
-  const [defaultCurrency, setDefaultCurrency] = useState(DEFAULT_SETTINGS.currencies[0]);
-  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(DEFAULT_SETTINGS.paymentMethods[0]);
-
-  // Header information state
+  // 폼 데이터 상태 (🔥 branchCode 제거)
   const [branchName, setBranchName] = useState('');
-  const [branchCode, setBranchCode] = useState('');
+  const [currency, setCurrency] = useState('USD');
+  const [krwExchangeRate, setKrwExchangeRate] = useState('');
   const [managerName, setManagerName] = useState('');
   const [targetMonth, setTargetMonth] = useState('');
-
-  // Cost items list state
   const [costItems, setCostItems] = useState([
-    {
-      id: Date.now(),
-      itemName: DEFAULT_SETTINGS.itemNames[0],
-      unitPrice: '',
-      currency: DEFAULT_SETTINGS.currencies[0],
-      quantity: '',
-      estimatedCost: 0,
-      actualCost: '',
-      basis: '',
-      paymentMethod: DEFAULT_SETTINGS.paymentMethods[0],
-      contract: null,
-      contractBase64: '',
-      contractFileName: '',
-      note: '',
-    },
+    { item: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
   ]);
 
-  // UI state
+  // 설정 상태
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('securityAppSettings');
+    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
+  });
+
+  // UI 상태
+  const [showSettings, setShowSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Load settings and branch defaults from Google Sheets on mount
+  // 인증 상태 리스너
   useEffect(() => {
-    loadSettingsFromServer();
-    loadBranchDefaultsFromServer();
+    const unsubscribe = listenToAuthChanges((user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
-  
-  // Load branch defaults from Google Sheets
-  const loadBranchDefaultsFromServer = async () => {
-    setIsLoadingBranchDefaults(true);
-    try {
-      const url = `${API_URL}?action=getBranchDefaults`;
-      console.log('Loading branch defaults from:', url);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors',
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Branch defaults response:', result);
-        
-        if (result.status === 'success' && result.data) {
-          setBranchDefaults(result.data);
-          console.log('Loaded branch defaults:', result.data);
-        } else {
-          console.error('Failed to load branch defaults:', result.message);
+
+  // Branch 데이터 로드 (인증 후에만 실행)
+  useEffect(() => {
+    const loadBranches = async () => {
+      // 인증이 완료되고 사용자가 있을 때만 실행
+      if (!authLoading && currentUser) {
+        try {
+          const branchesData = await getAllBranches();
+          if (branchesData.length > 0) {
+            setSettings(prev => ({ ...prev, branches: branchesData }));
+          }
+        } catch (error) {
+          console.error('Error loading branches:', error);
         }
       }
-    } catch (error) {
-      console.error('Error loading branch defaults:', error);
-    } finally {
-      setIsLoadingBranchDefaults(false);
+    };
+    loadBranches();
+  }, [authLoading, currentUser]); // 의존성 배열 추가
+
+  // Settings 변경사항을 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('securityAppSettings', JSON.stringify(settings));
+  }, [settings]);
+
+  // 메시지 자동 제거
+  useEffect(() => {
+    if (message.text) {
+      const timer = setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+      return () => clearTimeout(timer);
     }
-  };
-  
-  // Save branch defaults to Google Sheets
-  const saveBranchDefaults = async (branchName, defaults) => {
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'saveBranchDefaults',
-          branchName: branchName,
-          defaults: defaults,
-        }),
-        mode: 'cors',
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.status === 'success') {
-          console.log('Branch defaults saved successfully for:', branchName);
-          // Reload branch defaults
-          await loadBranchDefaultsFromServer();
-        } else {
-          console.error('Failed to save branch defaults:', result.message);
-        }
+  }, [message]);
+
+  // 기본 월 설정
+  useEffect(() => {
+    if (!targetMonth) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      setTargetMonth(`${year}-${month}`);
+    }
+  }, [targetMonth]);
+
+  // branch_user 자동 지점 설정
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'branch_user' && currentUser.branchName) {
+      setBranchName(currentUser.branchName);
+      const branch = settings.branches.find(b => b.name === currentUser.branchName);
+      if (branch) {
+        setCurrency(branch.currency || 'USD');
+        setManagerName(branch.manager || '');
       }
-    } catch (error) {
-      console.error('Error saving branch defaults:', error);
     }
-  };
-  
-  // Load settings from Google Sheets
-  const loadSettingsFromServer = async () => {
-    try {
-      const url = `${API_URL}?action=getSettings`;
-      console.log('Loading settings from:', url);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors',
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Settings response:', result);
-        
-        if (result.status === 'success' && result.data) {
-          setSettings(result.data);
-          setTempSettings(result.data);
-          console.log('Loaded settings:', result.data);
-        } else {
-          console.log('Using default settings');
-        }
+  }, [currentUser, settings.branches]);
+
+  // Manager Name & Currency 자동 채우기
+  useEffect(() => {
+    if (branchName && currentUser?.role === 'hq_admin') {
+      const branch = settings.branches.find(b => b.name === branchName);
+      if (branch) {
+        setManagerName(branch.manager || '');
+        setCurrency(branch.currency || 'USD');
       }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      console.log('Using default settings');
     }
-  };
+  }, [branchName, settings.branches, currentUser]);
 
-  // Save settings to Google Sheets
-  const saveSettings = async () => {
+  // 로그아웃
+  const handleLogout = async () => {
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'saveSettings',
-          settings: tempSettings,
-        }),
-        mode: 'cors',
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.status === 'success') {
-          setSettings(tempSettings);
-          setShowSettingsModal(false);
-          alert('Settings saved successfully to Google Sheets!');
-        } else {
-          alert('Failed to save settings: ' + result.message);
-        }
-      }
+      await logoutUser();
+      setCurrentUser(null);
+      setMessage({ type: 'success', text: 'Successfully logged out' });
     } catch (error) {
-      console.error('Error saving settings:', error);
-      alert('Failed to save settings. Using local storage as fallback.');
-      // Fallback to localStorage
-      setSettings(tempSettings);
-      localStorage.setItem('branchSecuritySettings', JSON.stringify(tempSettings));
-      setShowSettingsModal(false);
+      setMessage({ type: 'error', text: 'Logout failed' });
     }
   };
 
-  // Update temp settings
-  const updateTempSetting = (key, index, value) => {
-    const currentArray = tempSettings?.[key] || [];
-    setTempSettings((prev) => ({
-      ...prev,
-      [key]: currentArray.map((item, i) => (i === index ? value : item)),
-    }));
-  };
-
-  const addTempSettingItem = (key) => {
-    setTempSettings((prev) => ({
-      ...prev,
-      [key]: [...prev[key], ''],
-    }));
-  };
-
-  const removeTempSettingItem = (key, index) => {
-    const currentArray = tempSettings?.[key] || [];
-    if (currentArray.length > 1) {
-      setTempSettings((prev) => ({
-        ...prev,
-        [key]: currentArray.filter((_, i) => i !== index),
-      }));
+  // Branch Name 변경
+  const handleBranchChange = (selectedBranchName) => {
+    setBranchName(selectedBranchName);
+    const branch = settings.branches.find(b => b.name === selectedBranchName);
+    if (branch) {
+      setCurrency(branch.currency || 'USD');
+      setManagerName(branch.manager || '');
+    } else {
+      setCurrency('USD');
     }
   };
 
-  // Load previous data
-  const loadPreviousData = async () => {
-    if (!branchName || !branchCode || !targetMonth) {
-      alert('⚠️ Please enter Branch Name, Branch Code, and Target Month to load previous data.');
+  // Settings 저장
+  const handleSaveSettings = (newSettings) => {
+    setSettings(newSettings);
+    setShowSettings(false);
+    setMessage({ type: 'success', text: 'Settings saved successfully!' });
+  };
+
+  // 입력 변경
+  const handleInputChange = (index, field, value) => {
+    const newItems = [...costItems];
+    newItems[index][field] = value;
+    setCostItems(newItems);
+  };
+
+  // 비용 항목 변경
+  const handleItemChange = async (index, itemName) => {
+    const newItems = [...costItems];
+    newItems[index].item = itemName;
+
+    const selectedItem = settings.costItems.find(item => item.name === itemName);
+    if (selectedItem && !newItems[index].estimatedCost) {
+      newItems[index].estimatedCost = selectedItem.defaultRate?.toString() || '';
+    }
+
+    if (branchName && targetMonth) {
+      try {
+        const previousData = await getSecurityCostsByBranch(branchName, targetMonth);
+        if (previousData.length > 0) {
+          const matchingItem = previousData[0].items?.find(i => i.item === itemName);
+          if (matchingItem) {
+            newItems[index].estimatedCost = matchingItem.estimatedCost || newItems[index].estimatedCost;
+            newItems[index].paymentMethod = matchingItem.paymentMethod || '';
+          }
+        }
+      } catch (error) {
+        console.error('Error loading previous data:', error);
+      }
+    }
+
+    setCostItems(newItems);
+  };
+
+  // 비용 항목 추가
+  const handleAddItem = () => {
+    setCostItems([...costItems, { 
+      item: '', 
+      estimatedCost: '', 
+      actualCost: '', 
+      currency: currency, 
+      paymentMethod: '', 
+      notes: '' 
+    }]);
+  };
+
+  // 비용 항목 제거
+  const handleRemoveItem = (index) => {
+    if (costItems.length > 1) {
+      setCostItems(costItems.filter((_, i) => i !== index));
+    }
+  };
+
+  // 이전 데이터 로드
+  const handleLoadPreviousData = async () => {
+    if (!branchName || !targetMonth) {
+      setMessage({ type: 'warning', text: 'Please select branch and month first' });
       return;
     }
 
-    setIsLoading(true);
-
     try {
-      const url = `${API_URL}?action=load&branchName=${encodeURIComponent(branchName)}&branchCode=${encodeURIComponent(branchCode)}&targetMonth=${encodeURIComponent(targetMonth)}`;
-      
-      console.log('Loading data from:', url);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors',
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      console.log('Load response status:', response.status);
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Load response data:', result);
-
-        if (result.status === 'success' && result.data) {
-          // Populate form with loaded data
-          setManagerName(result.data.header.managerName);
-          
-          // Map loaded items to form structure
-          const loadedItems = result.data.costItems.map((item, index) => ({
-            id: Date.now() + index,
-            itemName: item.itemName,
-            unitPrice: item.unitPrice.toString(),
-            currency: item.currency,
-            quantity: item.quantity.toString(),
-            estimatedCost: item.estimatedCost,
-            actualCost: item.actualCost.toString(),
-            basis: item.basis,
-            paymentMethod: item.paymentMethod,
-            contract: null,
-            contractBase64: '',
-            contractFileName: item.contractFileName,
-            note: item.note,
-          }));
-          
-          setCostItems(loadedItems);
-          alert('✅ Previous data loaded successfully!');
-        } else if (result.status === 'error') {
-          if (result.message.includes('Invalid branch code')) {
-            alert('❌ Invalid branch code. Please check your credentials.');
-          } else {
-            alert(`❌ Error: ${result.message}`);
-          }
-        } else {
-          alert('ℹ️ No previous data found for this branch and month.');
+      const previousData = await getSecurityCostsByBranch(branchName, targetMonth);
+      if (previousData.length > 0) {
+        const latestData = previousData[0];
+        if (latestData.items && latestData.items.length > 0) {
+          setCostItems(latestData.items.map(item => ({
+            ...item,
+            actualCost: '',
+            currency: item.currency || currency
+          })));
+          setMessage({ type: 'success', text: 'Previous data loaded successfully!' });
         }
       } else {
-        throw new Error(`Failed to load data: ${response.status}`);
+        setMessage({ type: 'info', text: 'No previous data found for this branch and month' });
       }
     } catch (error) {
-      console.error('Load error:', error);
-      if (error.name === 'AbortError') {
-        alert('⏱️ Request timeout. The server is taking too long to respond. Please try again.');
-      } else {
-        alert('❌ Failed to load previous data.\n\nPossible causes:\n• Internet connection issue\n• Google Apps Script not responding\n• CORS configuration issue\n\nPlease ensure:\n1. Your internet connection is stable\n2. The Google Apps Script is deployed as a web app\n3. Access is set to "Anyone"');
-      }
-    } finally {
-      setIsLoading(false);
+      console.error('Error loading previous data:', error);
+      setMessage({ type: 'error', text: 'Failed to load previous data' });
     }
   };
 
-  // Add cost item
-  // Add cost item with branch defaults
-  const addCostItem = () => {
-    setCostItems([
-      ...costItems,
-      {
-        id: Date.now(),
-        itemName: (settings?.itemNames || DEFAULT_SETTINGS.itemNames)[0],
-        unitPrice: defaultUnitPrice || '',
-        currency: defaultCurrency || (settings?.currencies || DEFAULT_SETTINGS.currencies)[0],
-        quantity: '',
-        estimatedCost: 0,
-        actualCost: '',
-        basis: '',
-        paymentMethod: defaultPaymentMethod || (settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods)[0],
-        contract: null,
-        contractBase64: '',
-        contractFileName: '',
-        note: '',
-      },
-    ]);
+  // 날짜 기반 입력 제한
+  const canEditEstimatedCost = () => {
+    if (!targetMonth) return true;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    
+    const [targetYear, targetMonthNum] = targetMonth.split('-').map(Number);
+    
+    if (targetYear > currentYear) return false;
+    if (targetYear === currentYear && targetMonthNum > currentMonth) return false;
+    
+    return true;
   };
 
-  // Remove cost item
-  const removeCostItem = (id) => {
-    if (costItems.length > 1) {
-      setCostItems(costItems.filter((item) => item.id !== id));
+  const canEditActualCost = () => {
+    if (!targetMonth) return false;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    
+    const [targetYear, targetMonthNum] = targetMonth.split('-').map(Number);
+    
+    if (targetYear < currentYear) return true;
+    if (targetYear === currentYear && targetMonthNum < currentMonth) return true;
+    
+    if (targetYear === currentYear && targetMonthNum === currentMonth) {
+      return currentDay >= 28;
     }
+    
+    return false;
   };
 
-  // Update cost item
-  const updateCostItem = (id, field, value) => {
-    setCostItems(
-      costItems.map((item) => {
-        if (item.id === id) {
-          const updatedItem = { ...item, [field]: value };
-
-          // Auto-calculate estimated cost
-          if (field === 'unitPrice' || field === 'quantity') {
-            const unitPrice = parseFloat(field === 'unitPrice' ? value : item.unitPrice) || 0;
-            const quantity = parseFloat(field === 'quantity' ? value : item.quantity) || 0;
-            updatedItem.estimatedCost = unitPrice * quantity;
-          }
-
-          return updatedItem;
-        }
-        return item;
-      })
-    );
+  // 환율 변환
+  const convertToKRW = (amount, itemCurrency) => {
+    if (!krwExchangeRate || !amount) return null;
+    const rate = parseFloat(krwExchangeRate);
+    const amt = parseFloat(amount);
+    if (isNaN(rate) || isNaN(amt)) return null;
+    
+    if (itemCurrency === 'KRW') return amt;
+    
+    return amt * rate;
   };
 
-  // File upload handler (Base64 conversion)
-  const handleFileUpload = (id, file) => {
-    if (file && file.type === 'application/pdf') {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
-        setCostItems(
-          costItems.map((item) => {
-            if (item.id === id) {
-              return {
-                ...item,
-                contract: file,
-                contractBase64: base64String,
-                contractFileName: file.name,
-              };
-            }
-            return item;
-          })
-        );
-      };
-      reader.readAsDataURL(file);
-    } else {
-      alert('Only PDF files can be uploaded.');
-    }
-  };
-
-  // Validation: actual cost > estimated cost
-  const isActualCostExceeded = (item) => {
-    const actualCost = parseFloat(item.actualCost) || 0;
-    return actualCost > item.estimatedCost && item.estimatedCost > 0;
-  };
-
-  // Form submission
+  // 제출
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validation
-    if (!branchName || !branchCode || !managerName || !targetMonth) {
-      alert('Please fill in all required fields.');
+    if (!canEditEstimatedCost()) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Estimated Cost can only be entered for current or past months' 
+      });
+      // 🔥 메시지 위치로 스크롤
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    // Prepare data
-    const formData = {
-      header: {
-        branchName,
-        branchCode,
-        managerName,
-        targetMonth,
-      },
-      costItems: costItems.map((item) => ({
-        itemName: item.itemName,
-        unitPrice: parseFloat(item.unitPrice) || 0,
-        currency: item.currency,
-        quantity: parseFloat(item.quantity) || 0,
-        estimatedCost: item.estimatedCost,
-        actualCost: parseFloat(item.actualCost) || 0,
-        basis: item.basis,
-        paymentMethod: item.paymentMethod,
-        contractBase64: item.contractBase64,
-        contractFileName: item.contractFileName,
-        note: item.note,
-      })),
-      timestamp: new Date().toISOString(),
-    };
+    if (costItems.some(item => item.actualCost && !canEditActualCost())) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Actual Cost can only be entered after the 28th of the month' 
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (!branchName || !managerName || !targetMonth) {
+      setMessage({ type: 'error', text: 'Please fill in all required fields' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    const validItems = costItems.filter(item => 
+      item.item && (item.estimatedCost || item.actualCost)
+    );
+
+    if (validItems.length === 0) {
+      setMessage({ type: 'error', text: 'Please add at least one cost item' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
-      console.log('Submitting data:', formData);
+      // 🔥 branchCode 제거
+      const submissionData = {
+        branchName,
+        managerName,
+        targetMonth,
+        currency,
+        krwExchangeRate: krwExchangeRate ? parseFloat(krwExchangeRate) : null,
+        items: validItems.map(item => ({
+          item: item.item,
+          estimatedCost: parseFloat(item.estimatedCost) || 0,
+          actualCost: parseFloat(item.actualCost) || 0,
+          currency: item.currency || currency,
+          paymentMethod: item.paymentMethod,
+          notes: item.notes
+        })),
+        totalEstimated: calculateTotalEstimated(),
+        totalActual: calculateTotalActual(),
+        submittedAt: serverTimestamp(),
+        submittedBy: currentUser?.email || 'unknown'
+      };
+
+      await submitSecurityCost(submissionData);
+
+      setMessage({ type: 'success', text: 'Security cost submitted successfully!' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       
-      // Try with CORS mode first
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-        mode: 'cors',
-      });
-
-      console.log('Response status:', response.status);
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Response data:', result);
-        
-        if (result.status === 'success') {
-          setShowSuccessModal(true);
-          resetForm();
-        } else if (result.status === 'error') {
-          if (result.message.includes('Invalid branch code')) {
-            alert('Invalid branch code. Please check your credentials.');
-          } else {
-            alert(`Submission error: ${result.message}`);
-          }
-        }
-      } else {
-        throw new Error(`Server responded with status: ${response.status}`);
+      // 폼 초기화
+      if (currentUser?.role === 'hq_admin') {
+        setBranchName('');
+        setManagerName('');
       }
+      setCostItems([{ 
+        item: '', 
+        estimatedCost: '', 
+        actualCost: '', 
+        currency: currency, 
+        paymentMethod: '', 
+        notes: '' 
+      }]);
+
     } catch (error) {
       console.error('Submission error:', error);
-      
-      // Fallback to no-cors mode
-      try {
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain',
-          },
-          body: JSON.stringify(formData),
-          mode: 'no-cors',
-        });
-        
-        // In no-cors mode, we can't read the response
-        setShowSuccessModal(true);
-        alert('Data sent in no-cors mode. Please verify submission in Google Sheets.');
-        resetForm();
-      } catch (fallbackError) {
-        console.error('Fallback submission error:', fallbackError);
-        alert('Failed to submit data. Please check your connection and try again.');
-      }
+      setMessage({ type: 'error', text: error.message || 'Failed to submit data' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Reset form
-  const resetForm = () => {
-    setBranchName('');
-    setBranchCode('');
-    setManagerName('');
-    setTargetMonth('');
-    setCostItems([
-      {
-        id: Date.now(),
-        itemName: (settings?.itemNames || DEFAULT_SETTINGS.itemNames)[0],
-        unitPrice: '',
-        currency: (settings?.currencies || DEFAULT_SETTINGS.currencies)[0],
-        quantity: '',
-        estimatedCost: 0,
-        actualCost: '',
-        basis: '',
-        paymentMethod: (settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods)[0],
-        contract: null,
-        contractBase64: '',
-        contractFileName: '',
-        note: '',
-      },
-    ]);
+  // 총 예상 비용
+  const calculateTotalEstimated = () => {
+    return costItems.reduce((sum, item) => {
+      const cost = parseFloat(item.estimatedCost) || 0;
+      return sum + cost;
+    }, 0);
   };
 
+  // 총 실제 비용
+  const calculateTotalActual = () => {
+    return costItems.reduce((sum, item) => {
+      const cost = parseFloat(item.actualCost) || 0;
+      return sum + cost;
+    }, 0);
+  };
+
+  // 로딩 중
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`
+      }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '5px solid rgba(255,255,255,0.3)',
+          borderTop: '5px solid white',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }} />
+      </div>
+    );
+  }
+
+  // 로그인되지 않은 경우
+  if (!currentUser) {
+    return <Login />;
+  }
+
+  // 메인 앱 UI
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Header */}
-      <header className="bg-white shadow-md border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Building2 className="w-8 h-8 text-blue-600" />
-              <h1 className="text-3xl font-bold text-gray-900">Branch Security Cost Submission System</h1>
-            </div>
-            <button
-              onClick={() => {
-                setTempSettings(settings);
-                setShowSettingsModal(true);
-              }}
-              className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-              <span>Settings</span>
-            </button>
+    <div style={{ minHeight: '100vh', background: COLORS.background }}>
+      {/* 헤더 */}
+      <header style={{
+        background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
+        color: 'white',
+        padding: '1rem 2rem',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* 🔥 Shield 아이콘 로고 */}
+          <div style={{
+            width: '50px',
+            height: '50px',
+            background: 'linear-gradient(135deg, #E94560 0%, #d63d54 100%)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+          }}>
+            <Shield size={28} color="white" strokeWidth={2.5} />
           </div>
+          <div>
+            <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
+              Branch Security Cost Submission
+            </h1>
+            <p style={{ fontSize: '0.75rem', opacity: 0.9, margin: '0.25rem 0 0 0' }}>
+              {currentUser.email} | {currentUser.role === 'hq_admin' ? '🔑 Administrator' : '👤 User'}
+              {currentUser.role === 'branch_user' && ` | ${branchName}`}
+            </p>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          {isAdmin(currentUser) && (
+            <button
+              onClick={() => setShowSettings(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 1rem',
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                borderRadius: '0.5rem',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.target.style.background = 'rgba(255,255,255,0.3)'}
+              onMouseLeave={e => e.target.style.background = 'rgba(255,255,255,0.2)'}
+            >
+              <SettingsIcon size={18} />
+              Settings
+            </button>
+          )}
+          
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              background: COLORS.secondary,
+              border: 'none',
+              borderRadius: '0.5rem',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => e.target.style.background = '#d63d54'}
+            onMouseLeave={e => e.target.style.background = COLORS.secondary}
+          >
+            <LogOut size={18} />
+            Logout
+          </button>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Header information card */}
-          <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-                Branch Information
-              </h2>
-              <button
-                type="button"
-                onClick={loadPreviousData}
-                disabled={isLoading}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Loading...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    <span>View Submissions</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch Name <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={branchName}
-                  onChange={(e) => {
-                    const selectedBranch = e.target.value;
-                    setBranchName(selectedBranch);
-                    
-                    // Auto-load branch defaults from Google Sheets
-                    if (selectedBranch && branchDefaults[selectedBranch]) {
-                      const defaults = branchDefaults[selectedBranch];
-                      setManagerName(defaults.managerName || '');
-                      setDefaultUnitPrice(defaults.unitPrice || '');
-                      setDefaultCurrency(defaults.currency || DEFAULT_SETTINGS.currencies[0]);
-                      setDefaultPaymentMethod(defaults.paymentMethod || DEFAULT_SETTINGS.paymentMethods[0]);
-                      
-                      // Update all cost items with new defaults
-                      setCostItems(costItems.map(item => ({
-                        ...item,
-                        unitPrice: defaults.unitPrice || item.unitPrice,
-                        currency: defaults.currency || item.currency,
-                        paymentMethod: defaults.paymentMethod || item.paymentMethod,
-                      })));
-                      
-                      console.log('Loaded branch defaults:', defaults);
-                    } else {
-                      // Clear defaults if no saved data
-                      setManagerName('');
-                      setDefaultUnitPrice('');
-                      setDefaultCurrency(DEFAULT_SETTINGS.currencies[0]);
-                      setDefaultPaymentMethod(DEFAULT_SETTINGS.paymentMethods[0]);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  required
-                >
-                  <option value="">Select Branch</option>
-                  {(settings?.branchNames || DEFAULT_SETTINGS.branchNames).map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Branch Code <span className="text-red-500">*</span>
-                  <span className="text-xs text-gray-500 ml-2">
-                    (Security verification - known only to branch manager)
-                  </span>
-                </label>
-                <input
-                  type="password"
-                  value={branchCode}
-                  onChange={(e) => setBranchCode(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter your branch code"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Manager Name <span className="text-red-500">*</span>
-                  <span className="text-xs text-blue-600 ml-2">
-                    (Auto-saved per branch)
-                  </span>
-                </label>
-                <input
-                  type="text"
-                  value={managerName}
-                  onChange={(e) => setManagerName(e.target.value)}
-                  onBlur={() => {
-                    // Auto-save when Manager Name changes
-                    if (branchName && managerName) {
-                      saveBranchDefaults(branchName, {
-                        managerName: managerName,
-                        unitPrice: defaultUnitPrice,
-                        currency: defaultCurrency,
-                        paymentMethod: defaultPaymentMethod,
-                      });
-                    }
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., John Doe"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Target Month <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="month"
-                  value={targetMonth}
-                  onChange={(e) => setTargetMonth(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
+      {/* 🔥 메시지 배너 - Sticky */}
+      {message.text && (
+        <div style={{
+          padding: '1rem',
+          margin: '0',
+          background: message.type === 'success' ? COLORS.success :
+                     message.type === 'error' ? COLORS.error :
+                     message.type === 'warning' ? COLORS.warning :
+                     COLORS.info,
+          color: 'white',
+          animation: 'slideDown 0.3s ease-out',
+          position: 'sticky',
+          top: '70px',
+          zIndex: 99,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+        }}>
+          <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem' }}>
+            {message.text}
           </div>
+        </div>
+      )}
 
-          {/* Cost items list */}
-          <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-800 flex items-center">
-                <FileText className="w-5 h-5 mr-2 text-blue-600" />
+      {/* 메인 컨텐츠 */}
+      <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        <form onSubmit={handleSubmit}>
+          {/* 기본 정보 섹션 */}
+          <section style={{
+            background: COLORS.surface,
+            padding: '2rem',
+            borderRadius: '1rem',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            marginBottom: '2rem'
+          }}>
+            <h2 style={{ 
+              fontSize: '1.5rem', 
+              fontWeight: 'bold', 
+              color: COLORS.text.primary,
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}>
+              <Shield size={24} color={COLORS.primary} />
+              Basic Information
+            </h2>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: currentUser.role === 'hq_admin' ? 'repeat(auto-fit, minmax(250px, 1fr))' : 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '1.5rem'
+            }}>
+              {/* 🔥 관리자만 Branch 선택 표시 */}
+              {currentUser.role === 'hq_admin' && (
+                <div>
+                  <label style={{ 
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontWeight: '500',
+                    color: COLORS.text.primary
+                  }}>
+                    Branch Name *
+                  </label>
+                  <select
+                    value={branchName}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      border: `1px solid ${COLORS.text.light}`,
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">Select Branch</option>
+                    {settings.branches.map((branch, idx) => (
+                      <option key={idx} value={branch.name}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Manager Name */}
+              <div>
+                <label style={{ 
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontWeight: '500',
+                  color: COLORS.text.primary
+                }}>
+                  Manager Name *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <User size={20} style={{
+                    position: 'absolute',
+                    left: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: COLORS.text.light
+                  }} />
+                  <input
+                    type="text"
+                    value={managerName}
+                    onChange={(e) => setManagerName(e.target.value)}
+                    required
+                    placeholder="Enter manager name"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 0.75rem 0.75rem 2.5rem',
+                      border: `1px solid ${COLORS.text.light}`,
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Target Month */}
+              <div>
+                <label style={{ 
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontWeight: '500',
+                  color: COLORS.text.primary
+                }}>
+                  Target Month *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Calendar size={20} style={{
+                    position: 'absolute',
+                    left: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: COLORS.text.light
+                  }} />
+                  <input
+                    type="month"
+                    value={targetMonth}
+                    onChange={(e) => setTargetMonth(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 0.75rem 0.75rem 2.5rem',
+                      border: `1px solid ${COLORS.text.light}`,
+                      borderRadius: '0.5rem',
+                      fontSize: '1rem'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* 🔥 관리자만 KRW 환율 입력 */}
+              {currentUser.role === 'hq_admin' && (
+                <div>
+                  <label style={{ 
+                    display: 'block',
+                    marginBottom: '0.5rem',
+                    fontWeight: '500',
+                    color: COLORS.text.primary
+                  }}>
+                    KRW Exchange Rate
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <DollarSign size={20} style={{
+                      position: 'absolute',
+                      left: '0.75rem',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: COLORS.text.light
+                    }} />
+                    <input
+                      type="number"
+                      value={krwExchangeRate}
+                      onChange={(e) => setKrwExchangeRate(e.target.value)}
+                      placeholder="e.g., 1460"
+                      step="0.01"
+                      min="0"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 0.75rem 0.75rem 2.5rem',
+                        border: `1px solid ${COLORS.text.light}`,
+                        borderRadius: '0.5rem',
+                        fontSize: '1rem'
+                      }}
+                    />
+                  </div>
+                  <p style={{ 
+                    fontSize: '0.75rem', 
+                    color: COLORS.text.secondary, 
+                    marginTop: '0.25rem' 
+                  }}>
+                    Enter the {currency} to KRW exchange rate
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* 비용 항목 섹션 */}
+          <section style={{
+            background: COLORS.surface,
+            padding: '2rem',
+            borderRadius: '1rem',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            marginBottom: '2rem'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.5rem'
+            }}>
+              <h2 style={{ 
+                fontSize: '1.5rem', 
+                fontWeight: 'bold', 
+                color: COLORS.text.primary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                <DollarSign size={24} color={COLORS.primary} />
                 Cost Items
               </h2>
-              <button
-                type="button"
-                onClick={addCostItem}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Item</span>
-              </button>
+              
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={handleLoadPreviousData}
+                  style={{
+                    padding: '0.5rem 1rem',
+                    background: COLORS.info,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  Load Previous Data
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.5rem 1rem',
+                    background: COLORS.primary,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontWeight: '500'
+                  }}
+                >
+                  <Plus size={18} />
+                  Add Item
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-6">
-              {costItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="border border-gray-200 rounded-lg p-4 bg-gray-50 relative"
-                >
-                  {/* Item header */}
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium text-gray-700">
-                      Item #{index + 1}
-                    </h3>
-                    {costItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeCostItem(item.id)}
-                        className="text-red-500 hover:text-red-700 transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    )}
-                  </div>
+            {!canEditEstimatedCost() && (
+              <div style={{
+                padding: '0.75rem',
+                marginBottom: '1rem',
+                background: '#fef3c7',
+                border: '1px solid #fbbf24',
+                borderRadius: '0.5rem',
+                color: '#92400e',
+                fontSize: '0.875rem'
+              }}>
+                ⚠️ Estimated Cost can only be entered for the current month or earlier
+              </div>
+            )}
+            {!canEditActualCost() && (
+              <div style={{
+                padding: '0.75rem',
+                marginBottom: '1rem',
+                background: '#fef3c7',
+                border: '1px solid #fbbf24',
+                borderRadius: '0.5rem',
+                color: '#92400e',
+                fontSize: '0.875rem'
+              }}>
+                ⚠️ Actual Cost can only be entered after the 28th of the month
+              </div>
+            )}
 
-                  {/* Item fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Item name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Item Name
-                      </label>
-                      <select
-                        value={item.itemName}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'itemName', e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        {(settings?.itemNames || DEFAULT_SETTINGS.itemNames).map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Unit price */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unit Price
-                        <span className="text-xs text-blue-600 ml-2">
-                          (Auto-saved per branch)
-                        </span>
-                      </label>
-                      <input
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'unitPrice', e.target.value)
-                        }
-                        onBlur={() => {
-                          // Auto-save when Unit Price changes
-                          if (branchName && item.unitPrice) {
-                            setDefaultUnitPrice(item.unitPrice);
-                            saveBranchDefaults(branchName, {
-                              managerName: managerName,
-                              unitPrice: item.unitPrice,
-                              currency: item.currency,
-                              paymentMethod: item.paymentMethod,
-                            });
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="0"
-                        min="0"
-                        step="0.01"
-                      />
-                    </div>
-
-                    {/* Currency */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Currency
-                        <span className="text-xs text-blue-600 ml-2">
-                          (Auto-saved per branch)
-                        </span>
-                      </label>
-                      <select
-                        value={item.currency}
-                        onChange={(e) => {
-                          updateCostItem(item.id, 'currency', e.target.value);
-                          // Auto-save when Currency changes
-                          if (branchName) {
-                            setDefaultCurrency(e.target.value);
-                            saveBranchDefaults(branchName, {
-                              managerName: managerName,
-                              unitPrice: item.unitPrice,
-                              currency: e.target.value,
-                              paymentMethod: item.paymentMethod,
-                            });
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        {(settings?.currencies || DEFAULT_SETTINGS.currencies).map((curr) => (
-                          <option key={curr} value={curr}>
-                            {curr}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Quantity per month */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Quantity/Month
-                      </label>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'quantity', e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="0"
-                        min="0"
-                        step="0.01"
-                      />
-                    </div>
-
-                    {/* Estimated cost (auto-calculated) */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Estimated Cost
-                      </label>
-                      <input
-                        type="text"
-                        value={item.estimatedCost.toLocaleString()}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 cursor-not-allowed"
-                        disabled
-                      />
-                    </div>
-
-                    {/* Actual cost */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Actual Cost
-                      </label>
-                      <div className="relative">
+            {/* 비용 항목 테이블 */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f9fafb', borderBottom: `2px solid ${COLORS.text.light}` }}>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Cost Item</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Currency</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Estimated Cost</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Actual Cost</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Payment Method</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Notes</th>
+                    <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: COLORS.text.primary }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {costItems.map((item, index) => (
+                    <tr key={index} style={{ borderBottom: `1px solid ${COLORS.text.light}` }}>
+                      <td style={{ padding: '1rem' }}>
+                        <select
+                          value={item.item}
+                          onChange={(e) => handleItemChange(index, e.target.value)}
+                          required
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          <option value="">Select Item</option>
+                          {settings.costItems.map(costItem => (
+                            <option key={costItem.name} value={costItem.name}>
+                              {costItem.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <select
+                          value={item.currency || currency}
+                          onChange={(e) => handleInputChange(index, 'currency', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          {settings.currencies.map(curr => (
+                            <option key={curr} value={curr}>
+                              {curr} ({CURRENCY_SYMBOLS[curr]})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <input
+                          type="number"
+                          value={item.estimatedCost}
+                          onChange={(e) => handleInputChange(index, 'estimatedCost', e.target.value)}
+                          disabled={!canEditEstimatedCost()}
+                          placeholder={canEditEstimatedCost() ? "Enter amount" : "Not available"}
+                          min="0"
+                          step="0.01"
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem',
+                            background: !canEditEstimatedCost() ? '#f9fafb' : 'white',
+                            cursor: !canEditEstimatedCost() ? 'not-allowed' : 'text'
+                          }}
+                        />
+                        {item.estimatedCost && krwExchangeRate && (
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: COLORS.text.secondary, 
+                            marginTop: '0.25rem' 
+                          }}>
+                            ≈ ₩{convertToKRW(item.estimatedCost, item.currency || currency)?.toLocaleString('ko-KR')}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem' }}>
                         <input
                           type="number"
                           value={item.actualCost}
-                          onChange={(e) =>
-                            updateCostItem(item.id, 'actualCost', e.target.value)
-                          }
-                          className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                            isActualCostExceeded(item)
-                              ? 'border-red-500 bg-red-50'
-                              : 'border-gray-300'
-                          }`}
-                          placeholder="0"
+                          onChange={(e) => handleInputChange(index, 'actualCost', e.target.value)}
+                          disabled={!canEditActualCost()}
+                          placeholder={canEditActualCost() ? "Enter amount" : "Available after 28th"}
                           min="0"
                           step="0.01"
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem',
+                            background: !canEditActualCost() ? '#f9fafb' : 'white',
+                            cursor: !canEditActualCost() ? 'not-allowed' : 'text'
+                          }}
                         />
-                        {isActualCostExceeded(item) && (
-                          <AlertTriangle className="absolute right-3 top-2.5 w-5 h-5 text-red-500" />
+                        {item.actualCost && krwExchangeRate && (
+                          <div style={{ 
+                            fontSize: '0.7rem', 
+                            color: COLORS.text.secondary, 
+                            marginTop: '0.25rem' 
+                          }}>
+                            ≈ ₩{convertToKRW(item.actualCost, item.currency || currency)?.toLocaleString('ko-KR')}
+                          </div>
                         )}
-                      </div>
-                    </div>
-
-                    {/* Calculation basis */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Calculation Basis
-                      </label>
-                      <input
-                        type="text"
-                        value={item.basis}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'basis', e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., Based on 22 working days per month"
-                      />
-                    </div>
-
-                    {/* Payment method */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Payment Method
-                        <span className="text-xs text-blue-600 ml-2">
-                          (Auto-saved per branch)
-                        </span>
-                      </label>
-                      <select
-                        value={item.paymentMethod}
-                        onChange={(e) => {
-                          updateCostItem(item.id, 'paymentMethod', e.target.value);
-                          // Auto-save when Payment Method changes
-                          if (branchName) {
-                            setDefaultPaymentMethod(e.target.value);
-                            saveBranchDefaults(branchName, {
-                              managerName: managerName,
-                              unitPrice: item.unitPrice,
-                              currency: item.currency,
-                              paymentMethod: e.target.value,
-                            });
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        {(settings?.paymentMethods || DEFAULT_SETTINGS.paymentMethods).map((method) => (
-                          <option key={method} value={method}>
-                            {method}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Contract upload */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Contract (PDF)
-                      </label>
-                      <div className="flex items-center space-x-2">
-                        <label className="flex-1 flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Upload className="w-4 h-4 mr-2 text-gray-600" />
-                          <span className="text-sm text-gray-600">
-                            {item.contractFileName || 'Select PDF file'}
-                          </span>
-                          <input
-                            type="file"
-                            accept="application/pdf"
-                            onChange={(e) =>
-                              handleFileUpload(item.id, e.target.files[0])
-                            }
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Note */}
-                    <div className="lg:col-span-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Note
-                      </label>
-                      <textarea
-                        value={item.note}
-                        onChange={(e) =>
-                          updateCostItem(item.id, 'note', e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Additional notes"
-                        rows="2"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <select
+                          value={item.paymentMethod}
+                          onChange={(e) => handleInputChange(index, 'paymentMethod', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem'
+                          }}
+                        >
+                          <option value="">Select Method</option>
+                          {settings.paymentMethods.map(method => (
+                            <option key={method} value={method}>{method}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td style={{ padding: '1rem' }}>
+                        <input
+                          type="text"
+                          value={item.notes}
+                          onChange={(e) => handleInputChange(index, 'notes', e.target.value)}
+                          placeholder="Optional notes"
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem',
+                            border: `1px solid ${COLORS.text.light}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.875rem'
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: '1rem', textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(index)}
+                          disabled={costItems.length === 1}
+                          style={{
+                            padding: '0.5rem',
+                            background: costItems.length === 1 ? '#e5e7eb' : COLORS.error,
+                            color: costItems.length === 1 ? '#9ca3af' : 'white',
+                            border: 'none',
+                            borderRadius: '0.375rem',
+                            cursor: costItems.length === 1 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
 
-          {/* Submit button */}
-          <div className="flex justify-center">
+            {/* 합계 */}
+            <div style={{
+              marginTop: '2rem',
+              padding: '1.5rem',
+              background: '#f9fafb',
+              borderRadius: '0.5rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1rem'
+            }}>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+                  Total Estimated Cost
+                </p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.primary }}>
+                  {CURRENCY_SYMBOLS[currency]}{calculateTotalEstimated().toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+                  Total Actual Cost
+                </p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.secondary }}>
+                  {CURRENCY_SYMBOLS[currency]}{calculateTotalActual().toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+                  Variance
+                </p>
+                <p style={{ 
+                  fontSize: '1.5rem', 
+                  fontWeight: 'bold', 
+                  color: calculateTotalActual() > calculateTotalEstimated() ? COLORS.error : COLORS.success 
+                }}>
+                  {CURRENCY_SYMBOLS[currency]}{(calculateTotalActual() - calculateTotalEstimated()).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* 제출 버튼 */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`flex items-center space-x-2 px-8 py-3 rounded-md text-white font-medium transition-colors ${
-                isSubmitting
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+              style={{
+                padding: '1rem 2rem',
+                background: isSubmitting ? COLORS.text.light : COLORS.primary,
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Submitting...</span>
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    border: '3px solid rgba(255,255,255,0.3)',
+                    borderTop: '3px solid white',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Submitting...
                 </>
               ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  <span>Submit</span>
-                </>
+                'Submit Security Cost'
               )}
             </button>
           </div>
         </form>
       </main>
 
-      {/* Settings Modal */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-2xl font-bold text-gray-900">System Settings</h3>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Branch Names */}
-              <div>
-                <label className="block text-lg font-semibold text-gray-800 mb-3">
-                  Branch Names
-                </label>
-                <div className="space-y-2">
-                  {(tempSettings?.branchNames || []).map((name, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) =>
-                          updateTempSetting('branchNames', index, e.target.value)
-                        }
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Branch name"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTempSettingItem('branchNames', index)}
-                        className="p-2 text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addTempSettingItem('branchNames')}
-                    className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Branch</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Item Names */}
-              <div>
-                <label className="block text-lg font-semibold text-gray-800 mb-3">
-                  Cost Item Names
-                </label>
-                <div className="space-y-2">
-                  {(tempSettings?.itemNames || []).map((name, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) =>
-                          updateTempSetting('itemNames', index, e.target.value)
-                        }
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Item name"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTempSettingItem('itemNames', index)}
-                        className="p-2 text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addTempSettingItem('itemNames')}
-                    className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Item</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Currencies */}
-              <div>
-                <label className="block text-lg font-semibold text-gray-800 mb-3">
-                  Currencies
-                </label>
-                <div className="space-y-2">
-                  {(tempSettings?.currencies || []).map((curr, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={curr}
-                        onChange={(e) =>
-                          updateTempSetting('currencies', index, e.target.value)
-                        }
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Currency code"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTempSettingItem('currencies', index)}
-                        className="p-2 text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addTempSettingItem('currencies')}
-                    className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Currency</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Payment Methods */}
-              <div>
-                <label className="block text-lg font-semibold text-gray-800 mb-3">
-                  Payment Methods
-                </label>
-                <div className="space-y-2">
-                  {(tempSettings?.paymentMethods || []).map((method, index) => (
-                    <div key={index} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={method}
-                        onChange={(e) =>
-                          updateTempSetting('paymentMethods', index, e.target.value)
-                        }
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Payment method"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeTempSettingItem('paymentMethods', index)}
-                        className="p-2 text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addTempSettingItem('paymentMethods')}
-                    className="flex items-center space-x-2 px-3 py-2 bg-blue-50 text-blue-600 rounded-md hover:bg-blue-100 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Method</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveSettings}
-                className="flex items-center space-x-2 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                <Save className="w-5 h-5" />
-                <span>Save Settings</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Settings 모달 */}
+      {showSettings && (
+        <Settings
+          settings={settings}
+          onSave={handleSaveSettings}
+          onClose={() => setShowSettings(false)}
+        />
       )}
-
-      {/* Success modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-fade-in">
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-10 h-10 text-green-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                Submission Complete!
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Your data has been successfully submitted.
-              </p>
-              <button
-                onClick={() => setShowSuccessModal(false)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Animation styles */}
-      <style>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.2s ease-out;
-        }
-      `}</style>
     </div>
   );
 }
