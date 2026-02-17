@@ -3,7 +3,7 @@ import { X, Plus, Trash2, Building2, DollarSign, Globe, CreditCard, Users, Edit2
 import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
-import { COLLECTIONS } from '../firebase/collections';
+import { COLLECTIONS, saveSettingsToFirestore } from '../firebase/collections';
 import { deleteUserProfile } from '../firebase/auth';
 
 const COLORS = {
@@ -232,9 +232,27 @@ function Settings({ settings, onSave, onClose }) {
     });
   };
 
-  const handleSave = () => {
-    onSave(localSettings);
-    setMessage({ type: 'success', text: 'Settings saved successfully!' });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage({ type: '', text: '' });
+    
+    try {
+      // 1. Firestore에 저장
+      await saveSettingsToFirestore(localSettings);
+      
+      // 2. 부모 컴포넌트에 전달 (로컬 state + localStorage 업데이트)
+      onSave(localSettings);
+      
+      setMessage({ type: 'success', text: 'Settings saved to Firestore successfully!' });
+      console.log('[Settings] 저장 완료 (Firestore + localStorage)');
+    } catch (error) {
+      console.error('[Settings] 저장 실패:', error);
+      setMessage({ type: 'error', text: `Failed to save settings: ${error.message}` });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
@@ -1130,17 +1148,18 @@ function Settings({ settings, onSave, onClose }) {
           </button>
           <button
             onClick={handleSave}
+            disabled={saving}
             style={{
               padding: '0.75rem 1.5rem',
-              background: COLORS.success,
+              background: saving ? COLORS.text.light : COLORS.success,
               color: 'white',
               border: 'none',
               borderRadius: '0.5rem',
-              cursor: 'pointer',
+              cursor: saving ? 'not-allowed' : 'pointer',
               fontWeight: 'bold'
             }}
           >
-            Save Changes
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
