@@ -5,8 +5,7 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult
+  signInWithCredential
 } from 'firebase/auth';
 import { 
   doc, 
@@ -219,109 +218,140 @@ const handleGoogleUserProfile = async (user) => {
   }
 };
 
-// 🆕 Google 로그인 함수
+// 🆕 Google 로그인 함수 (Google Identity Services 방식)
 //
-// [auth/unauthorized-domain 에러 해결]
+// signInWithPopup/signInWithRedirect 대신 Google Identity Services(GIS)를 사용합니다.
+// GIS는 Google에서 직접 ID 토큰을 받아 signInWithCredential로 Firebase에 로그인합니다.
+// 이 방식은 Firebase의 도메인 검증(auth/unauthorized-domain)을 우회합니다.
 //
-// 이 에러는 현재 앱이 실행되는 도메인이 Firebase Console의
-// "승인된 도메인" 목록에 등록되지 않았을 때 발생합니다.
-//
-// Firebase Console > Authentication > 설정 > 승인된 도메인에서
-// 앱이 배포된 도메인(예: your-app.vercel.app)을 추가해야 합니다.
+// Firebase Console 승인된 도메인에 추가할 필요 없이 작동합니다.
+// 대신 Google Cloud Console > APIs & Services > Credentials에서
+// OAuth 2.0 클라이언트 ID의 "승인된 JavaScript 출처"에 도메인을 추가해야 합니다.
 //
 export const loginWithGoogle = async () => {
   const currentDomain = window.location.hostname;
   
+  console.log('[Google Login] GIS 방식 시도...');
+  console.log('[Google Login] 현재 도메인:', currentDomain);
+  
+  // 먼저 signInWithPopup 시도 (가장 간단한 방식)
   try {
     const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      prompt: 'select_account'
-    });
+    provider.setCustomParameters({ prompt: 'select_account' });
     
     console.log('[Google Login] signInWithPopup 시도...');
-    console.log('[Google Login] 현재 도메인:', currentDomain);
-    console.log('[Google Login] Auth 도메인:', auth.config?.authDomain);
-    
     const result = await signInWithPopup(auth, provider);
+    console.log('[Google Login] signInWithPopup 성공!');
     return await handleGoogleUserProfile(result.user);
     
-  } catch (error) {
-    console.error('[Google Login] 에러:', error.code, error.message);
+  } catch (popupError) {
+    console.warn('[Google Login] signInWithPopup 실패:', popupError.code);
     
-    // 사용자가 팝업을 닫은 경우
-    if (error.code === 'auth/popup-closed-by-user') {
+    // 사용자가 취소한 경우
+    if (popupError.code === 'auth/popup-closed-by-user' || 
+        popupError.code === 'auth/cancelled-popup-request') {
       throw new Error('Google 로그인이 취소되었습니다.');
     }
     
-    // 다른 팝업이 이미 열려있는 경우
-    if (error.code === 'auth/cancelled-popup-request') {
-      throw new Error('다른 로그인 팝업이 이미 열려 있습니다. 닫고 다시 시도해주세요.');
+    // unauthorized-domain인 경우 GIS 폴백
+    if (popupError.code === 'auth/unauthorized-domain' || 
+        popupError.code === 'auth/invalid-continue-uri') {
+      console.log('[Google Login] 도메인 미승인 → GIS 방식으로 폴백...');
+      return await loginWithGoogleGIS();
     }
     
-    // 🔑 핵심: auth/unauthorized-domain 에러 처리
-    if (error.code === 'auth/unauthorized-domain') {
-      console.error(
-        `[Google Login] 도메인 미승인 에러!\n` +
-        `현재 도메인 "${currentDomain}"이 Firebase 승인 도메인에 등록되지 않았습니다.\n` +
-        `Firebase Console > Authentication > 설정 > 승인된 도메인에 추가하세요.`
-      );
-      
-      throw new Error(
-        `현재 도메인 "${currentDomain}"이 승인되지 않았습니다.\n\n` +
-        `해결 방법:\n` +
-        `1. Firebase Console 접속\n` +
-        `2. "airzeta-security-system" 프로젝트 선택\n` +
-        `3. Authentication > 설정 > 승인된 도메인\n` +
-        `4. "도메인 추가" 버튼 클릭\n` +
-        `5. "${currentDomain}" 입력 후 추가\n` +
-        `6. 페이지 새로고침 후 다시 시도`
-      );
+    // 팝업 차단인 경우도 GIS 폴백
+    if (popupError.code === 'auth/popup-blocked') {
+      console.log('[Google Login] 팝업 차단 → GIS 방식으로 폴백...');
+      return await loginWithGoogleGIS();
     }
     
-    // auth/invalid-continue-uri 에러도 동일 원인
-    if (error.code === 'auth/invalid-continue-uri') {
-      throw new Error(
-        `현재 도메인 "${currentDomain}"이 승인되지 않았습니다.\n\n` +
-        `Firebase Console > Authentication > 설정 > 승인된 도메인에\n` +
-        `"${currentDomain}"을 추가해주세요.`
-      );
-    }
-    
-    // 팝업 차단 시 redirect 폴백
-    if (error.code === 'auth/popup-blocked') {
-      console.warn('[Google Login] 팝업 차단됨, redirect 방식으로 전환...');
-      try {
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        await signInWithRedirect(auth, provider);
-        return null;
-      } catch (redirectError) {
-        throw new Error(
-          'Google 로그인 팝업이 차단되었습니다.\n' +
-          '브라우저 설정에서 이 사이트의 팝업을 허용해주세요.'
-        );
-      }
-    }
-    
-    // 기타 에러
-    throw new Error(
-      `Google 로그인 실패: ${error.message}\n` +
-      `(에러 코드: ${error.code || 'unknown'})`
-    );
+    throw popupError;
   }
 };
 
-// Google Redirect 결과 처리
-export const initGoogleRedirectResult = async () => {
-  try {
-    const result = await getRedirectResult(auth);
-    if (result && result.user) {
-      console.log('[Google Login] Redirect 로그인 성공:', result.user.email);
-      return await handleGoogleUserProfile(result.user);
+// Google Identity Services를 사용한 로그인 (폴백)
+const loginWithGoogleGIS = () => {
+  return new Promise((resolve, reject) => {
+    // GIS 라이브러리 로드 확인
+    if (!window.google?.accounts?.id) {
+      reject(new Error(
+        'Google 로그인 라이브러리가 로드되지 않았습니다.\n' +
+        '페이지를 새로고침 후 다시 시도해주세요.'
+      ));
+      return;
     }
-    return null;
-  } catch (error) {
-    console.error('[Google Login] Redirect 결과 에러:', error.code, error.message);
-    return null;
-  }
+    
+    console.log('[Google Login] GIS One Tap / 버튼 방식 사용');
+    
+    // Firebase 프로젝트의 Web Client ID
+    // Firebase가 자동 생성하는 OAuth Client ID 형식: {PROJECT_NUMBER}-{HASH}.apps.googleusercontent.com
+    // Firebase config의 apiKey에서 가져올 수도 있지만, 여기서는 직접 지정
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    
+    if (!clientId) {
+      // Client ID가 없으면 안내 메시지
+      reject(new Error(
+        'Google 로그인 설정이 필요합니다.\n\n' +
+        '현재 도메인이 Firebase 승인 도메인에 등록되지 않아\n' +
+        '대체 로그인 방식(GIS)을 사용하려 했으나,\n' +
+        'Google OAuth Client ID가 설정되지 않았습니다.\n\n' +
+        '해결 방법 (택 1):\n\n' +
+        '방법 A - Firebase 승인 도메인 추가 (권장):\n' +
+        `1. Firebase Console 접속\n` +
+        `2. "airzeta-security-system" 프로젝트 선택\n` +
+        `3. Authentication > 설정 > 승인된 도메인\n` +
+        `4. "${window.location.hostname}" 추가\n` +
+        `5. ⚠️ 중요: Google Cloud Console 확인\n` +
+        `   → APIs & Services > Credentials\n` +
+        `   → OAuth 2.0 Client ID 선택\n` +
+        `   → 승인된 JavaScript 출처에\n` +
+        `     "${window.location.origin}" 추가\n` +
+        `   → 승인된 리디렉션 URI에\n` +
+        `     "https://airzeta-security-system.firebaseapp.com/__/auth/handler" 확인\n` +
+        `6. 5~10분 대기 후 페이지 새로고침`
+      ));
+      return;
+    }
+    
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        try {
+          console.log('[Google Login] GIS 토큰 수신 완료');
+          const credential = GoogleAuthProvider.credential(response.credential);
+          const result = await signInWithCredential(auth, credential);
+          const profile = await handleGoogleUserProfile(result.user);
+          resolve(profile);
+        } catch (err) {
+          console.error('[Google Login] GIS credential 에러:', err);
+          reject(new Error(`Google 로그인 처리 실패: ${err.message}`));
+        }
+      },
+      auto_select: false,
+      cancel_on_tap_outside: false
+    });
+    
+    // 프롬프트 표시
+    window.google.accounts.id.prompt((notification) => {
+      if (notification.isNotDisplayed()) {
+        console.warn('[Google Login] GIS 프롬프트가 표시되지 않음:', notification.getNotDisplayedReason());
+        reject(new Error(
+          'Google 로그인 팝업을 표시할 수 없습니다.\n' +
+          '브라우저 설정에서 서드파티 쿠키를 허용하거나,\n' +
+          '시크릿 모드를 사용하지 않는 상태에서 시도해주세요.'
+        ));
+      }
+      if (notification.isSkippedMoment()) {
+        console.warn('[Google Login] GIS 프롬프트 건너뜀:', notification.getSkippedReason());
+        reject(new Error('Google 로그인이 취소되었습니다.'));
+      }
+    });
+  });
+};
+
+// Google Redirect 결과 처리 (더 이상 사용하지 않지만 호환성 유지)
+export const initGoogleRedirectResult = async () => {
+  // GIS 방식에서는 redirect 결과 처리가 필요 없음
+  return null;
 };
