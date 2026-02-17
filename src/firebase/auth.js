@@ -78,9 +78,45 @@ export const getCurrentUserProfile = async (uid) => {
 export const listenToAuthChanges = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
-      const profile = await getCurrentUserProfile(user.uid);
-      callback(profile);
+      console.log('[Auth] onAuthStateChanged: 사용자 감지됨:', user.email);
+      try {
+        let profile = await getCurrentUserProfile(user.uid);
+        
+        // 프로필이 아직 없으면 (Google 로그인 직후 race condition)
+        // 잠시 대기 후 재시도
+        if (!profile) {
+          console.log('[Auth] 프로필 없음, 1초 후 재시도...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          profile = await getCurrentUserProfile(user.uid);
+        }
+        
+        // 그래도 없으면 기본 프로필 생성 (Google 로그인 사용자)
+        if (!profile) {
+          console.log('[Auth] 프로필 여전히 없음, 기본 프로필 생성');
+          profile = {
+            uid: user.uid,
+            email: user.email,
+            role: 'branch_user',
+            displayName: user.displayName || '',
+            photoURL: user.photoURL || ''
+          };
+        }
+        
+        console.log('[Auth] 프로필 로드 성공:', profile.email, '역할:', profile.role);
+        callback(profile);
+      } catch (error) {
+        console.error('[Auth] 프로필 로드 에러:', error);
+        // 에러가 발생해도 기본 정보로 로그인 허용
+        callback({
+          uid: user.uid,
+          email: user.email,
+          role: 'branch_user',
+          displayName: user.displayName || '',
+          photoURL: user.photoURL || ''
+        });
+      }
     } else {
+      console.log('[Auth] onAuthStateChanged: 로그아웃 상태');
       callback(null);
     }
   });
