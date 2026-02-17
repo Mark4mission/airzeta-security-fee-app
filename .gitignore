@@ -36,3 +36,19 @@ firestore-debug.log
 
 # Build
 dist/
+
+# macOS resource forks
+._*
+
+# Backup/temp files
+*.backup
+*.broken
+*.before-*
+*.bak
+.env.backup_*
+
+# Vite cache
+.vite/
+
+# Archives
+*.tar.gz
