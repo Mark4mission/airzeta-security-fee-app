@@ -2,9 +2,20 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  serverTimestamp,
+  collection,
+  getDocs
+} from 'firebase/firestore';
 import { auth, db } from './config';
 import { COLLECTIONS } from './collections';
 
@@ -164,6 +175,66 @@ export const deleteUserProfile = async (userId) => {
     return { success: true };
   } catch (error) {
     console.error('Error deleting user profile:', error);
+    throw error;
+  }
+};
+
+// 🆕 Google 로그인 함수
+export const loginWithGoogle = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    
+    // Firestore에서 사용자 프로필 확인
+    const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
+    
+    if (!userDoc.exists()) {
+      // 새 사용자면 프로필 생성 (기본 역할: branch_user)
+      await setDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+        email: user.email,
+        role: 'branch_user',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp()
+      });
+      
+      console.log('✅ New Google user profile created');
+      
+      return {
+        uid: user.uid,
+        email: user.email,
+        role: 'branch_user',
+        displayName: user.displayName,
+        photoURL: user.photoURL
+      };
+    } else {
+      // 기존 사용자면 lastLogin 업데이트
+      await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+        lastLogin: serverTimestamp()
+      });
+      
+      console.log('✅ Existing Google user logged in');
+      
+      return {
+        uid: user.uid,
+        email: user.email,
+        ...userDoc.data()
+      };
+    }
+  } catch (error) {
+    console.error('Google login error:', error);
+    
+    // 사용자가 팝업을 닫은 경우
+    if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Google sign-in was cancelled');
+    }
+    
     throw error;
   }
 };
