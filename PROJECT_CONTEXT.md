@@ -1,8 +1,9 @@
-# Air Zeta Security Fee App - Project Context
+# Air Zeta Security Fee App - Complete Project Documentation
 
-> **Last Updated**: 2026-02-21 (backup tag: `backup-2026-02-21-v5-final-manager-sync`)
-> **Total PRs Merged**: #1 ~ #22
-> **Total Source Lines**: ~6,078 lines across 14 source files
+> **Last Updated**: 2026-02-21 (backup tag: `backup-2026-02-21-v6-final-docs`)
+> **Total PRs Merged**: #1 ~ #23
+> **Total Source Lines**: ~6,610 lines across 14 source files + 1 seed script
+> **Live URL**: https://mark4mission.github.io/airzeta-security-fee-app/
 
 ---
 
@@ -37,9 +38,11 @@
 
 ### Key Design Decisions
 - **No backend server** - Pure client-side React + Firebase
-- **No CSS framework** - All styling via inline `style={{}}` objects
+- **No CSS framework** - All styling via inline `style={{}}` objects with `COLORS` constant
 - **No React Router** - Single-page with conditional rendering based on auth state
 - **No state management library** - Pure `useState` / `useEffect` / `useCallback`
+- **No TypeScript** - Plain JSX
+- **Korean comments** - Many code comments are intentionally in Korean (한국어)
 
 ---
 
@@ -54,11 +57,12 @@ Dev Branch: genspark_ai_developer (feature development)
 ```
 
 ### Git Workflow
-1. Create/switch to `genspark_ai_developer` branch
-2. Make changes, commit with descriptive messages
-3. Push to remote, create PR to `main`
-4. Deploy with `npm run deploy` (builds + publishes to `gh-pages` branch)
-5. Merge PR
+1. Create/switch to `genspark_ai_developer` branch from latest `main`
+2. Make changes, verify build passes (`npm run build`)
+3. Commit with descriptive messages, push to remote
+4. Create PR to `main`
+5. Deploy with `npm run deploy` (builds + publishes to `gh-pages` branch)
+6. Merge PR
 
 ### Deployment Commands
 ```bash
@@ -67,22 +71,28 @@ npm run deploy     # Build + publish dist/ to GitHub Pages
 npm run dev        # Local development server (port 5173)
 ```
 
-### Backup Tags (in chronological order)
+### Backup Tags (chronological order)
 ```
 backup-before-pr13
 backup-2026-02-21-hq-admin-approval
 backup-2026-02-21-v2-variance-indicator
 backup-2026-02-21-v3-pre-krw-fix
 backup-2026-02-21-v4-pre-krw-currency-fix
-backup-2026-02-21-v5-final-manager-sync     <-- LATEST
+backup-2026-02-21-v5-final-manager-sync
+backup-2026-02-21-v6-final-docs              <-- LATEST
 ```
 
 To restore from a tag:
 ```bash
-git checkout backup-2026-02-21-v5-final-manager-sync
+git checkout backup-2026-02-21-v6-final-docs
 # or create a branch from it:
-git checkout -b restore-branch backup-2026-02-21-v5-final-manager-sync
+git checkout -b restore-branch backup-2026-02-21-v6-final-docs
 ```
+
+### Backup Archive
+- Local: `/home/user/airzeta_backup_2026-02-21_v6_final.tar.gz` (145 KB)
+- Contains all source, configs, scripts, docs (excludes node_modules, dist, .git)
+- To restore: `tar -xzf airzeta_backup_2026-02-21_v6_final.tar.gz -C <target-dir>`
 
 ---
 
@@ -121,7 +131,7 @@ Document ID = branch name (e.g., `BKKSU`)
   "currency": "THB",
   "paymentMethod": "Cash",
   "active": true,
-  "updatedAt": "<timestamp>"
+  "updatedAt": "<server_timestamp>"
 }
 ```
 
@@ -158,7 +168,7 @@ Document ID = Firebase Auth UID
 ```json
 {
   "email": "user@example.com",
-  "role": "branch_user",          // or "hq_admin" or "pending_admin"
+  "role": "branch_user",
   "branchName": "BKKSU",
   "displayName": "Test User",
   "preferredCurrency": "THB",
@@ -187,12 +197,21 @@ Single document
 - **Google Sign-In** enabled (requires domain authorization)
 - Authorized domains: `airzeta-security-system.firebaseapp.com`, `mark4mission.github.io`
 
+### Firebase Console Links
+- **Firestore**: https://console.firebase.google.com/project/airzeta-security-system/firestore
+- **Authentication**: https://console.firebase.google.com/project/airzeta-security-system/authentication
+- **GCP Credentials**: https://console.cloud.google.com/apis/credentials?project=airzeta-security-system
+
 ### Test Accounts (from seed data)
 ```
 Admin:       mark4mission@gmail.com  (hq_admin)
 Branch Users: <branch>@test.airzeta.com / Test1234!
-  - ALASU (USD), TYOSU (JPY), SINSU (SGD)
-  - HKGSU (HKD), BKKSU (THB), SFOSF (USD)
+  - ALASU (Seoul, USD)
+  - TYOSU (Tokyo, JPY)
+  - SINSU (Singapore, SGD)
+  - HKGSU (Hong Kong, HKD)
+  - BKKSU (Bangkok, THB)
+  - SFOSF (San Francisco, USD)
 ```
 
 ---
@@ -201,36 +220,60 @@ Branch Users: <branch>@test.airzeta.com / Test1234!
 
 ```
 /home/user/webapp/
-├── index.html                    # Entry point
+├── index.html                    # HTML entry point
 ├── package.json                  # Dependencies & scripts
+├── package-lock.json             # Lock file (~337 KB)
 ├── vite.config.js                # Vite config (base: '/', host: 0.0.0.0)
 ├── postcss.config.js             # PostCSS (autoprefixer)
 ├── eslint.config.js              # ESLint config
-├── vercel.json                   # Legacy Vercel config (unused)
-├── .gitignore
-├── .env                          # Firebase keys (NOT in git)
+├── vercel.json                   # Legacy Vercel config (unused, kept for reference)
+├── .gitignore                    # Git ignore rules
+├── .env                          # Firebase keys (NOT in git, must create manually)
+│
 ├── scripts/
-│   └── seed-test-data.mjs        # Test data seeder
+│   └── seed-test-data.mjs        # Test data seeder (532 lines)
+│
 ├── src/
-│   ├── main.jsx                  # React entry point
-│   ├── App.jsx                   # Main app component (~1,498 lines)
-│   ├── App.css                   # Global styles + animations
-│   ├── index.css                 # Root CSS reset
+│   ├── main.jsx                  # React entry point (10 lines)
+│   ├── App.jsx                   # Main app component (1,498 lines)
+│   ├── App.css                   # Global styles + spinner animation (105 lines)
+│   ├── index.css                 # Root CSS reset (10 lines)
 │   ├── assets/
 │   │   └── react.svg
 │   ├── components/
-│   │   ├── Login.jsx             # Login/Register/Forgot password
-│   │   ├── BranchSelection.jsx   # First-time branch selection
-│   │   ├── AdminDashboard.jsx    # Monthly cost grid (admin)
-│   │   ├── BranchCostHistory.jsx # Bar chart + table per branch
-│   │   ├── Settings.jsx          # Admin settings modal
-│   │   └── UserManagement.jsx    # User role management
+│   │   ├── Login.jsx             # Login/Register/Forgot password (632 lines)
+│   │   ├── BranchSelection.jsx   # First-time branch selection (479 lines)
+│   │   ├── AdminDashboard.jsx    # Monthly cost grid for admin (284 lines)
+│   │   ├── BranchCostHistory.jsx # Bar chart + table per branch (413 lines)
+│   │   ├── Settings.jsx          # Admin settings modal (1,387 lines)
+│   │   └── UserManagement.jsx    # User role management (394 lines)
 │   └── firebase/
-│       ├── config.js             # Firebase init (env vars)
-│       ├── auth.js               # Auth functions (~501 lines)
-│       └── collections.js        # Firestore CRUD (~336 lines)
-└── dist/                         # Build output (git-ignored)
+│       ├── config.js             # Firebase init from .env (29 lines)
+│       ├── auth.js               # Auth functions (501 lines)
+│       └── collections.js        # Firestore CRUD (336 lines)
+│
+├── AI_HANDOFF_PROMPT.md          # Ready-to-use prompt for AI coding assistants
+├── PROJECT_CONTEXT.md            # This file - complete project documentation
+├── CLAUDE.md                     # Instructions for Claude / Cursor AI
+├── GEMINI.md                     # Instructions for Genspark / Gemini AI
+├── README.md                     # GitHub repository README
+└── AVIATION_SECURITY_HUB_DEV_GUIDE.md  # Original Korean dev guide
 ```
+
+### File Line Count Summary
+| File | Lines | Description |
+|------|-------|-------------|
+| `src/App.jsx` | 1,498 | Main component - all form logic, state, submission |
+| `src/components/Settings.jsx` | 1,387 | Admin settings modal (branches, items, currencies) |
+| `src/components/Login.jsx` | 632 | Login, register, forgot password UI |
+| `src/firebase/auth.js` | 501 | All authentication functions |
+| `src/components/BranchSelection.jsx` | 479 | First-time branch picker |
+| `src/components/BranchCostHistory.jsx` | 413 | Per-branch bar chart + detail table |
+| `src/components/UserManagement.jsx` | 394 | User role management |
+| `src/firebase/collections.js` | 336 | All Firestore CRUD operations |
+| `src/components/AdminDashboard.jsx` | 284 | Monthly cost dashboard grid |
+| `scripts/seed-test-data.mjs` | 532 | Test data seeder |
+| **Total** | **~6,610** | |
 
 ---
 
@@ -242,76 +285,133 @@ User visits app
   ├─ Not logged in → Login screen
   │   ├─ Email/Password login
   │   ├─ Google login (popup)
-  │   ├─ Self-registration (new account)
-  │   └─ Forgot password (email reset)
+  │   ├─ Self-registration (new email/password account)
+  │   └─ Forgot password (email reset link)
   │
   ├─ Logged in, no branch assigned → BranchSelection screen
-  │   ├─ Select a branch → branch_user
-  │   └─ Select "HQ" → pending_admin (needs approval)
+  │   ├─ Select a branch → becomes branch_user for that branch
+  │   └─ Select "HQ" → becomes pending_admin (needs HQ admin approval)
   │
-  ├─ pending_admin → "Approval Pending" screen
+  ├─ pending_admin → "Approval Pending" screen (cannot use app until approved)
   │
   ├─ branch_user → Main form (own branch only)
+  │   ├─ Branch auto-selected and locked
+  │   ├─ Submit Estimated/Actual costs
+  │   └─ View own branch cost history
   │
-  └─ hq_admin → Admin Dashboard + Main form (any branch)
+  └─ hq_admin → Full access
+      ├─ Admin Dashboard (all branches grid)
+      ├─ Main form (select any branch)
+      ├─ Settings modal (manage branches, items, currencies, payment methods)
+      ├─ User Management (approve pending admins, manage roles)
+      └─ View all branch cost histories
 ```
 
 ### 6.2 User Roles
 
-| Role | Can Do |
-|------|--------|
-| `hq_admin` | View dashboard, select any branch, submit costs, manage settings, manage users, view all history |
+| Role | Permissions |
+|------|------------|
+| `hq_admin` | View dashboard, select any branch, submit costs, manage settings, manage users, view all history, set KRW exchange rate |
 | `branch_user` | View/submit costs for own branch only, view own branch history |
-| `pending_admin` | Waiting for HQ admin approval (selected "HQ" during registration) |
+| `pending_admin` | Waiting for HQ admin approval (selected "HQ" during registration). Cannot access any features. |
 
 ### 6.3 Admin Dashboard (AdminDashboard.jsx)
-- **Monthly grid**: Rows = branches, Columns = months (Jan-Dec)
+- **Monthly grid**: Rows = branches (all active branches), Columns = months (Jan-Dec)
 - Each cell shows: **E** (Estimated) / **A** (Actual) costs with color coding
-- **Variance indicator**: Shows percentage difference between Est and Act
-- **Click a cell** → auto-populates Basic Information + loads cost data below
-- Filter by branch, year, month
-- **Recent update markers** for newly submitted data
+- **Variance indicator**: Shows percentage difference between Est and Act with color
+  - Green = Act <= Est (under budget)
+  - Red = Act > Est (over budget)
+- **Click a cell** → auto-populates Basic Information section below + loads cost data
+- Filters: branch dropdown, year dropdown, month dropdown
+- **Recent update markers**: Cells with recently submitted data show visual indicator
+- Data source: `getAllSecurityCosts()` fetches entire `securityCosts` collection
 
-### 6.4 Cost Submission Form (App.jsx)
-**Basic Information section:**
-- Branch Name (admin: dropdown, branch_user: auto-set)
-- Manager Name (auto-filled from branch settings, editable)
-- Target Month (date picker, `<input type="month">`)
-- KRW Exchange Rate (admin only, for currency conversion display)
+### 6.4 Cost Submission Form (App.jsx - Main Component)
 
-**Cost Items section:**
-- Dynamic list of cost line items
-- Per item: Cost Item (dropdown), Currency, Unit Price, Quantity, Payment Method
-- Auto-calculated: Estimated Cost = Unit Price x Quantity
-- Actual Cost (editable only after 28th of the month)
-- KRW conversion display: `≈ ₩xxx,xxx` under Est/Act when exchange rate is set
-- Notes field per item
+#### Basic Information Section
+| Field | Admin | Branch User | Notes |
+|-------|-------|-------------|-------|
+| Branch Name | Dropdown (all branches) | Auto-set, read-only | From `settings.branches` |
+| Manager Name | Auto-filled from branch settings, editable | Auto-filled, editable | **Syncs back** to `branchCodes` on submit |
+| Target Month | `<input type="month">` picker | Same | Default: current month |
+| KRW Exchange Rate | Editable number input | **Hidden** | Shows currency-specific label (e.g., "Enter the THB to KRW exchange rate") |
 
-**Business Rules:**
-- Estimated Cost: Only editable for current or past months
-- Actual Cost: Only editable after the 28th of the target month
-- Validation: At least one cost item with name + cost required
-- **Manager Name sync**: If admin changes manager name and submits, the branch's manager is updated in Firestore `branchCodes` collection
+#### Cost Items Section
+- Dynamic list of cost item rows (add/remove with + and trash icons)
+- Per item fields:
+  | Field | Description |
+  |-------|-------------|
+  | Cost Item | Dropdown from `settings.costItems` |
+  | Currency | Dropdown, defaults to branch currency |
+  | Unit Price | Number input with comma formatting |
+  | Quantity | Number input |
+  | Estimated Cost | **Auto-calculated**: Unit Price x Quantity (read-only except manual override) |
+  | Payment Method | Dropdown from `settings.paymentMethods` |
+  | Actual Cost | Number input (conditionally editable) |
+  | Notes | Text input |
+
+#### KRW Conversion Display
+- When KRW Exchange Rate is entered (admin only):
+  - Under Estimated Cost: shows `≈ ₩xxx,xxx` (estimated * rate)
+  - Under Actual Cost: shows `≈ ₩xxx,xxx` (actual * rate)
+- Currency-aware: If branch currency is KRW, no conversion needed
+- Helper text dynamically shows branch currency: "Enter the THB to KRW exchange rate" for Bangkok
+
+#### Business Rules
+| Rule | Condition |
+|------|-----------|
+| Estimated Cost editable | Target month is current or past month |
+| Actual Cost editable | After the 28th of the target month |
+| Validation | At least one cost item with name + estimated cost required |
+| Manager Name sync | If manager name changed from branch default, updates `branchCodes/{branchName}` on submit |
+
+#### Auto-Load Behavior
+- When branch or month changes → automatically loads previously submitted data for that combination
+- Uses `getSecurityCostsByBranch(branch, month)` → returns sorted by `submittedAt` descending
+- Takes the **latest** submission and pre-fills all cost items
+- Falls back to empty form if no prior data exists
+- Shows status message: "Previous data loaded for [branch] [month]" or "No previous data found"
+
+#### Post-Submit Behavior
+- **hq_admin**: Form resets (branch, manager cleared, cost items reset to default)
+- **branch_user**: Data remains visible, then reloads from Firestore after 1.5s delay (for `serverTimestamp()` propagation)
+- **BranchCostHistory** graph refreshes via key increment (`historyRefreshKey`)
+- **Manager sync**: If manager name differs from stored branch data, Firestore `branchCodes` document is updated
 
 ### 6.5 Branch Cost History (BranchCostHistory.jsx)
-- Bar chart showing monthly Estimated vs Actual costs
-- Year selector (current year ± 5)
-- Summary cards: Total Estimated, Total Actual, Variance
-- Detail table with MoM (Month-over-Month) change percentages
-- Visible to both admin (when branch selected) and branch_user
+- **Visual bar chart**: Monthly Estimated (blue) vs Actual (red/orange) costs
+- **Year selector**: Current year ± 5 years
+- **Summary cards**: 
+  - Total Estimated (with currency symbol)
+  - Total Actual (with currency symbol)
+  - Total Variance (Estimated - Actual, colored green/red)
+- **Detail table**: 
+  - Monthly rows with Est, Act, Variance columns
+  - Month-over-Month (MoM) change percentage with trend icons (↑/↓/→)
+- **Currency-aware**: Uses branch's currency for display symbols
+- Visible to both admin (when a branch is selected) and branch_user (always, for own branch)
+- Renders only when `branchName` is set
 
-### 6.6 Auto-Load Behavior
-- When branch or month changes → automatically loads previously submitted data for that combination
-- Uses `getSecurityCostsByBranch(branch, month)` query
-- Falls back to empty form if no prior data exists
-- After submit: branch_user data reloads after 1.5s delay (for serverTimestamp sync)
+### 6.6 Settings Modal (Settings.jsx, admin only)
+Accessible via ⚙️ Settings icon in the header.
 
-### 6.7 Settings Modal (Settings.jsx, admin only)
-- **Branches**: Add/edit/delete branch offices (name, manager, currency, payment method)
-- **Cost Items**: Add/edit/delete cost item definitions
-- **Currencies**: Manage supported currency list
-- **Payment Methods**: Manage payment method options
-- All settings saved to both Firestore and localStorage
+| Tab | Contents |
+|-----|----------|
+| **Branches** | Add/edit/delete branch offices. Fields: name, manager, currency, payment method |
+| **Cost Items** | Add/edit/delete cost item definitions. Fields: name, category, description |
+| **Currencies** | Add/remove supported currency codes (e.g., "USD", "THB") |
+| **Payment Methods** | Add/remove payment method options (e.g., "Bank Transfer", "Cash") |
+| **User Management** | Embedded UserManagement component for managing user roles and approving pending admins |
+
+All settings are saved to both **Firestore** (`settings/appSettings` + `branchCodes` collection) and **localStorage** (as fallback/cache).
+
+### 6.7 User Management (UserManagement.jsx, admin only)
+- **View all users**: List with email, role, branch, status
+- **Create new user**: Email + password + role + branch
+- **Update user role**: Switch between hq_admin / branch_user
+- **Toggle user status**: Active / disabled
+- **Pending Admin approval**: Approve or reject users who selected "HQ" during registration
+- **Delete user profile**: Remove user document from Firestore
 
 ### 6.8 Multi-Currency Support
 Supported currencies with symbols:
@@ -319,10 +419,11 @@ Supported currencies with symbols:
 USD ($), EUR (€), KRW (₩), JPY (¥), SGD (S$),
 HKD (HK$), THB (฿), GBP (£), CNY (CN¥)
 ```
-- Each branch has a default currency
-- Each cost item can have its own currency
-- KRW Exchange Rate: Admin enters rate → shows `≈ ₩` conversion under costs
+- Each branch has a **default currency** (set in Settings → Branches)
+- Each cost item can have its own currency (overridable per row)
+- **KRW Exchange Rate**: Admin enters rate → shows `≈ ₩` conversion under costs
 - Helper text dynamically shows: "Enter the {branch_currency} to KRW exchange rate"
+- **Important**: Currency display uses `branch.currency`, NOT `currentUser.preferredCurrency`
 
 ---
 
@@ -348,45 +449,94 @@ showSettings, isSubmitting, message, autoLoadMessage, historyRefreshKey
 ### 7.2 Data Flow
 ```
 Login → Auth listener fires → Load settings from Firestore →
-  branch_user: auto-set branch → auto-load cost data
-  hq_admin: wait for branch selection → auto-load cost data
+  branch_user: auto-set branch from user profile → auto-load cost data
+  hq_admin: wait for branch selection from dropdown or dashboard cell click → auto-load cost data
 
-Submit → Save to securityCosts → Sync manager if changed →
-  hq_admin: reset form
-  branch_user: reload data after 1.5s delay
+Submit → Save to securityCosts → Check manager name change → Sync manager if changed →
+  hq_admin: reset form (branch/manager cleared)
+  branch_user: keep data visible, reload from Firestore after 1.5s delay
 
-Graph refresh: historyRefreshKey increments → BranchCostHistory remounts
+Dashboard cell click → Set branchName + targetMonth → triggers auto-load useEffect
+Graph refresh: historyRefreshKey increments → BranchCostHistory key changes → component remounts
 ```
 
-### 7.3 Currency Logic
+### 7.3 Currency Logic (Critical - Source of Past Bugs)
 - `currency` state = branch-level default currency (from `branch.currency`, NOT from `preferredCurrency`)
-- Admin useEffect and branch_user useEffect both use `branch.currency || 'USD'` directly
-- `preferredCurrency` from user profile is intentionally NOT used for the main currency (was causing bugs where THB branches showed USD)
+- Admin useEffect (line ~236) and branch_user useEffect (line ~218) both use `branch.currency || 'USD'` directly
+- `preferredCurrency` from user profile is **intentionally NOT used** for the main currency display
+- This was a major bug source: using `preferredCurrency` caused BKK to show '$' instead of '฿'
+- Each cost item row also has its own `currency` field that can differ from the branch default
 
 ### 7.4 Number Formatting
 - Display: `toLocaleString('en-US')` with comma separators
-- Input: Strip commas on focus, format on blur
-- KRW conversion: `amount * exchangeRate` displayed as `≈ ₩{formatted_integer}`
+- Input: Strip commas on focus (`stripCommas`), format on blur (`formatInputDisplay`)
+- KRW conversion: `amount * exchangeRate` displayed as `≈ ₩{formatted_integer}` using `formatNumberInt`
+
+### 7.5 Manager Name Synchronization (PR #22)
+- On form submit, compares entered `managerName` with `settings.branches[selectedBranch].manager`
+- If different: calls `updateBranchManager(branchName, managerName)` to update `branchCodes/{branchName}`
+- Also updates local `settings` state immediately so next branch selection shows updated name
+- Logs the sync operation for debugging
+
+### 7.6 Authentication Functions (auth.js exports)
+| Function | Description |
+|----------|-------------|
+| `loginUser(email, pw)` | Email/password sign-in, creates profile if missing |
+| `logoutUser()` | Signs out from Firebase Auth |
+| `registerUser(email, pw, displayName)` | Creates account + Firestore profile |
+| `resetPassword(email)` | Sends password reset email |
+| `changePassword(currentPw, newPw)` | Re-authenticates then updates password |
+| `getCurrentUserProfile()` | Gets Firestore user doc by UID |
+| `updateUserBranch(uid, branchName, role)` | Sets user's branch + role |
+| `updateUserPreferences(uid, prefs)` | Updates currency/payment preferences |
+| `listenToAuthChanges(callback)` | `onAuthStateChanged` wrapper with profile loading |
+| `isAdmin(user)` | Checks `role === 'hq_admin'` |
+| `isPendingAdmin(user)` | Checks `role === 'pending_admin'` |
+| `createUser(email, pw, role, branch)` | Admin creates a new user |
+| `getAllUsers()` | Fetches all user profiles |
+| `updateUserRole(uid, role)` | Changes user role |
+| `toggleUserStatus(uid)` | Enables/disables user |
+| `getPendingAdmins()` | Gets all pending_admin users |
+| `approvePendingAdmin(uid)` | Changes role to hq_admin |
+| `rejectPendingAdmin(uid)` | Deletes user profile |
+| `deleteUserProfile(uid)` | Removes Firestore user doc |
+| `loginWithGoogle()` | Google popup sign-in |
+| `initGoogleRedirectResult()` | Handle Google redirect |
+
+### 7.7 Firestore CRUD Functions (collections.js exports)
+| Function | Description |
+|----------|-------------|
+| `getAllBranches()` | Fetch all `branchCodes` documents |
+| `getSecurityCostsByBranch(branch, month)` | Query costs for branch+month, sorted by submittedAt |
+| `submitSecurityCost(data)` | Add new cost document |
+| `getAllSecurityCosts()` | Fetch all cost documents (admin dashboard) |
+| `getSecurityCostsByBranchYear(branch, year)` | Fetch by branch, client-side filter by year |
+| `updateBranchManager(branchName, newManager)` | Update manager field in branchCodes |
+| `saveSettingsToFirestore(settings)` | Save branches + app settings |
+| `loadSettingsFromFirestore()` | Load branches + app settings |
 
 ---
 
 ## 8. Known Issues & Technical Debt
 
-1. **Bundle size**: Main JS chunk is ~650KB (exceeds Vite's 500KB warning). Could benefit from code-splitting.
-2. **No Firestore indexes**: `getSecurityCostsByBranchYear` uses client-side filtering to avoid composite index requirements.
+1. **Bundle size**: Main JS chunk is ~650KB (exceeds Vite's 500KB warning). Could benefit from code-splitting with `React.lazy()` and dynamic `import()`.
+2. **No Firestore composite indexes**: `getSecurityCostsByBranchYear` uses client-side filtering to avoid composite index requirements. If data grows large, consider adding indexes.
 3. **Inline styles**: All styling is inline CSS objects. Could migrate to CSS modules or Tailwind for maintainability.
-4. **No automated tests**: No unit or integration tests exist.
-5. **Vercel config**: `vercel.json` exists but is unused (legacy from initial deployment).
-6. **vite.config.js base**: Set to `'/'` for Vercel compatibility. GitHub Pages deployment works because `gh-pages` handles the base path.
+4. **No automated tests**: No unit or integration tests exist. Adding Jest + React Testing Library would improve reliability.
+5. **Vercel config**: `vercel.json` exists but is unused (legacy from initial Google Sheets-based deployment).
+6. **vite.config.js base**: Set to `'/'`. GitHub Pages deployment works because `gh-pages` package handles the base path. The `deploy` script in package.json uses `gh-pages -d dist`.
+7. **COLORS duplication**: The `COLORS` constant is duplicated across `App.jsx` and every component file. Could be extracted to a shared constants file.
+8. **App.jsx size**: At 1,498 lines, the main component is large. Consider splitting into custom hooks (`useAuth`, `useCostForm`, etc.).
 
 ---
 
 ## 9. Development Environment Setup
 
 ### Prerequisites
-- Node.js 18+ / npm 9+
-- Git
-- Firebase project access (for `.env` values)
+- **Node.js** 18+ / npm 9+
+- **Git** with GitHub access
+- **GitHub CLI** (`gh`) for PR management (optional but recommended)
+- Firebase project access (for `.env` values - provided below)
 
 ### Quick Start
 ```bash
@@ -421,7 +571,27 @@ npm run deploy
 ```bash
 node scripts/seed-test-data.mjs
 ```
-Creates 8 test users, 6 branches, and sample cost data for months 1-5.
+Creates 8 test users, 6 branches, and sample cost data for months 1-5 of the current year.
+
+### Restoring from Backup Archive
+```bash
+# If you have the .tar.gz backup:
+mkdir -p airzeta-restore && cd airzeta-restore
+tar -xzf airzeta_backup_2026-02-21_v6_final.tar.gz
+npm install
+# Create .env with Firebase keys (see above)
+npm run dev
+```
+
+### Restoring from Git Tag
+```bash
+git clone https://github.com/Mark4mission/airzeta-security-fee-app.git
+cd airzeta-security-fee-app
+git checkout backup-2026-02-21-v6-final-docs
+npm install
+# Create .env with Firebase keys (see above)
+npm run dev
+```
 
 ---
 
@@ -438,7 +608,68 @@ Creates 8 test users, 6 branches, and sample cost data for months 1-5.
 | #16 | Admin auto-load | AdminDashboard integration, BranchCostHistory chart |
 | #17 | Dashboard cell click | Data sync fixes, Est/Act emphasis |
 | #18 | Variance indicator | Est/Act variance in dashboard cells, cell click deploy fix |
-| #19 | Data loading fix | Remove Load Previous Data button, fix loading for all users, reset on logout |
+| #19 | Data loading fix | Remove Load Previous Data button, auto-load for all users, reset on logout |
 | #20 | Submit + graph fix | Data disappears after submit, Cost History graph empty |
-| #21 | KRW currency fix | Exchange rate helper text, Unicode rendering, post-submit data retention |
+| #21 | KRW currency fix | Exchange rate helper text uses branch currency, Unicode rendering fix, post-submit data retention |
 | #22 | Manager sync | Sync manager name to branchCodes on submit |
+| #23 | Documentation | PROJECT_CONTEXT.md, AI_HANDOFF_PROMPT.md, CLAUDE.md, GEMINI.md, README.md |
+
+---
+
+## 11. Styling Conventions
+
+### Color Constants (COLORS)
+Every component defines its own `COLORS` object (duplicated pattern):
+```javascript
+const COLORS = {
+  primary: '#1B3A7D',      // Navy blue (header, buttons, links)
+  secondary: '#E94560',    // Red/pink (accent, secondary buttons)
+  success: '#10b981',      // Green (success messages, under-budget)
+  error: '#ef4444',        // Red (errors, over-budget)
+  warning: '#f59e0b',      // Amber (warnings)
+  info: '#3b82f6',         // Blue (info messages)
+  background: '#f3f4f6',   // Light gray (page background)
+  surface: '#ffffff',      // White (card backgrounds)
+  text: {
+    primary: '#1f2937',    // Dark gray (main text)
+    secondary: '#6b7280',  // Medium gray (labels)
+    light: '#9ca3af'       // Light gray (placeholders)
+  }
+};
+```
+
+### Currency Symbols (CURRENCY_SYMBOLS)
+```javascript
+const CURRENCY_SYMBOLS = {
+  USD: '$', EUR: '€', KRW: '₩', JPY: '¥', SGD: 'S$',
+  HKD: 'HK$', THB: '฿', GBP: '£', CNY: 'CN¥'
+};
+```
+
+### Inline Style Pattern
+All styling uses inline `style={{}}` objects. Example:
+```jsx
+<div style={{
+  background: COLORS.surface,
+  borderRadius: 16,
+  padding: '24px',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+}}>
+```
+
+---
+
+## 12. Common Pitfalls & Developer Notes
+
+| Issue | Solution |
+|-------|---------|
+| Currency shows '$' for non-USD branch | Use `branch.currency`, NOT `currentUser.preferredCurrency` |
+| Firestore compound query fails | Use single-field `where()` + client-side filtering |
+| Unicode shows as raw text in JSX | Use JS expressions: `{'\u2248'}` or template literals, NOT bare `\u2248` |
+| Data disappears after submit | Wait 1.5s+ for `serverTimestamp()` propagation before re-querying |
+| KRW conversion shows NaN | Ensure `parseFloat(krwExchangeRate)` and `parseFloat(amount)` are valid |
+| BranchCostHistory empty | Component renders only when `branchName` is truthy |
+| Manager name not updating | Check `updateBranchManager()` is called after successful `submitSecurityCost()` |
+| `npm run deploy` fails | Ensure GitHub auth is configured; `gh-pages` needs push access |
+| Build warning 500KB | Expected; main chunk includes Firebase SDK. Can split with lazy loading. |
+| Settings not persisting | Check both Firestore write and localStorage fallback |
