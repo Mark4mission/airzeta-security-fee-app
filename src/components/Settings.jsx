@@ -1139,7 +1139,21 @@ function Settings({ settings, onSave, onClose }) {
                         {users.map((user) => (
                           <tr key={user.id} style={{ borderBottom: `1px solid ${COLORS.background}` }}>
                             <td style={{ padding: '1rem' }}>{user.email}</td>
-                            <td style={{ padding: '1rem' }}>{user.branchName}</td>
+                            <td style={{ padding: '1rem' }}>
+                              {user.branchName ? (
+                                user.branchName
+                              ) : (
+                                <span style={{
+                                  padding: '0.2rem 0.6rem',
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  borderRadius: '0.25rem',
+                                  fontSize: '0.8rem'
+                                }}>
+                                  Unassigned
+                                </span>
+                              )}
+                            </td>
                             <td style={{ padding: '1rem' }}>
                               <span style={{
                                 padding: '0.25rem 0.75rem',
@@ -1156,10 +1170,10 @@ function Settings({ settings, onSave, onClose }) {
                                 padding: '0.25rem 0.75rem',
                                 borderRadius: '0.25rem',
                                 fontSize: '0.875rem',
-                                background: user.active ? COLORS.success : COLORS.error,
+                                background: user.active !== false ? COLORS.success : COLORS.error,
                                 color: 'white'
                               }}>
-                                {user.active ? 'Active' : 'Inactive'}
+                                {user.active !== false ? 'Active' : 'Inactive'}
                               </span>
                             </td>
                             <td style={{ padding: '1rem' }}>

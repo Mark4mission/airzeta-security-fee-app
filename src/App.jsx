@@ -15,6 +15,7 @@ import {
 } from './firebase/auth';
 import Settings from './components/Settings';
 import Login from './components/Login';
+import BranchSelection from './components/BranchSelection';
 
 // 색상 상수
 const COLORS = {
@@ -482,6 +483,25 @@ function App() {
   // 로그인되지 않은 경우
   if (!currentUser) {
     return <Login />;
+  }
+
+  // 브랜치 미선택 사용자 → BranchSelection 화면
+  // hq_admin은 브랜치 선택 없이 바로 메인 화면으로
+  const needsBranchSelection = currentUser.role !== 'hq_admin' && !currentUser.branchName;
+
+  if (needsBranchSelection) {
+    return (
+      <BranchSelection
+        currentUser={currentUser}
+        onBranchSelected={(selectedBranch) => {
+          // currentUser 갱신 → 메인 화면으로 전환
+          setCurrentUser(prev => ({
+            ...prev,
+            branchName: selectedBranch
+          }));
+        }}
+      />
+    );
   }
 
   // 메인 앱 UI
