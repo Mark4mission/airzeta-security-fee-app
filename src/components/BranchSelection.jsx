@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Building2, Loader, LogOut, CheckCircle } from 'lucide-react';
+import { Building2, Loader, LogOut, CheckCircle, Search } from 'lucide-react';
 import { getAllBranches } from '../firebase/collections';
 import { updateUserBranch, logoutUser } from '../firebase/auth';
 
@@ -20,6 +20,7 @@ const COLORS = {
 function BranchSelection({ currentUser, onBranchSelected }) {
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -29,8 +30,17 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     const loadBranches = async () => {
       try {
         const branchList = await getAllBranches();
-        // active 필터링 (active 필드가 없거나 true인 것만)
-        const activeBranches = branchList.filter(b => b.active !== false);
+        // active 필터링 + 브랜치명 추출 (문서 ID 또는 branchName 필드)
+        const activeBranches = branchList
+          .filter(b => b.active !== false)
+          .map(b => ({
+            // 문서 ID가 브랜치명 (예: ALASU, SFOSF, HQ)
+            name: b.id || b.branchName || '',
+            id: b.id
+          }))
+          .filter(b => b.name) // 이름 없는 것 제외
+          .sort((a, b) => a.name.localeCompare(b.name)); // 알파벳 순 정렬
+
         setBranches(activeBranches);
         console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개');
       } catch (err) {
@@ -42,6 +52,11 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     };
     loadBranches();
   }, []);
+
+  // 검색 필터링
+  const filteredBranches = branches.filter(b =>
+    b.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // 브랜치 선택 확정
   const handleConfirm = async () => {
@@ -56,8 +71,6 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     try {
       await updateUserBranch(currentUser.uid, selectedBranch);
       console.log('[BranchSelection] 브랜치 등록 완료:', selectedBranch);
-      
-      // 부모(App.jsx)에 알림 → currentUser 갱신
       onBranchSelected(selectedBranch);
     } catch (err) {
       console.error('[BranchSelection] 브랜치 등록 실패:', err);
@@ -87,17 +100,17 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     }}>
       <div style={{
         background: COLORS.surface,
-        padding: '3rem',
+        padding: '2.5rem',
         borderRadius: '1rem',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        maxWidth: '550px',
+        maxWidth: '480px',
         width: '100%'
       }}>
         {/* 헤더 */}
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div style={{
-            width: '80px',
-            height: '80px',
+            width: '72px',
+            height: '72px',
             margin: '0 auto 1rem auto',
             background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
             borderRadius: '50%',
@@ -106,7 +119,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             justifyContent: 'center',
             boxShadow: '0 8px 16px rgba(27, 58, 125, 0.3)'
           }}>
-            <Building2 size={40} color="white" strokeWidth={2} />
+            <Building2 size={36} color="white" strokeWidth={2} />
           </div>
           <h1 style={{
             fontSize: '1.5rem',
@@ -160,90 +173,140 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             </p>
           </div>
         ) : (
-          /* 브랜치 선택 UI */
           <>
+            {/* 검색 바 (브랜치 8개 이상일 때만 표시) */}
+            {branches.length >= 8 && (
+              <div style={{
+                position: 'relative',
+                marginBottom: '1rem'
+              }}>
+                <Search
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: '0.75rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: COLORS.text.light
+                  }}
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search branches..."
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem 0.75rem 0.6rem 2.25rem',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '0.5rem',
+                    fontSize: '0.875rem',
+                    color: COLORS.text.primary,
+                    background: '#f9fafb',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    transition: 'border-color 0.2s'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = COLORS.primary}
+                  onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                />
+              </div>
+            )}
+
+            {/* 브랜치 버튼 그리드 */}
             <div style={{
-              display: 'grid',
-              gap: '0.75rem',
-              marginBottom: '2rem',
-              maxHeight: '300px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.5rem',
+              marginBottom: '1.75rem',
+              maxHeight: '280px',
               overflowY: 'auto',
-              paddingRight: '0.5rem'
+              padding: '0.25rem',
+              justifyContent: 'flex-start'
             }}>
-              {branches.map((branch) => {
+              {filteredBranches.map((branch) => {
                 const isSelected = selectedBranch === branch.name;
                 return (
                   <button
-                    key={branch.id || branch.name}
+                    key={branch.id}
                     onClick={() => { setSelectedBranch(branch.name); setError(''); }}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1rem',
-                      padding: '1rem 1.25rem',
-                      background: isSelected ? `${COLORS.primary}10` : COLORS.surface,
-                      border: `2px solid ${isSelected ? COLORS.primary : '#e5e7eb'}`,
-                      borderRadius: '0.75rem',
+                      padding: '0.55rem 1rem',
+                      background: isSelected
+                        ? COLORS.primary
+                        : '#f8f9fb',
+                      color: isSelected ? '#ffffff' : COLORS.text.primary,
+                      border: `1.5px solid ${isSelected ? COLORS.primary : '#d1d5db'}`,
+                      borderRadius: '0.5rem',
                       cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      textAlign: 'left',
-                      width: '100%'
+                      fontSize: '0.8rem',
+                      fontWeight: isSelected ? '700' : '600',
+                      letterSpacing: '0.025em',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap',
+                      boxShadow: isSelected
+                        ? '0 2px 8px rgba(27, 58, 125, 0.35)'
+                        : '0 1px 2px rgba(0,0,0,0.04)',
+                      transform: isSelected ? 'scale(1.04)' : 'scale(1)',
+                      fontFamily: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+                    }}
+                    onMouseOver={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = COLORS.primary;
+                        e.currentTarget.style.background = '#eef2f9';
+                        e.currentTarget.style.color = COLORS.primary;
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!isSelected) {
+                        e.currentTarget.style.borderColor = '#d1d5db';
+                        e.currentTarget.style.background = '#f8f9fb';
+                        e.currentTarget.style.color = COLORS.text.primary;
+                      }
                     }}
                   >
-                    {/* 체크 아이콘 */}
-                    <div style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      border: `2px solid ${isSelected ? COLORS.primary : '#d1d5db'}`,
-                      background: isSelected ? COLORS.primary : 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      transition: 'all 0.2s'
-                    }}>
-                      {isSelected && <CheckCircle size={16} color="white" />}
-                    </div>
-
-                    {/* 브랜치 정보 */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontWeight: '600',
-                        color: isSelected ? COLORS.primary : COLORS.text.primary,
-                        fontSize: '1rem'
-                      }}>
-                        {branch.name}
-                      </div>
-                      {branch.manager && (
-                        <div style={{
-                          fontSize: '0.8rem',
-                          color: COLORS.text.secondary,
-                          marginTop: '0.15rem'
-                        }}>
-                          Manager: {branch.manager}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 통화 뱃지 */}
-                    {branch.currency && (
-                      <span style={{
-                        padding: '0.2rem 0.6rem',
-                        background: isSelected ? COLORS.primary : '#f3f4f6',
-                        color: isSelected ? 'white' : COLORS.text.secondary,
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        flexShrink: 0
-                      }}>
-                        {branch.currency}
-                      </span>
-                    )}
+                    {branch.name}
                   </button>
                 );
               })}
+
+              {/* 검색 결과 없음 */}
+              {filteredBranches.length === 0 && searchQuery && (
+                <p style={{
+                  width: '100%',
+                  textAlign: 'center',
+                  color: COLORS.text.light,
+                  fontSize: '0.85rem',
+                  padding: '1.5rem 0',
+                  margin: 0
+                }}>
+                  No branches matching "{searchQuery}"
+                </p>
+              )}
             </div>
+
+            {/* 선택된 브랜치 표시 */}
+            {selectedBranch && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.6rem 1rem',
+                marginBottom: '1rem',
+                background: '#eef7f1',
+                border: '1px solid #a7f3d0',
+                borderRadius: '0.5rem'
+              }}>
+                <CheckCircle size={16} color={COLORS.success} />
+                <span style={{
+                  fontSize: '0.85rem',
+                  color: '#065f46',
+                  fontWeight: '600'
+                }}>
+                  Selected: {selectedBranch}
+                </span>
+              </div>
+            )}
 
             {/* 확인 버튼 */}
             <button
@@ -251,35 +314,36 @@ function BranchSelection({ currentUser, onBranchSelected }) {
               disabled={submitting || !selectedBranch}
               style={{
                 width: '100%',
-                padding: '1rem',
+                padding: '0.9rem',
                 background: submitting || !selectedBranch ? '#9ca3af' : COLORS.success,
                 color: 'white',
                 border: 'none',
                 borderRadius: '0.5rem',
-                fontSize: '1rem',
+                fontSize: '0.95rem',
                 fontWeight: '600',
                 cursor: submitting || !selectedBranch ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.5rem',
-                transition: 'background 0.2s'
+                transition: 'background 0.2s',
+                boxShadow: submitting || !selectedBranch ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)'
               }}
             >
               {submitting ? (
-                <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</>
+                <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</>
               ) : (
-                <><CheckCircle size={20} /> Confirm Branch Selection</>
+                <><CheckCircle size={18} /> Confirm Branch Selection</>
               )}
             </button>
           </>
         )}
 
-        {/* 로그아웃 / 다른 계정 */}
+        {/* 로그아웃 */}
         <div style={{
           textAlign: 'center',
-          marginTop: '1.5rem',
-          paddingTop: '1.5rem',
+          marginTop: '1.25rem',
+          paddingTop: '1.25rem',
           borderTop: '1px solid #e5e7eb'
         }}>
           <button
