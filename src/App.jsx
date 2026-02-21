@@ -129,6 +129,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [autoLoadMessage, setAutoLoadMessage] = useState(''); // 관리자 자동로드 메시지
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0); // BranchCostHistory 강제 리프레시용
 
   // 인증 상태 리스너
   useEffect(() => {
@@ -554,21 +555,24 @@ function App() {
       setMessage({ type: 'success', text: 'Security cost submitted successfully!' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
       
-      // 폼 초기화
+      // BranchCostHistory 그래프 강제 리프레시
+      setHistoryRefreshKey(prev => prev + 1);
+      
+      // 폼 초기화 후 방금 제출한 데이터 다시 로드
       if (currentUser?.role === 'hq_admin') {
+        // 관리자: 브랜치/매니저 초기화 → 새 브랜치 선택 유도
         setBranchName('');
         setManagerName('');
+        setCostItems([{ 
+          item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', 
+          currency: currency, paymentMethod: defaultPaymentMethod, notes: '' 
+        }]);
+      } else {
+        // 지점 사용자: 방금 제출한 데이터를 다시 로드하여 화면에 표시
+        setTimeout(() => {
+          autoLoadCostData(branchName, targetMonth);
+        }, 500);
       }
-      setCostItems([{ 
-        item: '', 
-        unitPrice: '',
-        quantity: '',
-        estimatedCost: '', 
-        actualCost: '', 
-        currency: currency, 
-        paymentMethod: defaultPaymentMethod, 
-        notes: '' 
-      }]);
 
     } catch (error) {
       console.error('Submission error:', error);
@@ -1456,7 +1460,7 @@ function App() {
 
         {/* 비용 히스토리 - 관리자(브랜치 선택 시) 및 지점 사용자 모두 표시 */}
         {branchName && (
-          <BranchCostHistory branchName={branchName} currency={currency} />
+          <BranchCostHistory key={`${branchName}-${historyRefreshKey}`} branchName={branchName} currency={currency} />
         )}
       </main>
 

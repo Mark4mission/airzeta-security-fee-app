@@ -47,10 +47,16 @@ function BranchCostHistory({ branchName, currency }) {
     const loadData = async () => {
       setLoading(true);
       try {
+        console.log(`[BranchCostHistory] Loading data for branch=${branchName}, year=${targetYear}, currency=${currency}`);
         const data = await getSecurityCostsByBranchYear(branchName, targetYear.toString());
+        console.log(`[BranchCostHistory] Loaded ${data.length} records`);
+        if (data.length > 0) {
+          console.log('[BranchCostHistory] Sample:', data[0].targetMonth, 'Est:', data[0].totalEstimated, 'Act:', data[0].totalActual);
+        }
         setAllData(data);
       } catch (err) {
         console.error('[BranchCostHistory] load error:', err);
+        setAllData([]);
       } finally {
         setLoading(false);
       }
