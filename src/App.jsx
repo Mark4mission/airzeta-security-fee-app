@@ -45,6 +45,20 @@ const CURRENCY_SYMBOLS = {
   THB: '฿'
 };
 
+// 숫자 3자리 쉼표 포맷 유틸리티
+const formatNumber = (num, decimals = 2) => {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  return Number(num).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+};
+
+const formatNumberInt = (num) => {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  return Math.round(Number(num)).toLocaleString('en-US');
+};
+
 // 기본 설정값
 const DEFAULT_SETTINGS = {
   branches: [
@@ -76,6 +90,7 @@ function App() {
   const [krwExchangeRate, setKrwExchangeRate] = useState('');
   const [managerName, setManagerName] = useState('');
   const [targetMonth, setTargetMonth] = useState('');
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('');
   const [costItems, setCostItems] = useState([
     { item: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
   ]);
@@ -175,20 +190,22 @@ function App() {
       if (branch) {
         setCurrency(branch.currency || 'USD');
         setManagerName(branch.manager || '');
-        console.log('[App] 브랜치 매칭 성공:', branch.name, branch.manager);
+        setDefaultPaymentMethod(branch.paymentMethod || '');
+        console.log('[App] 브랜치 매칭 성공:', branch.name, '매니저:', branch.manager, '통화:', branch.currency, '결제:', branch.paymentMethod);
       } else {
         console.warn('[App] 브랜치 매칭 실패. branchName:', currentUser.branchName);
       }
     }
   }, [currentUser, settings.branches]);
 
-  // Manager Name & Currency 자동 채우기
+  // Manager Name & Currency & PaymentMethod 자동 채우기
   useEffect(() => {
     if (branchName && currentUser?.role === 'hq_admin') {
       const branch = settings.branches.find(b => b.name === branchName);
       if (branch) {
         setManagerName(branch.manager || '');
         setCurrency(branch.currency || 'USD');
+        setDefaultPaymentMethod(branch.paymentMethod || '');
       }
     }
   }, [branchName, settings.branches, currentUser]);
@@ -211,8 +228,10 @@ function App() {
     if (branch) {
       setCurrency(branch.currency || 'USD');
       setManagerName(branch.manager || '');
+      setDefaultPaymentMethod(branch.paymentMethod || '');
     } else {
       setCurrency('USD');
+      setDefaultPaymentMethod('');
     }
   };
 
@@ -265,7 +284,7 @@ function App() {
       estimatedCost: '', 
       actualCost: '', 
       currency: currency, 
-      paymentMethod: '', 
+      paymentMethod: defaultPaymentMethod, 
       notes: '' 
     }]);
   };
@@ -429,7 +448,7 @@ function App() {
         estimatedCost: '', 
         actualCost: '', 
         currency: currency, 
-        paymentMethod: '', 
+        paymentMethod: defaultPaymentMethod, 
         notes: '' 
       }]);
 
@@ -972,7 +991,7 @@ function App() {
                             color: COLORS.text.secondary, 
                             marginTop: '0.25rem' 
                           }}>
-                            ≈ ₩{convertToKRW(item.estimatedCost, item.currency || currency)?.toLocaleString('ko-KR')}
+                            ≈ ₩{formatNumberInt(convertToKRW(item.estimatedCost, item.currency || currency))}
                           </div>
                         )}
                       </td>
@@ -1001,7 +1020,7 @@ function App() {
                             color: COLORS.text.secondary, 
                             marginTop: '0.25rem' 
                           }}>
-                            ≈ ₩{convertToKRW(item.actualCost, item.currency || currency)?.toLocaleString('ko-KR')}
+                            ≈ ₩{formatNumberInt(convertToKRW(item.actualCost, item.currency || currency))}
                           </div>
                         )}
                       </td>
@@ -1076,7 +1095,7 @@ function App() {
                   Total Estimated Cost
                 </p>
                 <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.primary }}>
-                  {CURRENCY_SYMBOLS[currency]}{calculateTotalEstimated().toFixed(2)}
+                  {CURRENCY_SYMBOLS[currency]}{formatNumber(calculateTotalEstimated())}
                 </p>
               </div>
               <div>
@@ -1084,7 +1103,7 @@ function App() {
                   Total Actual Cost
                 </p>
                 <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.secondary }}>
-                  {CURRENCY_SYMBOLS[currency]}{calculateTotalActual().toFixed(2)}
+                  {CURRENCY_SYMBOLS[currency]}{formatNumber(calculateTotalActual())}
                 </p>
               </div>
               <div>
@@ -1096,7 +1115,7 @@ function App() {
                   fontWeight: 'bold', 
                   color: calculateTotalActual() > calculateTotalEstimated() ? COLORS.error : COLORS.success 
                 }}>
-                  {CURRENCY_SYMBOLS[currency]}{(calculateTotalActual() - calculateTotalEstimated()).toFixed(2)}
+                  {CURRENCY_SYMBOLS[currency]}{formatNumber(calculateTotalActual() - calculateTotalEstimated())}
                 </p>
               </div>
             </div>

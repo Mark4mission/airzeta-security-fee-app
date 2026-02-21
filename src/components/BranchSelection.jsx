@@ -33,11 +33,16 @@ function BranchSelection({ currentUser, onBranchSelected }) {
         // active 필터링 + 브랜치명 추출 (문서 ID 또는 branchName 필드)
         const activeBranches = branchList
           .filter(b => b.active !== false)
-          .map(b => ({
+          .map(b => {
             // 문서 ID가 브랜치명 (예: ALASU, SFOSF, HQ)
-            name: b.id || b.branchName || '',
-            id: b.id
-          }))
+            const fullName = b.id || b.branchName || '';
+            return {
+              name: fullName,
+              // 왼쪽 최대 3자리로 간결한 표시명 생성
+              displayName: fullName.slice(0, 3).toUpperCase(),
+              id: b.id
+            };
+          })
           .filter(b => b.name) // 이름 없는 것 제외
           .sort((a, b) => a.name.localeCompare(b.name)); // 알파벳 순 정렬
 
@@ -53,9 +58,10 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     loadBranches();
   }, []);
 
-  // 검색 필터링
+  // 검색 필터링 (full name과 displayName 모두 대상)
   const filteredBranches = branches.filter(b =>
-    b.name.toLowerCase().includes(searchQuery.toLowerCase())
+    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // 브랜치 선택 확정
@@ -265,7 +271,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                       }
                     }}
                   >
-                    {branch.name}
+                    {branch.displayName}
                   </button>
                 );
               })}
@@ -303,7 +309,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                   color: '#065f46',
                   fontWeight: '600'
                 }}>
-                  Selected: {selectedBranch}
+                  Selected: {selectedBranch.slice(0, 3).toUpperCase()} ({selectedBranch})
                 </span>
               </div>
             )}
