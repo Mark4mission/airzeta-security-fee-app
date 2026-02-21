@@ -237,7 +237,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                     key={branch.id}
                     onClick={() => { setSelectedBranch(branch.name); setError(''); }}
                     style={{
-                      padding: '0.55rem 1rem',
+                      padding: '0.35rem 0.85rem',
                       background: isSelected
                         ? COLORS.primary
                         : '#f8f9fb',

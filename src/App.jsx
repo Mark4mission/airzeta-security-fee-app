@@ -42,7 +42,9 @@ const CURRENCY_SYMBOLS = {
   JPY: '¥',
   SGD: 'S$',
   HKD: 'HK$',
-  THB: '฿'
+  THB: '฿',
+  GBP: '£',
+  CNY: 'CN¥'
 };
 
 // 숫자 3자리 쉼표 포맷 유틸리티
@@ -92,7 +94,7 @@ function App() {
   const [targetMonth, setTargetMonth] = useState('');
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('');
   const [costItems, setCostItems] = useState([
-    { item: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
+    { item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
   ]);
 
   // 설정 상태
@@ -242,10 +244,18 @@ function App() {
     setMessage({ type: 'success', text: 'Settings saved successfully!' });
   };
 
-  // 입력 변경
+  // 입력 변경 (unitPrice/quantity → estimatedCost 자동 계산 포함)
   const handleInputChange = (index, field, value) => {
     const newItems = [...costItems];
     newItems[index][field] = value;
+
+    // unitPrice 또는 quantity 변경 시 estimatedCost 자동 계산
+    if (field === 'unitPrice' || field === 'quantity') {
+      const price = parseFloat(newItems[index].unitPrice) || 0;
+      const qty = parseFloat(newItems[index].quantity) || 0;
+      newItems[index].estimatedCost = (price * qty) > 0 ? (price * qty).toString() : '';
+    }
+
     setCostItems(newItems);
   };
 
@@ -255,8 +265,14 @@ function App() {
     newItems[index].item = itemName;
 
     const selectedItem = settings.costItems.find(item => item.name === itemName);
-    if (selectedItem && !newItems[index].estimatedCost) {
-      newItems[index].estimatedCost = selectedItem.defaultRate?.toString() || '';
+    if (selectedItem && !newItems[index].unitPrice) {
+      newItems[index].unitPrice = selectedItem.defaultRate?.toString() || '';
+      // unitPrice가 채워지고 quantity가 있으면 estimatedCost 계산
+      const price = parseFloat(newItems[index].unitPrice) || 0;
+      const qty = parseFloat(newItems[index].quantity) || 0;
+      if (price > 0 && qty > 0) {
+        newItems[index].estimatedCost = (price * qty).toString();
+      }
     }
 
     if (branchName && targetMonth) {
@@ -265,7 +281,16 @@ function App() {
         if (previousData.length > 0) {
           const matchingItem = previousData[0].items?.find(i => i.item === itemName);
           if (matchingItem) {
-            newItems[index].estimatedCost = matchingItem.estimatedCost || newItems[index].estimatedCost;
+            // 이전 데이터에 unitPrice/quantity가 있으면 사용, 없으면 estimatedCost 사용
+            if (matchingItem.unitPrice) {
+              newItems[index].unitPrice = matchingItem.unitPrice?.toString() || newItems[index].unitPrice;
+              newItems[index].quantity = matchingItem.quantity?.toString() || '';
+              const price = parseFloat(newItems[index].unitPrice) || 0;
+              const qty = parseFloat(newItems[index].quantity) || 0;
+              newItems[index].estimatedCost = (price * qty) > 0 ? (price * qty).toString() : '';
+            } else if (matchingItem.estimatedCost) {
+              newItems[index].estimatedCost = matchingItem.estimatedCost?.toString() || '';
+            }
             newItems[index].paymentMethod = matchingItem.paymentMethod || '';
           }
         }
@@ -281,6 +306,8 @@ function App() {
   const handleAddItem = () => {
     setCostItems([...costItems, { 
       item: '', 
+      unitPrice: '',
+      quantity: '',
       estimatedCost: '', 
       actualCost: '', 
       currency: currency, 
@@ -310,6 +337,9 @@ function App() {
         if (latestData.items && latestData.items.length > 0) {
           setCostItems(latestData.items.map(item => ({
             ...item,
+            unitPrice: item.unitPrice?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            estimatedCost: item.estimatedCost?.toString() || '',
             actualCost: '',
             currency: item.currency || currency
           })));
@@ -400,7 +430,7 @@ function App() {
     }
 
     const validItems = costItems.filter(item => 
-      item.item && (item.estimatedCost || item.actualCost)
+      item.item && (item.estimatedCost || item.actualCost || (item.unitPrice && item.quantity))
     );
 
     if (validItems.length === 0) {
@@ -421,6 +451,8 @@ function App() {
         krwExchangeRate: krwExchangeRate ? parseFloat(krwExchangeRate) : null,
         items: validItems.map(item => ({
           item: item.item,
+          unitPrice: parseFloat(item.unitPrice) || 0,
+          quantity: parseFloat(item.quantity) || 0,
           estimatedCost: parseFloat(item.estimatedCost) || 0,
           actualCost: parseFloat(item.actualCost) || 0,
           currency: item.currency || currency,
@@ -445,6 +477,8 @@ function App() {
       }
       setCostItems([{ 
         item: '', 
+        unitPrice: '',
+        quantity: '',
         estimatedCost: '', 
         actualCost: '', 
         currency: currency, 
@@ -780,14 +814,7 @@ function App() {
                   }}>
                     KRW Exchange Rate
                   </label>
-                  <div style={{ position: 'relative' }}>
-                    <DollarSign size={20} style={{
-                      position: 'absolute',
-                      left: '0.75rem',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      color: COLORS.text.light
-                    }} />
+                  <div>
                     <input
                       type="number"
                       value={krwExchangeRate}
@@ -797,7 +824,7 @@ function App() {
                       min="0"
                       style={{
                         width: '100%',
-                        padding: '0.75rem 0.75rem 0.75rem 2.5rem',
+                        padding: '0.75rem',
                         border: `1px solid ${COLORS.text.light}`,
                         borderRadius: '0.5rem',
                         fontSize: '1rem'
@@ -909,131 +936,198 @@ function App() {
               </div>
             )}
 
-            {/* 비용 항목 테이블 */}
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#f9fafb', borderBottom: `2px solid ${COLORS.text.light}` }}>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Cost Item</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Currency</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Estimated Cost</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Actual Cost</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Payment Method</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: COLORS.text.primary }}>Notes</th>
-                    <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: COLORS.text.primary }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {costItems.map((item, index) => (
-                    <tr key={index} style={{ borderBottom: `1px solid ${COLORS.text.light}` }}>
-                      <td style={{ padding: '1rem' }}>
+            {/* 비용 항목 카드 리스트 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {costItems.map((item, index) => {
+                const itemCurrency = item.currency || currency;
+                const sym = CURRENCY_SYMBOLS[itemCurrency] || itemCurrency;
+                const estCost = parseFloat(item.estimatedCost) || 0;
+                const actCost = parseFloat(item.actualCost) || 0;
+
+                return (
+                  <div key={index} style={{
+                    border: `1px solid #e5e7eb`,
+                    borderRadius: '0.625rem',
+                    background: '#fafbfc',
+                    overflow: 'hidden'
+                  }}>
+                    {/* 카드 헤더: 항목번호 + 삭제 */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.4rem 0.75rem',
+                      background: '#f1f5f9',
+                      borderBottom: '1px solid #e5e7eb'
+                    }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.primary, letterSpacing: '0.04em' }}>
+                        ITEM #{index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(index)}
+                        disabled={costItems.length === 1}
+                        style={{
+                          padding: '0.2rem 0.4rem',
+                          background: 'none',
+                          color: costItems.length === 1 ? '#d1d5db' : COLORS.error,
+                          border: 'none',
+                          borderRadius: '0.25rem',
+                          cursor: costItems.length === 1 ? 'not-allowed' : 'pointer',
+                          display: 'flex', alignItems: 'center', gap: '0.25rem',
+                          fontSize: '0.7rem', fontWeight: '500'
+                        }}
+                      >
+                        <Trash2 size={13} /> Remove
+                      </button>
+                    </div>
+
+                    {/* Row 1: Cost Item | Currency | Unit Price | Qty | Est. Cost */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1.2fr 0.8fr 1.4fr',
+                      gap: '0.5rem',
+                      padding: '0.5rem 0.75rem',
+                      alignItems: 'end'
+                    }}>
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Cost Item</label>
                         <select
                           value={item.item}
                           onChange={(e) => handleItemChange(index, e.target.value)}
                           required
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', background: 'white'
                           }}
                         >
                           <option value="">Select Item</option>
                           {settings.costItems.map(costItem => (
-                            <option key={costItem.name} value={costItem.name}>
-                              {costItem.name}
-                            </option>
+                            <option key={costItem.name} value={costItem.name}>{costItem.name}</option>
                           ))}
                         </select>
-                      </td>
-                      <td style={{ padding: '1rem' }}>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Currency</label>
                         <select
-                          value={item.currency || currency}
+                          value={itemCurrency}
                           onChange={(e) => handleInputChange(index, 'currency', e.target.value)}
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', background: 'white'
                           }}
                         >
                           {settings.currencies.map(curr => (
-                            <option key={curr} value={curr}>
-                              {curr} ({CURRENCY_SYMBOLS[curr]})
-                            </option>
+                            <option key={curr} value={curr}>{curr} ({CURRENCY_SYMBOLS[curr] || ''})</option>
                           ))}
                         </select>
-                      </td>
-                      <td style={{ padding: '1rem' }}>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Unit Price</label>
                         <input
                           type="number"
-                          value={item.estimatedCost}
-                          onChange={(e) => handleInputChange(index, 'estimatedCost', e.target.value)}
+                          value={item.unitPrice}
+                          onChange={(e) => handleInputChange(index, 'unitPrice', e.target.value)}
                           disabled={!canEditEstimatedCost()}
-                          placeholder={canEditEstimatedCost() ? "Enter amount" : "Not available"}
-                          min="0"
-                          step="0.01"
+                          placeholder="0"
+                          min="0" step="0.01"
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem',
-                            background: !canEditEstimatedCost() ? '#f9fafb' : 'white',
-                            cursor: !canEditEstimatedCost() ? 'not-allowed' : 'text'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', textAlign: 'right',
+                            background: !canEditEstimatedCost() ? '#f9fafb' : 'white'
                           }}
                         />
-                        {item.estimatedCost && krwExchangeRate && (
-                          <div style={{ 
-                            fontSize: '0.7rem', 
-                            color: COLORS.text.secondary, 
-                            marginTop: '0.25rem' 
-                          }}>
-                            ≈ ₩{formatNumberInt(convertToKRW(item.estimatedCost, item.currency || currency))}
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Qty</label>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => handleInputChange(index, 'quantity', e.target.value)}
+                          disabled={!canEditEstimatedCost()}
+                          placeholder="0"
+                          min="0" step="1"
+                          style={{
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', textAlign: 'right',
+                            background: !canEditEstimatedCost() ? '#f9fafb' : 'white'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.primary, display: 'block', marginBottom: '0.2rem' }}>
+                          Est. Cost {estCost > 0 && <span style={{ fontWeight: '400', color: COLORS.text.light }}>({sym})</span>}
+                        </label>
+                        <div style={{
+                          padding: '0.4rem 0.5rem',
+                          background: estCost > 0 ? '#eef2ff' : '#f9fafb',
+                          border: `1px solid ${estCost > 0 ? '#c7d2fe' : '#e5e7eb'}`,
+                          borderRadius: '0.375rem',
+                          fontSize: '0.85rem',
+                          fontWeight: '700',
+                          color: estCost > 0 ? COLORS.primary : COLORS.text.light,
+                          textAlign: 'right',
+                          minHeight: '1.6rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'flex-end'
+                        }}>
+                          {estCost > 0 ? `${sym}${formatNumber(estCost)}` : '—'}
+                        </div>
+                        {estCost > 0 && krwExchangeRate && (
+                          <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
+                            ≈ ₩{formatNumberInt(convertToKRW(estCost, itemCurrency))}
                           </div>
                         )}
-                      </td>
-                      <td style={{ padding: '1rem' }}>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Actual Cost | Payment Method | Notes */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.5fr 1.5fr 2fr',
+                      gap: '0.5rem',
+                      padding: '0.35rem 0.75rem 0.5rem',
+                      borderTop: '1px dashed #e5e7eb'
+                    }}>
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Actual Cost</label>
                         <input
                           type="number"
                           value={item.actualCost}
                           onChange={(e) => handleInputChange(index, 'actualCost', e.target.value)}
                           disabled={!canEditActualCost()}
-                          placeholder={canEditActualCost() ? "Enter amount" : "Available after 28th"}
-                          min="0"
-                          step="0.01"
+                          placeholder={canEditActualCost() ? "Enter amount" : "After 28th"}
+                          min="0" step="0.01"
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem',
-                            background: !canEditActualCost() ? '#f9fafb' : 'white',
-                            cursor: !canEditActualCost() ? 'not-allowed' : 'text'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', textAlign: 'right',
+                            background: !canEditActualCost() ? '#f9fafb' : 'white'
                           }}
                         />
-                        {item.actualCost && krwExchangeRate && (
-                          <div style={{ 
-                            fontSize: '0.7rem', 
-                            color: COLORS.text.secondary, 
-                            marginTop: '0.25rem' 
-                          }}>
-                            ≈ ₩{formatNumberInt(convertToKRW(item.actualCost, item.currency || currency))}
+                        {actCost > 0 && krwExchangeRate && (
+                          <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
+                            ≈ ₩{formatNumberInt(convertToKRW(actCost, itemCurrency))}
                           </div>
                         )}
-                      </td>
-                      <td style={{ padding: '1rem' }}>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Payment Method</label>
                         <select
                           value={item.paymentMethod}
                           onChange={(e) => handleInputChange(index, 'paymentMethod', e.target.value)}
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', background: 'white'
                           }}
                         >
                           <option value="">Select Method</option>
@@ -1041,43 +1135,26 @@ function App() {
                             <option key={method} value={method}>{method}</option>
                           ))}
                         </select>
-                      </td>
-                      <td style={{ padding: '1rem' }}>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Notes</label>
                         <input
                           type="text"
                           value={item.notes}
                           onChange={(e) => handleInputChange(index, 'notes', e.target.value)}
                           placeholder="Optional notes"
                           style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem',
-                            fontSize: '0.875rem'
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem'
                           }}
                         />
-                      </td>
-                      <td style={{ padding: '1rem', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          disabled={costItems.length === 1}
-                          style={{
-                            padding: '0.5rem',
-                            background: costItems.length === 1 ? '#e5e7eb' : COLORS.error,
-                            color: costItems.length === 1 ? '#9ca3af' : 'white',
-                            border: 'none',
-                            borderRadius: '0.375rem',
-                            cursor: costItems.length === 1 ? 'not-allowed' : 'pointer'
-                          }}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* 합계 */}
