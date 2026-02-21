@@ -6,7 +6,8 @@ import {
   getAllBranches, 
   getSecurityCostsByBranch, 
   submitSecurityCost,
-  loadSettingsFromFirestore 
+  loadSettingsFromFirestore,
+  updateBranchManager 
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -551,6 +552,23 @@ function App() {
       };
 
       await submitSecurityCost(submissionData);
+
+      // 매니저 이름 변경 시 Settings(branchCodes)에 동기화
+      const currentBranch = settings.branches.find(b => b.name === branchName);
+      if (currentBranch && currentBranch.manager !== managerName) {
+        console.log(`[Submit] 매니저 변경 감지: ${currentBranch.manager} → ${managerName}`);
+        const updated = await updateBranchManager(branchName, managerName);
+        if (updated) {
+          // 로컬 settings 상태도 동기화 (다음 브랜치 선택 시 반영)
+          setSettings(prev => ({
+            ...prev,
+            branches: prev.branches.map(b => 
+              b.name === branchName ? { ...b, manager: managerName } : b
+            )
+          }));
+          console.log('[Submit] 로컬 settings 매니저 동기화 완료');
+        }
+      }
 
       setMessage({ type: 'success', text: 'Security cost submitted successfully!' });
       window.scrollTo({ top: 0, behavior: 'smooth' });

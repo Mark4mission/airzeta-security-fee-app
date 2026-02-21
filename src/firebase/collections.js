@@ -149,6 +149,31 @@ export const getSecurityCostsByBranchYear = async (branch, year) => {
   }
 };
 
+// 브랜치 매니저 이름 업데이트 (제출 시 동기화)
+export const updateBranchManager = async (branchName, newManager) => {
+  try {
+    await ensureAuthenticated();
+    
+    const branchRef = doc(db, COLLECTIONS.BRANCH_CODES, branchName);
+    const branchDoc = await getDoc(branchRef);
+    
+    if (branchDoc.exists()) {
+      await updateDoc(branchRef, {
+        manager: newManager,
+        updatedAt: serverTimestamp()
+      });
+      console.log(`[Settings] 브랜치 매니저 업데이트: ${branchName} → ${newManager}`);
+      return true;
+    } else {
+      console.warn(`[Settings] 브랜치 문서 없음: ${branchName}`);
+      return false;
+    }
+  } catch (error) {
+    console.error('[Settings] 매니저 업데이트 에러:', error);
+    return false;
+  }
+};
+
 // ============================================================
 // Settings 저장/로드 함수 (Firestore 연동)
 // ============================================================
