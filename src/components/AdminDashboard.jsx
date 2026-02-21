@@ -19,7 +19,7 @@ const fmt = (n) => {
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 };
 
-function AdminDashboard({ branches }) {
+function AdminDashboard({ branches, onCellClick }) {
   const [allCosts, setAllCosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterBranch, setFilterBranch] = useState('');
@@ -134,7 +134,7 @@ function AdminDashboard({ branches }) {
         </select>
         <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
           <option value="">All Branches</option>
-          {(branches || []).map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+          {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
         </select>
       </div>
 
@@ -151,6 +151,9 @@ function AdminDashboard({ branches }) {
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <span style={{ width: 10, height: 10, borderRadius: 2, background: '#fef3c7', border: '2px solid #f59e0b', display: 'inline-block' }} /> Updated within 3 days
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: '0.5rem', fontStyle: 'italic' }}>
+          Click a cell to load cost data
         </span>
       </div>
 
@@ -192,7 +195,9 @@ function AdminDashboard({ branches }) {
 
                   return (
                     <td key={m} style={{ padding: '0.25rem', textAlign: 'center' }}>
-                      <div style={{
+                      <div
+                        onClick={() => onCellClick && onCellClick(bn, `${filterYear}-${m}`)}
+                        style={{
                         padding: '0.3rem 0.2rem',
                         background: bg,
                         borderRadius: '0.25rem',
@@ -201,8 +206,14 @@ function AdminDashboard({ branches }) {
                         display: 'flex',
                         flexDirection: 'column',
                         justifyContent: 'center',
-                        position: 'relative'
-                      }}>
+                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(27,58,125,0.25)'; e.currentTarget.style.transform = 'scale(1.04)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'scale(1)'; }}
+                        title={`Click to load ${bn} - ${monthLabels[parseInt(m) - 1]} ${filterYear}`}
+                      >
                         {cost ? (
                           <>
                             <div style={{ fontSize: '0.6rem', color: COLORS.primary, fontWeight: '600' }}>
