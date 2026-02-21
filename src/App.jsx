@@ -213,13 +213,13 @@ function App() {
         b => b.name === currentUser.branchName || b.id === currentUser.branchName
       );
       if (branch) {
-        // 사용자 선호값이 있으면 우선 사용, 없으면 브랜치 기본값
-        const userCurrency = currentUser.preferredCurrency || branch.currency || 'USD';
+        // 브랜치 기본 통화를 우선 사용 (환율 계산/표시에 정확한 통화가 필요)
+        const branchCurrency = branch.currency || 'USD';
         const userPayment = currentUser.preferredPaymentMethod || branch.paymentMethod || '';
-        setCurrency(userCurrency);
+        setCurrency(branchCurrency);
         setManagerName(branch.manager || '');
         setDefaultPaymentMethod(userPayment);
-        console.log('[App] 브랜치 매칭 성공:', branch.name, '매니저:', branch.manager, '통화:', userCurrency, '결제:', userPayment);
+        console.log('[App] 브랜치 매칭 성공:', branch.name, '매니저:', branch.manager, '통화:', branchCurrency, '결제:', userPayment);
       } else {
         console.warn('[App] 브랜치 매칭 실패. branchName:', currentUser.branchName);
       }
@@ -232,10 +232,10 @@ function App() {
       const branch = settings.branches.find(b => b.name === branchName);
       if (branch) {
         setManagerName(branch.manager || '');
-        // 관리자도 선호값 우선, 없으면 브랜치 기본값
-        const userCurrency = currentUser.preferredCurrency || branch.currency || 'USD';
+        // 관리자: 브랜치 기본 통화를 우선 사용 (환율 계산에 정확한 통화가 필요)
+        const branchCurrency = branch.currency || 'USD';
         const userPayment = currentUser.preferredPaymentMethod || branch.paymentMethod || '';
-        setCurrency(userCurrency);
+        setCurrency(branchCurrency);
         setDefaultPaymentMethod(userPayment);
       }
     }
@@ -568,10 +568,11 @@ function App() {
           currency: currency, paymentMethod: defaultPaymentMethod, notes: '' 
         }]);
       } else {
-        // 지점 사용자: 방금 제출한 데이터를 다시 로드하여 화면에 표시
+        // 지점 사용자: 제출한 데이터를 그대로 유지 (화면 초기화 방지)
+        // 1초 후 Firestore에서 최신 데이터 다시 로드 (서버 타임스탬프 반영 대기)
         setTimeout(() => {
           autoLoadCostData(branchName, targetMonth);
-        }, 500);
+        }, 1500);
       }
 
     } catch (error) {
@@ -1313,7 +1314,7 @@ function App() {
                         </div>
                         {estCost > 0 && krwExchangeRate && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
-                            \u2248 \u20A9{formatNumberInt(convertToKRW(estCost, itemCurrency))}
+                            {`\u2248 \u20A9${formatNumberInt(convertToKRW(estCost, itemCurrency))}`}
                           </div>
                         )}
                       </div>
@@ -1342,7 +1343,7 @@ function App() {
                         />
                         {actCost > 0 && krwExchangeRate && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
-                            \u2248 \u20A9{formatNumberInt(convertToKRW(actCost, itemCurrency))}
+                            {`\u2248 \u20A9${formatNumberInt(convertToKRW(actCost, itemCurrency))}`}
                           </div>
                         )}
                       </div>
