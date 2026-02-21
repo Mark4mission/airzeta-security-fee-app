@@ -122,20 +122,27 @@ export const getAllSecurityCosts = async () => {
   }
 };
 
-// 특정 브랜치의 연도별 Security Costs 조회
+// 특정 브랜치의 연도별 Security Costs 조회 (복합 인덱스 필요 없는 방식)
 export const getSecurityCostsByBranchYear = async (branch, year) => {
   try {
     await ensureAuthenticated();
-    const startMonth = `${year}-01`;
-    const endMonth = `${year}-12`;
+    
+    // 복합 인덱스 문제를 피하기 위해 branchName만으로 쿼리 후 클라이언트에서 필터링
     const q = query(
       collection(db, COLLECTIONS.SECURITY_COSTS),
-      where('branchName', '==', branch),
-      where('targetMonth', '>=', startMonth),
-      where('targetMonth', '<=', endMonth)
+      where('branchName', '==', branch)
     );
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const allDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // 클라이언트 사이드에서 연도 필터링
+    const filtered = allDocs.filter(d => {
+      if (!d.targetMonth) return false;
+      return d.targetMonth.startsWith(year);
+    });
+    
+    console.log(`[getSecurityCostsByBranchYear] branch=${branch}, year=${year}, total=${allDocs.length}, filtered=${filtered.length}`);
+    return filtered;
   } catch (error) {
     console.error('Error fetching branch year costs:', error);
     throw error;
