@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2 } from 'lucide-react';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
@@ -17,6 +17,8 @@ import {
 import Settings from './components/Settings';
 import Login from './components/Login';
 import BranchSelection from './components/BranchSelection';
+import AdminDashboard from './components/AdminDashboard';
+import BranchCostHistory from './components/BranchCostHistory';
 
 // 색상 상수
 const COLORS = {
@@ -125,6 +127,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [autoLoadMessage, setAutoLoadMessage] = useState(''); // 관리자 자동로드 메시지
 
   // 인증 상태 리스너
   useEffect(() => {
@@ -235,6 +238,53 @@ function App() {
       }
     }
   }, [branchName, settings.branches, currentUser]);
+
+  // 관리자: 브랜치 또는 월 변경 시 기존 데이터 자동 로드
+  const autoLoadCostData = useCallback(async (branch, month) => {
+    if (!branch || !month) return;
+    setAutoLoadMessage('');
+    try {
+      const previousData = await getSecurityCostsByBranch(branch, month);
+      if (previousData.length > 0) {
+        const latestData = previousData[0];
+        if (latestData.items && latestData.items.length > 0) {
+          setCostItems(latestData.items.map(item => ({
+            ...item,
+            unitPrice: item.unitPrice?.toString() || '',
+            quantity: item.quantity?.toString() || '',
+            estimatedCost: item.estimatedCost?.toString() || '',
+            actualCost: item.actualCost?.toString() || '',
+            currency: item.currency || currency
+          })));
+          setAutoLoadMessage(`Loaded data for ${branch} - ${month}`);
+          setTimeout(() => setAutoLoadMessage(''), 4000);
+        } else {
+          resetCostItems();
+          setAutoLoadMessage('No input available to load for this branch/month.');
+        }
+      } else {
+        resetCostItems();
+        setAutoLoadMessage('No input available to load for this branch/month.');
+      }
+    } catch (error) {
+      console.error('[AutoLoad] Error:', error);
+      setAutoLoadMessage('Failed to load data.');
+    }
+  }, [currency, defaultPaymentMethod]);
+
+  const resetCostItems = () => {
+    setCostItems([{
+      item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '',
+      currency: currency, paymentMethod: defaultPaymentMethod, notes: ''
+    }]);
+  };
+
+  // 관리자가 브랜치 또는 월을 변경하면 자동 로드 트리거
+  useEffect(() => {
+    if (currentUser?.role === 'hq_admin' && branchName && targetMonth) {
+      autoLoadCostData(branchName, targetMonth);
+    }
+  }, [branchName, targetMonth, currentUser?.role]);
 
   // 로그아웃
   const handleLogout = async () => {
@@ -715,6 +765,11 @@ function App() {
 
       {/* 메인 컨텐츠 */}
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
+        {/* 관리자 대시보드 */}
+        {isAdmin(currentUser) && (
+          <AdminDashboard branches={settings.branches} />
+        )}
+
         <form onSubmit={handleSubmit}>
           {/* 기본 정보 섹션 */}
           <section style={{
@@ -975,6 +1030,27 @@ function App() {
                 fontSize: '0.875rem'
               }}>
                 ⚠️ Actual Cost can only be entered after the 28th of the month
+              </div>
+            )}
+
+            {/* 관리자 자동 로드 메시지 */}
+            {autoLoadMessage && (
+              <div style={{
+                padding: '0.75rem',
+                marginBottom: '1rem',
+                background: autoLoadMessage.includes('No input') || autoLoadMessage.includes('Failed')
+                  ? '#fef3c7' : '#d1fae5',
+                border: `1px solid ${autoLoadMessage.includes('No input') || autoLoadMessage.includes('Failed')
+                  ? '#fbbf24' : '#6ee7b7'}`,
+                borderRadius: '0.5rem',
+                color: autoLoadMessage.includes('No input') || autoLoadMessage.includes('Failed')
+                  ? '#92400e' : '#065f46',
+                fontSize: '0.875rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}>
+                {autoLoadMessage.includes('No input') || autoLoadMessage.includes('Failed') ? '⚠️' : '✅'} {autoLoadMessage}
               </div>
             )}
 
@@ -1283,6 +1359,11 @@ function App() {
             </button>
           </div>
         </form>
+
+        {/* 사용자 모드: 지점 비용 히스토리 */}
+        {currentUser.role === 'branch_user' && branchName && (
+          <BranchCostHistory branchName={branchName} currency={currency} />
+        )}
       </main>
 
       {/* Settings 모달 */}

@@ -110,6 +110,38 @@ export const submitSecurityCost = async (data) => {
   }
 };
 
+// 전체 Security Costs 조회 (관리자 대시보드용)
+export const getAllSecurityCosts = async () => {
+  try {
+    await ensureAuthenticated();
+    const querySnapshot = await getDocs(collection(db, COLLECTIONS.SECURITY_COSTS));
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching all security costs:', error);
+    throw error;
+  }
+};
+
+// 특정 브랜치의 연도별 Security Costs 조회
+export const getSecurityCostsByBranchYear = async (branch, year) => {
+  try {
+    await ensureAuthenticated();
+    const startMonth = `${year}-01`;
+    const endMonth = `${year}-12`;
+    const q = query(
+      collection(db, COLLECTIONS.SECURITY_COSTS),
+      where('branchName', '==', branch),
+      where('targetMonth', '>=', startMonth),
+      where('targetMonth', '<=', endMonth)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    console.error('Error fetching branch year costs:', error);
+    throw error;
+  }
+};
+
 // ============================================================
 // Settings 저장/로드 함수 (Firestore 연동)
 // ============================================================
