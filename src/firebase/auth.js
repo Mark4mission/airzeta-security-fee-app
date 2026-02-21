@@ -169,6 +169,21 @@ export const updateUserBranch = async (uid, branchName) => {
   }
 };
 
+// 💾 사용자 선호 설정 저장 (currency, paymentMethod 등)
+export const updateUserPreferences = async (uid, prefs) => {
+  try {
+    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+      ...prefs,
+      updatedAt: serverTimestamp()
+    });
+    console.log('[Auth] 사용자 설정 저장:', uid, prefs);
+    return { success: true };
+  } catch (error) {
+    console.error('Update user preferences error:', error);
+    throw error;
+  }
+};
+
 // ============================================================
 // 인증 상태 리스너
 // ============================================================
