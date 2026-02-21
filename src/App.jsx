@@ -284,18 +284,27 @@ function App() {
     }]);
   };
 
-  // 관리자가 브랜치 또는 월을 변경하면 자동 로드 트리거
+  // 브랜치 또는 월 변경 시 기존 데이터 자동 로드 (관리자 + 지점 사용자 모두)
   useEffect(() => {
-    if (currentUser?.role === 'hq_admin' && branchName && targetMonth) {
+    if (currentUser && branchName && targetMonth) {
       autoLoadCostData(branchName, targetMonth);
     }
-  }, [branchName, targetMonth, currentUser?.role]);
+  }, [branchName, targetMonth, currentUser?.uid]);
 
-  // 로그아웃
+  // 로그아웃 - 모든 상태 초기화
   const handleLogout = async () => {
     try {
       await logoutUser();
+      // 전체 상태 초기화
       setCurrentUser(null);
+      setBranchName('');
+      setManagerName('');
+      setCurrency('USD');
+      setKrwExchangeRate('');
+      setDefaultPaymentMethod('');
+      setTargetMonth('');
+      setCostItems([{ item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }]);
+      setAutoLoadMessage('');
       setMessage({ type: 'success', text: 'Successfully logged out' });
     } catch (error) {
       setMessage({ type: 'error', text: 'Logout failed' });
@@ -422,40 +431,7 @@ function App() {
     }
   };
 
-  // 이전 데이터 로드
-  const handleLoadPreviousData = async () => {
-    if (!branchName || !targetMonth) {
-      setMessage({ type: 'warning', text: 'Please select branch and month first' });
-      return;
-    }
-
-    try {
-      const previousData = await getSecurityCostsByBranch(branchName, targetMonth);
-      if (previousData.length > 0) {
-        const latestData = previousData[0];
-        if (latestData.items && latestData.items.length > 0) {
-          const cleanItems = latestData.items.map(item => ({
-            item: item.item || '',
-            unitPrice: item.unitPrice?.toString() || '',
-            quantity: item.quantity?.toString() || '',
-            estimatedCost: item.estimatedCost?.toString() || '',
-            actualCost: '',
-            currency: item.currency || currency,
-            paymentMethod: item.paymentMethod || '',
-            notes: item.notes || ''
-          }));
-          console.log('[LoadPrevious] Loaded items:', cleanItems.length, cleanItems.map(i => ({ item: i.item, payment: i.paymentMethod })));
-          setCostItems(cleanItems);
-          setMessage({ type: 'success', text: 'Previous data loaded successfully!' });
-        }
-      } else {
-        setMessage({ type: 'info', text: 'No previous data found for this branch and month' });
-      }
-    } catch (error) {
-      console.error('Error loading previous data:', error);
-      setMessage({ type: 'error', text: 'Failed to load previous data' });
-    }
-  };
+  // (Load Previous Data 기능 제거됨 - autoLoad가 브랜치/월 변경 시 자동으로 데이터 로드)
 
   // 날짜 기반 입력 제한
   const canEditEstimatedCost = () => {
@@ -1078,22 +1054,6 @@ function App() {
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   type="button"
-                  onClick={handleLoadPreviousData}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: COLORS.info,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '0.5rem',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    fontWeight: '500'
-                  }}
-                >
-                  Load Previous Data
-                </button>
-                <button
-                  type="button"
                   onClick={handleAddItem}
                   style={{
                     display: 'flex',
@@ -1494,8 +1454,8 @@ function App() {
           </div>
         </form>
 
-        {/* 사용자 모드: 지점 비용 히스토리 */}
-        {currentUser.role === 'branch_user' && branchName && (
+        {/* 비용 히스토리 - 관리자(브랜치 선택 시) 및 지점 사용자 모두 표시 */}
+        {branchName && (
           <BranchCostHistory branchName={branchName} currency={currency} />
         )}
       </main>
