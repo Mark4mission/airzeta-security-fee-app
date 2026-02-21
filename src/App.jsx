@@ -11,7 +11,8 @@ import {
 import { 
   listenToAuthChanges, 
   logoutUser, 
-  isAdmin 
+  isAdmin,
+  updateUserPreferences 
 } from './firebase/auth';
 import Settings from './components/Settings';
 import Login from './components/Login';
@@ -190,10 +191,13 @@ function App() {
         b => b.name === currentUser.branchName || b.id === currentUser.branchName
       );
       if (branch) {
-        setCurrency(branch.currency || 'USD');
+        // 사용자 선호값이 있으면 우선 사용, 없으면 브랜치 기본값
+        const userCurrency = currentUser.preferredCurrency || branch.currency || 'USD';
+        const userPayment = currentUser.preferredPaymentMethod || branch.paymentMethod || '';
+        setCurrency(userCurrency);
         setManagerName(branch.manager || '');
-        setDefaultPaymentMethod(branch.paymentMethod || '');
-        console.log('[App] 브랜치 매칭 성공:', branch.name, '매니저:', branch.manager, '통화:', branch.currency, '결제:', branch.paymentMethod);
+        setDefaultPaymentMethod(userPayment);
+        console.log('[App] 브랜치 매칭 성공:', branch.name, '매니저:', branch.manager, '통화:', userCurrency, '결제:', userPayment);
       } else {
         console.warn('[App] 브랜치 매칭 실패. branchName:', currentUser.branchName);
       }
@@ -206,8 +210,11 @@ function App() {
       const branch = settings.branches.find(b => b.name === branchName);
       if (branch) {
         setManagerName(branch.manager || '');
-        setCurrency(branch.currency || 'USD');
-        setDefaultPaymentMethod(branch.paymentMethod || '');
+        // 관리자도 선호값 우선, 없으면 브랜치 기본값
+        const userCurrency = currentUser.preferredCurrency || branch.currency || 'USD';
+        const userPayment = currentUser.preferredPaymentMethod || branch.paymentMethod || '';
+        setCurrency(userCurrency);
+        setDefaultPaymentMethod(userPayment);
       }
     }
   }, [branchName, settings.branches, currentUser]);
@@ -242,6 +249,33 @@ function App() {
     setSettings(newSettings);
     setShowSettings(false);
     setMessage({ type: 'success', text: 'Settings saved successfully!' });
+  };
+
+  // Currency 변경 핸들러 (사용자 선호 저장)
+  const handleCurrencyChange = (index, value) => {
+    const newItems = [...costItems];
+    newItems[index].currency = value;
+    setCostItems(newItems);
+    // 사용자가 수동으로 변경 시 Firestore에 선호값 저장
+    if (currentUser?.uid) {
+      updateUserPreferences(currentUser.uid, { preferredCurrency: value }).catch(err =>
+        console.error('[App] Currency 선호 저장 실패:', err)
+      );
+    }
+  };
+
+  // PaymentMethod 변경 핸들러 (사용자 선호 저장)
+  const handlePaymentMethodChange = (index, value) => {
+    const newItems = [...costItems];
+    newItems[index].paymentMethod = value;
+    setCostItems(newItems);
+    setDefaultPaymentMethod(value);
+    // 사용자가 수동으로 변경 시 Firestore에 선호값 저장
+    if (currentUser?.uid) {
+      updateUserPreferences(currentUser.uid, { preferredPaymentMethod: value }).catch(err =>
+        console.error('[App] PaymentMethod 선호 저장 실패:', err)
+      );
+    }
   };
 
   // 입력 변경 (unitPrice/quantity → estimatedCost 자동 계산 포함)
@@ -982,10 +1016,10 @@ function App() {
                       </button>
                     </div>
 
-                    {/* Row 1: Cost Item | Currency | Unit Price | Qty | Est. Cost */}
+                    {/* Row 1: Cost Item | Currency | Unit Price | Qty | Payment Method */}
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1.2fr 0.8fr 1.4fr',
+                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
                       gap: '0.5rem',
                       padding: '0.5rem 0.75rem',
                       alignItems: 'end'
@@ -1013,7 +1047,7 @@ function App() {
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Currency</label>
                         <select
                           value={itemCurrency}
-                          onChange={(e) => handleInputChange(index, 'currency', e.target.value)}
+                          onChange={(e) => handleCurrencyChange(index, e.target.value)}
                           style={{
                             width: '100%', padding: '0.4rem',
                             border: `1px solid #d1d5db`, borderRadius: '0.375rem',
@@ -1063,6 +1097,33 @@ function App() {
                       </div>
 
                       <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Payment</label>
+                        <select
+                          value={item.paymentMethod}
+                          onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
+                          style={{
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.8rem', background: 'white'
+                          }}
+                        >
+                          <option value="">Select</option>
+                          {settings.paymentMethods.map(method => (
+                            <option key={method} value={method}>{method}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Estimated Cost | Actual Cost | Notes */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1.5fr',
+                      gap: '0.5rem',
+                      padding: '0.35rem 0.75rem 0.5rem',
+                      borderTop: '1px dashed #e5e7eb'
+                    }}>
+                      <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.primary, display: 'block', marginBottom: '0.2rem' }}>
                           Est. Cost {estCost > 0 && <span style={{ fontWeight: '400', color: COLORS.text.light }}>({sym})</span>}
                         </label>
@@ -1078,24 +1139,15 @@ function App() {
                           minHeight: '1.6rem',
                           display: 'flex', alignItems: 'center', justifyContent: 'flex-end'
                         }}>
-                          {estCost > 0 ? `${sym}${formatNumber(estCost)}` : '—'}
+                          {estCost > 0 ? `${sym}${formatNumber(estCost)}` : '\u2014'}
                         </div>
                         {estCost > 0 && krwExchangeRate && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
-                            ≈ ₩{formatNumberInt(convertToKRW(estCost, itemCurrency))}
+                            \u2248 \u20A9{formatNumberInt(convertToKRW(estCost, itemCurrency))}
                           </div>
                         )}
                       </div>
-                    </div>
 
-                    {/* Row 2: Actual Cost | Payment Method | Notes */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1.5fr 1.5fr 2fr',
-                      gap: '0.5rem',
-                      padding: '0.35rem 0.75rem 0.5rem',
-                      borderTop: '1px dashed #e5e7eb'
-                    }}>
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Actual Cost</label>
                         <input
@@ -1114,27 +1166,9 @@ function App() {
                         />
                         {actCost > 0 && krwExchangeRate && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
-                            ≈ ₩{formatNumberInt(convertToKRW(actCost, itemCurrency))}
+                            \u2248 \u20A9{formatNumberInt(convertToKRW(actCost, itemCurrency))}
                           </div>
                         )}
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Payment Method</label>
-                        <select
-                          value={item.paymentMethod}
-                          onChange={(e) => handleInputChange(index, 'paymentMethod', e.target.value)}
-                          style={{
-                            width: '100%', padding: '0.4rem',
-                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
-                            fontSize: '0.8rem', background: 'white'
-                          }}
-                        >
-                          <option value="">Select Method</option>
-                          {settings.paymentMethods.map(method => (
-                            <option key={method} value={method}>{method}</option>
-                          ))}
-                        </select>
                       </div>
 
                       <div>
