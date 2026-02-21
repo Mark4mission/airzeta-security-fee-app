@@ -134,7 +134,7 @@ function AdminDashboard({ branches }) {
         </select>
         <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
           <option value="">All Branches</option>
-          {(branches || []).map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+          {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
         </select>
       </div>
 

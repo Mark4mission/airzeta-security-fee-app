@@ -155,14 +155,29 @@ export const getCurrentUserProfile = async (uid) => {
 };
 
 // 🏢 사용자 브랜치 등록/변경
+// HQ 선택 시 → pending_admin 상태로 설정 (기존 admin의 승인 필요)
 export const updateUserBranch = async (uid, branchName) => {
   try {
-    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
-      branchName,
-      updatedAt: serverTimestamp()
-    });
-    console.log('[Auth] 브랜치 등록 완료:', uid, '→', branchName);
-    return { success: true };
+    const isHQ = branchName === 'HQ' || branchName === 'hq';
+    
+    if (isHQ) {
+      // HQ 선택 → 관리자 승인 대기 상태로 설정
+      await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+        branchName: 'HQ',
+        role: 'pending_admin',
+        pendingAdminRequestedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      console.log('[Auth] HQ 선택 → pending_admin 등록:', uid);
+      return { success: true, pendingAdmin: true };
+    } else {
+      await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+        branchName,
+        updatedAt: serverTimestamp()
+      });
+      console.log('[Auth] 브랜치 등록 완료:', uid, '→', branchName);
+      return { success: true, pendingAdmin: false };
+    }
   } catch (error) {
     console.error('Update branch error:', error);
     throw error;
@@ -248,6 +263,11 @@ export const isAdmin = (user) => {
   return user && user.role === 'hq_admin';
 };
 
+// 🕐 관리자 승인 대기 상태 확인
+export const isPendingAdmin = (user) => {
+  return user && user.role === 'pending_admin';
+};
+
 // 📝 역할별 권한 체크
 export const checkPermission = (user, permission) => {
   const permissions = {
@@ -317,6 +337,56 @@ export const toggleUserStatus = async (uid, active) => {
     return { success: true };
   } catch (error) {
     console.error('Toggle user status error:', error);
+    throw error;
+  }
+};
+
+// ============================================================
+// 관리자 승인 관련 기능 (pending_admin)
+// ============================================================
+
+// 📋 승인 대기 중인 관리자 목록 조회
+export const getPendingAdmins = async () => {
+  try {
+    const usersSnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
+    return usersSnapshot.docs
+      .map(d => ({ uid: d.id, ...d.data() }))
+      .filter(u => u.role === 'pending_admin');
+  } catch (error) {
+    console.error('Get pending admins error:', error);
+    throw error;
+  }
+};
+
+// ✅ 관리자 승인 (pending_admin → hq_admin)
+export const approvePendingAdmin = async (uid) => {
+  try {
+    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+      role: 'hq_admin',
+      approvedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    console.log('[Auth] 관리자 승인 완료:', uid);
+    return { success: true };
+  } catch (error) {
+    console.error('Approve pending admin error:', error);
+    throw error;
+  }
+};
+
+// ❌ 관리자 승인 거부 (pending_admin → branch_user, branchName 초기화)
+export const rejectPendingAdmin = async (uid) => {
+  try {
+    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+      role: 'branch_user',
+      branchName: '',
+      rejectedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    console.log('[Auth] 관리자 승인 거부:', uid);
+    return { success: true };
+  } catch (error) {
+    console.error('Reject pending admin error:', error);
     throw error;
   }
 };

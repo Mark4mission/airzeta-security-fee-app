@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Loader, LogOut, CheckCircle, Search } from 'lucide-react';
+import { Building2, Loader, LogOut, CheckCircle, Search, AlertTriangle, ShieldAlert, Clock } from 'lucide-react';
 import { getAllBranches } from '../firebase/collections';
 import { updateUserBranch, logoutUser } from '../firebase/auth';
 
@@ -24,6 +24,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [pendingAdminResult, setPendingAdminResult] = useState(false); // HQ 선택 후 승인 대기 상태
 
   // Firestore에서 branchCodes 컬렉션 로드
   useEffect(() => {
@@ -64,6 +65,9 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     b.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // HQ 선택 여부 확인
+  const isHQSelected = selectedBranch === 'HQ' || selectedBranch === 'hq';
+
   // 브랜치 선택 확정
   const handleConfirm = async () => {
     if (!selectedBranch) {
@@ -75,9 +79,15 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     setError('');
 
     try {
-      await updateUserBranch(currentUser.uid, selectedBranch);
-      console.log('[BranchSelection] 브랜치 등록 완료:', selectedBranch);
-      onBranchSelected(selectedBranch);
+      const result = await updateUserBranch(currentUser.uid, selectedBranch);
+      console.log('[BranchSelection] 브랜치 등록 완료:', selectedBranch, 'pendingAdmin:', result.pendingAdmin);
+      
+      if (result.pendingAdmin) {
+        // HQ 선택 → 승인 대기 상태 표시
+        setPendingAdminResult(true);
+      } else {
+        onBranchSelected(selectedBranch);
+      }
     } catch (err) {
       console.error('[BranchSelection] 브랜치 등록 실패:', err);
       setError('Failed to save branch selection. Please try again.');
@@ -142,8 +152,71 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           </p>
         </div>
 
+        {/* 승인 대기 화면 */}
+        {pendingAdminResult && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              margin: '0 auto 1.5rem auto',
+              background: `linear-gradient(135deg, ${COLORS.warning || '#f59e0b'} 0%, #d97706 100%)`,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 16px rgba(245, 158, 11, 0.3)'
+            }}>
+              <Clock size={40} color="white" strokeWidth={2} />
+            </div>
+            <h2 style={{
+              fontSize: '1.25rem',
+              fontWeight: 'bold',
+              color: COLORS.text.primary,
+              marginBottom: '0.75rem'
+            }}>
+              Admin Approval Pending
+            </h2>
+            <div style={{
+              padding: '1.25rem',
+              background: '#fef3c7',
+              border: '1px solid #fbbf24',
+              borderRadius: '0.75rem',
+              marginBottom: '1.5rem'
+            }}>
+              <ShieldAlert size={24} color="#92400e" style={{ marginBottom: '0.5rem' }} />
+              <p style={{ color: '#92400e', fontSize: '0.9rem', margin: '0 0 0.5rem 0', fontWeight: '600' }}>
+                Your HQ administrator access request has been submitted.
+              </p>
+              <p style={{ color: '#a16207', fontSize: '0.8rem', margin: 0, lineHeight: '1.5' }}>
+                An existing HQ administrator must approve your request before you can access admin features.
+                You will be able to log in after approval.
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              style={{
+                width: '100%',
+                padding: '0.9rem',
+                background: COLORS.text.secondary || '#6b7280',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              <LogOut size={18} /> OK, Sign Out
+            </button>
+          </div>
+        )}
+
         {/* 에러 메시지 */}
-        {error && (
+        {!pendingAdminResult && error && (
           <div style={{
             padding: '0.75rem',
             marginBottom: '1rem',
@@ -157,13 +230,38 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           </div>
         )}
 
+        {/* HQ 선택 경고 메시지 */}
+        {!pendingAdminResult && isHQSelected && (
+          <div style={{
+            padding: '0.75rem',
+            marginBottom: '1rem',
+            background: '#fef3c7',
+            border: '1px solid #fbbf24',
+            borderRadius: '0.5rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem'
+          }}>
+            <AlertTriangle size={18} color="#92400e" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <div>
+              <p style={{ color: '#92400e', fontSize: '0.85rem', margin: '0 0 0.25rem 0', fontWeight: '600' }}>
+                HQ is for administrators only
+              </p>
+              <p style={{ color: '#a16207', fontSize: '0.75rem', margin: 0, lineHeight: '1.4' }}>
+                Selecting HQ will require approval from an existing admin.
+                You won't be able to access the app until approved.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 로딩 */}
-        {loading ? (
+        {!pendingAdminResult && loading ? (
           <div style={{ textAlign: 'center', padding: '3rem 0' }}>
             <Loader size={40} style={{ color: COLORS.primary, animation: 'spin 1s linear infinite' }} />
             <p style={{ marginTop: '1rem', color: COLORS.text.secondary }}>Loading branches...</p>
           </div>
-        ) : branches.length === 0 ? (
+        ) : !pendingAdminResult && branches.length === 0 ? (
           /* 브랜치 없을 때 */
           <div style={{
             textAlign: 'center',
@@ -178,7 +276,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
               Please contact your administrator to set up branches.
             </p>
           </div>
-        ) : (
+        ) : !pendingAdminResult ? (
           <>
             {/* 검색 바 (브랜치 8개 이상일 때만 표시) */}
             {branches.length >= 8 && (
@@ -321,7 +419,9 @@ function BranchSelection({ currentUser, onBranchSelected }) {
               style={{
                 width: '100%',
                 padding: '0.9rem',
-                background: submitting || !selectedBranch ? '#9ca3af' : COLORS.success,
+                background: submitting || !selectedBranch
+                  ? '#9ca3af'
+                  : isHQSelected ? '#f59e0b' : COLORS.success,
                 color: 'white',
                 border: 'none',
                 borderRadius: '0.5rem',
@@ -333,17 +433,19 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                 justifyContent: 'center',
                 gap: '0.5rem',
                 transition: 'background 0.2s',
-                boxShadow: submitting || !selectedBranch ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)'
+                boxShadow: submitting || !selectedBranch ? 'none' : isHQSelected ? '0 2px 8px rgba(245, 158, 11, 0.3)' : '0 2px 8px rgba(16, 185, 129, 0.3)'
               }}
             >
               {submitting ? (
                 <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Saving...</>
+              ) : isHQSelected ? (
+                <><ShieldAlert size={18} /> Request Admin Access</>
               ) : (
                 <><CheckCircle size={18} /> Confirm Branch Selection</>
               )}
             </button>
           </>
-        )}
+        ) : null}
 
         {/* 로그아웃 */}
         <div style={{

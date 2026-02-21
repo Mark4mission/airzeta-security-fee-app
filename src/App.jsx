@@ -12,6 +12,7 @@ import {
   listenToAuthChanges, 
   logoutUser, 
   isAdmin,
+  isPendingAdmin,
   updateUserPreferences 
 } from './firebase/auth';
 import Settings from './components/Settings';
@@ -632,7 +633,84 @@ function App() {
 
   // 브랜치 미선택 사용자 → BranchSelection 화면
   // hq_admin은 브랜치 선택 없이 바로 메인 화면으로
-  const needsBranchSelection = currentUser.role !== 'hq_admin' && !currentUser.branchName;
+  const needsBranchSelection = currentUser.role !== 'hq_admin' && currentUser.role !== 'pending_admin' && !currentUser.branchName;
+
+  // pending_admin 상태인 경우 승인 대기 화면 표시
+  if (isPendingAdmin(currentUser)) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
+        padding: '2rem'
+      }}>
+        <div style={{
+          background: COLORS.surface,
+          padding: '2.5rem',
+          borderRadius: '1rem',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          maxWidth: '480px',
+          width: '100%',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            margin: '0 auto 1.5rem auto',
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 16px rgba(245, 158, 11, 0.3)'
+          }}>
+            <Shield size={40} color="white" strokeWidth={2} />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: COLORS.text.primary, marginBottom: '0.5rem' }}>
+            Admin Approval Pending
+          </h2>
+          <p style={{ color: COLORS.text.secondary, fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+            Your request for HQ administrator access is being reviewed.<br/>
+            An existing administrator must approve your request.<br/>
+            <strong>Email:</strong> {currentUser.email}
+          </p>
+          <div style={{
+            padding: '1rem',
+            background: '#fef3c7',
+            border: '1px solid #fbbf24',
+            borderRadius: '0.5rem',
+            color: '#92400e',
+            fontSize: '0.85rem',
+            marginBottom: '1.5rem'
+          }}>
+            Please contact your HQ administrator to approve your access.
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              width: '100%',
+              padding: '0.9rem',
+              background: COLORS.secondary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <Shield size={18} /> Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (needsBranchSelection) {
     return (
@@ -767,7 +845,7 @@ function App() {
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* 관리자 대시보드 */}
         {isAdmin(currentUser) && (
-          <AdminDashboard branches={settings.branches} />
+          <AdminDashboard branches={settings.branches.filter(b => b.name !== 'HQ' && b.name !== 'hq')} />
         )}
 
         <form onSubmit={handleSubmit}>
@@ -822,7 +900,9 @@ function App() {
                     }}
                   >
                     <option value="">Select Branch</option>
-                    {settings.branches.map((branch, idx) => (
+                    {settings.branches
+                      .filter(branch => branch.name !== 'HQ' && branch.name !== 'hq')
+                      .map((branch, idx) => (
                       <option key={idx} value={branch.name}>
                         {branch.name}
                       </option>
