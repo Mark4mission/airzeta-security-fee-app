@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Building2, DollarSign, Globe, CreditCard, Users, Edit2, Shield, UserPlus } from 'lucide-react';
+import { X, Plus, Trash2, Building2, DollarSign, Globe, CreditCard, Users, Edit2, Shield, UserPlus, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase/config';
 import { COLLECTIONS, saveSettingsToFirestore } from '../firebase/collections';
-import { deleteUserProfile } from '../firebase/auth';
+import { deleteUserProfile, approvePendingAdmin, rejectPendingAdmin } from '../firebase/auth';
 
 const COLORS = {
   primary: '#1B3A7D',
@@ -41,6 +41,7 @@ function Settings({ settings, onSave, onClose }) {
     branchName: '',
     role: 'branch_user'
   });
+  const [pendingAdmins, setPendingAdmins] = useState([]);
 
   useEffect(() => {
     console.log('Settings received:', settings);
@@ -64,6 +65,8 @@ function Settings({ settings, onSave, onClose }) {
       }));
       console.log('Loaded users:', userList);
       setUsers(userList);
+      // pending_admin 사용자 분리
+      setPendingAdmins(userList.filter(u => u.role === 'pending_admin'));
     } catch (error) {
       console.error('Error loading users:', error);
       setMessage({ type: 'error', text: 'Failed to load users' });
@@ -185,6 +188,31 @@ function Settings({ settings, onSave, onClose }) {
       loadUsers();
     } catch (error) {
       console.error('Error deleting user:', error);
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  // pending_admin 승인/거부 핸들러
+  const handleApprovePendingAdmin = async (uid) => {
+    if (!window.confirm('Approve this user as HQ Administrator?')) return;
+    try {
+      await approvePendingAdmin(uid);
+      setMessage({ type: 'success', text: 'Admin approved successfully!' });
+      loadUsers();
+    } catch (error) {
+      console.error('Error approving admin:', error);
+      setMessage({ type: 'error', text: error.message });
+    }
+  };
+
+  const handleRejectPendingAdmin = async (uid) => {
+    if (!window.confirm('Reject this admin request? The user will need to re-select a branch.')) return;
+    try {
+      await rejectPendingAdmin(uid);
+      setMessage({ type: 'success', text: 'Admin request rejected.' });
+      loadUsers();
+    } catch (error) {
+      console.error('Error rejecting admin:', error);
       setMessage({ type: 'error', text: error.message });
     }
   };
@@ -795,6 +823,91 @@ function Settings({ settings, onSave, onClose }) {
                 )}
               </div>
 
+              {/* Pending Admin Approvals Section */}
+              {pendingAdmins.length > 0 && !showAddUser && !editingUser && (
+                <div style={{
+                  padding: '1.5rem',
+                  background: '#fef3c7',
+                  border: '2px solid #fbbf24',
+                  borderRadius: '0.75rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <Clock size={20} color="#92400e" />
+                    <h4 style={{ margin: 0, color: '#92400e', fontSize: '1rem' }}>
+                      Pending Admin Approvals ({pendingAdmins.length})
+                    </h4>
+                  </div>
+                  <p style={{ color: '#a16207', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: '1.5' }}>
+                    These users have requested HQ administrator access. Please review and approve or reject.
+                  </p>
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {pendingAdmins.map(user => (
+                      <div key={user.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.75rem 1rem',
+                        background: 'white',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #fbbf24'
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: '600', color: COLORS.text.primary, fontSize: '0.9rem' }}>
+                            {user.email}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: COLORS.text.secondary }}>
+                            {user.displayName && `${user.displayName} | `}
+                            Requested: {user.pendingAdminRequestedAt?.seconds
+                              ? new Date(user.pendingAdminRequestedAt.seconds * 1000).toLocaleDateString()
+                              : 'Unknown'
+                            }
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            onClick={() => handleApprovePendingAdmin(user.id)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: COLORS.success,
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '0.375rem',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            <CheckCircle size={16} /> Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectPendingAdmin(user.id)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: COLORS.error,
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '0.375rem',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            <XCircle size={16} /> Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Add User Form */}
               {showAddUser && (
                 <div style={{
@@ -1141,10 +1254,10 @@ function Settings({ settings, onSave, onClose }) {
                                 padding: '0.25rem 0.75rem',
                                 borderRadius: '0.25rem',
                                 fontSize: '0.875rem',
-                                background: user.role === 'hq_admin' ? COLORS.secondary : COLORS.info,
+                                background: user.role === 'hq_admin' ? COLORS.secondary : user.role === 'pending_admin' ? COLORS.warning : COLORS.info,
                                 color: 'white'
                               }}>
-                                {user.role === 'hq_admin' ? '🔑 Admin' : '👤 User'}
+                                {user.role === 'hq_admin' ? '🔑 Admin' : user.role === 'pending_admin' ? '⏳ Pending' : '👤 User'}
                               </span>
                             </td>
                             <td style={{ padding: '1rem' }}>

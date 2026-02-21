@@ -12,6 +12,7 @@ import {
   listenToAuthChanges, 
   logoutUser, 
   isAdmin,
+  isPendingAdmin,
   updateUserPreferences 
 } from './firebase/auth';
 import Settings from './components/Settings';
@@ -248,14 +249,18 @@ function App() {
       if (previousData.length > 0) {
         const latestData = previousData[0];
         if (latestData.items && latestData.items.length > 0) {
-          setCostItems(latestData.items.map(item => ({
-            ...item,
+          const cleanItems = latestData.items.map(item => ({
+            item: item.item || '',
             unitPrice: item.unitPrice?.toString() || '',
             quantity: item.quantity?.toString() || '',
             estimatedCost: item.estimatedCost?.toString() || '',
             actualCost: item.actualCost?.toString() || '',
-            currency: item.currency || currency
-          })));
+            currency: item.currency || currency,
+            paymentMethod: item.paymentMethod || '',
+            notes: item.notes || ''
+          }));
+          console.log('[AutoLoad] Loaded items:', cleanItems.length, cleanItems.map(i => ({ item: i.item, payment: i.paymentMethod })));
+          setCostItems(cleanItems);
           setAutoLoadMessage(`Loaded data for ${branch} - ${month}`);
           setTimeout(() => setAutoLoadMessage(''), 4000);
         } else {
@@ -411,7 +416,9 @@ function App() {
   // 비용 항목 제거
   const handleRemoveItem = (index) => {
     if (costItems.length > 1) {
-      setCostItems(costItems.filter((_, i) => i !== index));
+      const newItems = costItems.filter((_, i) => i !== index);
+      console.log('[App] Item removed, remaining:', newItems.length, newItems.map(it => it.item));
+      setCostItems(newItems);
     }
   };
 
@@ -427,14 +434,18 @@ function App() {
       if (previousData.length > 0) {
         const latestData = previousData[0];
         if (latestData.items && latestData.items.length > 0) {
-          setCostItems(latestData.items.map(item => ({
-            ...item,
+          const cleanItems = latestData.items.map(item => ({
+            item: item.item || '',
             unitPrice: item.unitPrice?.toString() || '',
             quantity: item.quantity?.toString() || '',
             estimatedCost: item.estimatedCost?.toString() || '',
             actualCost: '',
-            currency: item.currency || currency
-          })));
+            currency: item.currency || currency,
+            paymentMethod: item.paymentMethod || '',
+            notes: item.notes || ''
+          }));
+          console.log('[LoadPrevious] Loaded items:', cleanItems.length, cleanItems.map(i => ({ item: i.item, payment: i.paymentMethod })));
+          setCostItems(cleanItems);
           setMessage({ type: 'success', text: 'Previous data loaded successfully!' });
         }
       } else {
@@ -521,12 +532,17 @@ function App() {
       return;
     }
 
-    const validItems = costItems.filter(item => 
-      item.item && (item.estimatedCost || item.actualCost || (item.unitPrice && item.quantity))
-    );
+    // 유효한 항목만 필터: item명이 있고, 비용 데이터가 있는 것
+    const validItems = costItems.filter(item => {
+      const hasItem = item.item && item.item.trim() !== '';
+      const hasCost = item.estimatedCost || item.actualCost || (item.unitPrice && item.quantity);
+      return hasItem && hasCost;
+    });
+
+    console.log('[Submit] costItems:', costItems.length, 'validItems:', validItems.length);
 
     if (validItems.length === 0) {
-      setMessage({ type: 'error', text: 'Please add at least one cost item' });
+      setMessage({ type: 'error', text: 'Please add at least one cost item with a name and cost value' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -632,7 +648,84 @@ function App() {
 
   // 브랜치 미선택 사용자 → BranchSelection 화면
   // hq_admin은 브랜치 선택 없이 바로 메인 화면으로
-  const needsBranchSelection = currentUser.role !== 'hq_admin' && !currentUser.branchName;
+  const needsBranchSelection = currentUser.role !== 'hq_admin' && currentUser.role !== 'pending_admin' && !currentUser.branchName;
+
+  // pending_admin 상태인 경우 승인 대기 화면 표시
+  if (isPendingAdmin(currentUser)) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
+        padding: '2rem'
+      }}>
+        <div style={{
+          background: COLORS.surface,
+          padding: '2.5rem',
+          borderRadius: '1rem',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          maxWidth: '480px',
+          width: '100%',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            margin: '0 auto 1.5rem auto',
+            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 16px rgba(245, 158, 11, 0.3)'
+          }}>
+            <Shield size={40} color="white" strokeWidth={2} />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: COLORS.text.primary, marginBottom: '0.5rem' }}>
+            Admin Approval Pending
+          </h2>
+          <p style={{ color: COLORS.text.secondary, fontSize: '0.875rem', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+            Your request for HQ administrator access is being reviewed.<br/>
+            An existing administrator must approve your request.<br/>
+            <strong>Email:</strong> {currentUser.email}
+          </p>
+          <div style={{
+            padding: '1rem',
+            background: '#fef3c7',
+            border: '1px solid #fbbf24',
+            borderRadius: '0.5rem',
+            color: '#92400e',
+            fontSize: '0.85rem',
+            marginBottom: '1.5rem'
+          }}>
+            Please contact your HQ administrator to approve your access.
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              width: '100%',
+              padding: '0.9rem',
+              background: COLORS.secondary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '0.5rem',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <Shield size={18} /> Sign Out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (needsBranchSelection) {
     return (
@@ -767,12 +860,26 @@ function App() {
       <main style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
         {/* 관리자 대시보드 */}
         {isAdmin(currentUser) && (
-          <AdminDashboard branches={settings.branches} />
+          <AdminDashboard
+            branches={settings.branches.filter(b => b.name !== 'HQ' && b.name !== 'hq')}
+            onCellClick={(branch, month) => {
+              console.log('[App] Dashboard cell clicked:', branch, month);
+              handleBranchChange(branch);
+              setTargetMonth(month);
+              // Scroll to Basic Information section
+              setTimeout(() => {
+                const basicInfoSection = document.getElementById('basic-info-section');
+                if (basicInfoSection) {
+                  basicInfoSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }, 100);
+            }}
+          />
         )}
 
         <form onSubmit={handleSubmit}>
           {/* 기본 정보 섹션 */}
-          <section style={{
+          <section id="basic-info-section" style={{
             background: COLORS.surface,
             padding: '2rem',
             borderRadius: '1rem',
@@ -822,7 +929,9 @@ function App() {
                     }}
                   >
                     <option value="">Select Branch</option>
-                    {settings.branches.map((branch, idx) => (
+                    {settings.branches
+                      .filter(branch => branch.name !== 'HQ' && branch.name !== 'hq')
+                      .map((branch, idx) => (
                       <option key={idx} value={branch.name}>
                         {branch.name}
                       </option>
@@ -1124,6 +1233,10 @@ function App() {
                           {settings.costItems.map(costItem => (
                             <option key={costItem.name} value={costItem.name}>{costItem.name}</option>
                           ))}
+                          {/* Show the loaded item value even if it's not in settings */}
+                          {item.item && !settings.costItems.some(ci => ci.name === item.item) && (
+                            <option value={item.item}>{item.item} (custom)</option>
+                          )}
                         </select>
                       </div>
 
@@ -1199,6 +1312,10 @@ function App() {
                           {settings.paymentMethods.map(method => (
                             <option key={method} value={method}>{method}</option>
                           ))}
+                          {/* Show the loaded payment method even if it's not in settings */}
+                          {item.paymentMethod && !settings.paymentMethods.includes(item.paymentMethod) && (
+                            <option value={item.paymentMethod}>{item.paymentMethod} (custom)</option>
+                          )}
                         </select>
                       </div>
                     </div>
@@ -1212,20 +1329,21 @@ function App() {
                       borderTop: '1px dashed #e5e7eb'
                     }}>
                       <div>
-                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.primary, display: 'block', marginBottom: '0.2rem' }}>
+                        <label style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.primary, display: 'block', marginBottom: '0.2rem', letterSpacing: '0.02em' }}>
                           Est. Cost {estCost > 0 && <span style={{ fontWeight: '400', color: COLORS.text.light }}>({sym})</span>}
                         </label>
                         <div style={{
-                          padding: '0.4rem 0.5rem',
+                          padding: '0.5rem 0.6rem',
                           background: estCost > 0 ? '#eef2ff' : '#f9fafb',
-                          border: `1px solid ${estCost > 0 ? '#c7d2fe' : '#e5e7eb'}`,
+                          border: `2px solid ${estCost > 0 ? '#818cf8' : '#e5e7eb'}`,
                           borderRadius: '0.375rem',
-                          fontSize: '0.85rem',
-                          fontWeight: '700',
+                          fontSize: '0.95rem',
+                          fontWeight: '800',
                           color: estCost > 0 ? COLORS.primary : COLORS.text.light,
                           textAlign: 'right',
-                          minHeight: '1.6rem',
-                          display: 'flex', alignItems: 'center', justifyContent: 'flex-end'
+                          minHeight: '1.8rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                          boxShadow: estCost > 0 ? '0 1px 4px rgba(27,58,125,0.12)' : 'none'
                         }}>
                           {estCost > 0 ? `${sym}${formatNumber(estCost)}` : '\u2014'}
                         </div>
@@ -1237,7 +1355,7 @@ function App() {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Actual Cost</label>
+                        <label style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.secondary, display: 'block', marginBottom: '0.2rem', letterSpacing: '0.02em' }}>Actual Cost</label>
                         <input
                           type="text"
                           inputMode="decimal"
@@ -1248,10 +1366,14 @@ function App() {
                           disabled={!canEditActualCost()}
                           placeholder={canEditActualCost() ? "Enter amount" : "After 28th"}
                           style={{
-                            width: '100%', padding: '0.4rem',
-                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
-                            fontSize: '0.8rem', textAlign: 'right',
-                            background: !canEditActualCost() ? '#f9fafb' : 'white'
+                            width: '100%', padding: '0.5rem 0.4rem',
+                            border: `2px solid ${actCost > 0 ? COLORS.secondary : '#d1d5db'}`,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.95rem', fontWeight: actCost > 0 ? '800' : '400',
+                            textAlign: 'right',
+                            color: actCost > 0 ? COLORS.secondary : COLORS.text.primary,
+                            background: !canEditActualCost() ? '#f9fafb' : actCost > 0 ? '#fff1f2' : 'white',
+                            boxShadow: actCost > 0 ? '0 1px 4px rgba(233,69,96,0.12)' : 'none'
                           }}
                         />
                         {actCost > 0 && krwExchangeRate && (
@@ -1291,19 +1413,31 @@ function App() {
               gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '1rem'
             }}>
-              <div>
-                <p style={{ fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+              <div style={{
+                padding: '1rem',
+                background: '#eef2ff',
+                borderRadius: '0.5rem',
+                borderLeft: `4px solid ${COLORS.primary}`,
+                boxShadow: '0 1px 4px rgba(27,58,125,0.10)'
+              }}>
+                <p style={{ fontSize: '0.8rem', color: COLORS.primary, marginBottom: '0.25rem', fontWeight: '600', letterSpacing: '0.03em' }}>
                   Total Estimated Cost
                 </p>
-                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.primary }}>
+                <p style={{ fontSize: '1.6rem', fontWeight: '900', color: COLORS.primary }}>
                   {CURRENCY_SYMBOLS[currency]}{formatNumber(calculateTotalEstimated())}
                 </p>
               </div>
-              <div>
-                <p style={{ fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
+              <div style={{
+                padding: '1rem',
+                background: '#fff1f2',
+                borderRadius: '0.5rem',
+                borderLeft: `4px solid ${COLORS.secondary}`,
+                boxShadow: '0 1px 4px rgba(233,69,96,0.10)'
+              }}>
+                <p style={{ fontSize: '0.8rem', color: COLORS.secondary, marginBottom: '0.25rem', fontWeight: '600', letterSpacing: '0.03em' }}>
                   Total Actual Cost
                 </p>
-                <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: COLORS.secondary }}>
+                <p style={{ fontSize: '1.6rem', fontWeight: '900', color: COLORS.secondary }}>
                   {CURRENCY_SYMBOLS[currency]}{formatNumber(calculateTotalActual())}
                 </p>
               </div>
