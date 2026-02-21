@@ -152,7 +152,13 @@ function AdminDashboard({ branches, onCellClick }) {
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <span style={{ width: 10, height: 10, borderRadius: 2, background: '#fef3c7', border: '2px solid #f59e0b', display: 'inline-block' }} /> Updated within 3 days
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: '0.5rem', fontStyle: 'italic' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ color: COLORS.error, fontWeight: '700' }}>▲</span> Over budget
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ color: COLORS.success, fontWeight: '700' }}>▼</span> Under budget
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: '0.5rem', fontStyle: 'italic', color: COLORS.primary }}>
           Click a cell to load cost data
         </span>
       </div>
@@ -193,26 +199,37 @@ function AdminDashboard({ branches, onCellClick }) {
                     bg = hasEst && hasAct ? '#bbf7d0' : hasEst ? '#bfdbfe' : '#fef9c3';
                   }
 
+                  // Variance calculation
+                  const variance = (hasEst && hasAct) ? cost.totalActual - cost.totalEstimated : null;
+                  const variancePct = (hasEst && hasAct && cost.totalEstimated > 0)
+                    ? ((cost.totalActual - cost.totalEstimated) / cost.totalEstimated * 100)
+                    : null;
+
                   return (
                     <td key={m} style={{ padding: '0.25rem', textAlign: 'center' }}>
                       <div
-                        onClick={() => onCellClick && onCellClick(bn, `${filterYear}-${m}`)}
+                        onClick={() => {
+                          console.log('[AdminDashboard] Cell clicked:', bn, `${filterYear}-${m}`);
+                          if (onCellClick) onCellClick(bn, `${filterYear}-${m}`);
+                        }}
                         style={{
-                        padding: '0.3rem 0.2rem',
-                        background: bg,
-                        borderRadius: '0.25rem',
-                        border: recent ? `2px solid ${borderColor}` : '1px solid #e5e7eb',
-                        minHeight: '2.2rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        position: 'relative',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                        onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(27,58,125,0.25)'; e.currentTarget.style.transform = 'scale(1.04)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'scale(1)'; }}
-                        title={`Click to load ${bn} - ${monthLabels[parseInt(m) - 1]} ${filterYear}`}
+                          padding: '0.3rem 0.2rem',
+                          background: bg,
+                          borderRadius: '0.25rem',
+                          border: recent ? `2px solid ${borderColor}` : '1px solid #e5e7eb',
+                          minHeight: '2.8rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          position: 'relative',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          userSelect: 'none',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(27,58,125,0.3)'; e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.borderColor = COLORS.primary; }}
+                        onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.borderColor = recent ? borderColor : '#e5e7eb'; }}
+                        title={`Click to load ${bn} - ${monthLabels[parseInt(m) - 1]} ${filterYear}${variancePct !== null ? `\nVariance: ${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(1)}%` : ''}`}
                       >
                         {cost ? (
                           <>
@@ -222,6 +239,22 @@ function AdminDashboard({ branches, onCellClick }) {
                             <div style={{ fontSize: '0.6rem', color: hasAct ? COLORS.secondary : COLORS.text.light, fontWeight: hasAct ? '600' : '400' }}>
                               A: {hasAct ? fmt(cost.totalActual) : '-'}
                             </div>
+                            {/* Variance indicator */}
+                            {variancePct !== null && (
+                              <div style={{
+                                fontSize: '0.55rem',
+                                fontWeight: '700',
+                                marginTop: '1px',
+                                padding: '0px 3px',
+                                borderRadius: '3px',
+                                background: variance > 0 ? '#fef2f2' : variance < 0 ? '#f0fdf4' : '#f5f5f5',
+                                color: variance > 0 ? COLORS.error : variance < 0 ? COLORS.success : COLORS.text.secondary,
+                                lineHeight: '1.4',
+                              }}>
+                                {variance > 0 ? '▲' : variance < 0 ? '▼' : '='}{' '}
+                                {Math.abs(variancePct).toFixed(1)}%
+                              </div>
+                            )}
                             {recent && (
                               <div style={{ position: 'absolute', top: -2, right: -2, width: 6, height: 6, borderRadius: '50%', background: COLORS.warning }} />
                             )}
