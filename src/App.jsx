@@ -62,6 +62,23 @@ const formatNumberInt = (num) => {
   return Math.round(Number(num)).toLocaleString('en-US');
 };
 
+// 입력 필드용 포맷: 값이 있으면 쉼표 포맷, 없으면 빈 문자열
+const formatInputDisplay = (val, decimals = 2) => {
+  if (val === '' || val === null || val === undefined) return '';
+  const num = parseFloat(String(val).replace(/,/g, ''));
+  if (isNaN(num)) return '';
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals
+  });
+};
+
+// 입력에서 쉼표 제거하고 숫자 추출
+const stripCommas = (val) => {
+  if (val === '' || val === null || val === undefined) return '';
+  return String(val).replace(/,/g, '');
+};
+
 // 기본 설정값
 const DEFAULT_SETTINGS = {
   branches: [
@@ -72,11 +89,11 @@ const DEFAULT_SETTINGS = {
     { name: 'Bangkok Branch', address: '654 Sukhumvit, Bangkok', manager: 'Somchai Prasert', phone: '+66-2-1234-5678', currency: 'THB' }
   ],
   costItems: [
-    { name: 'Security Personnel Wages', category: 'Labor', description: 'Monthly wages for security staff', defaultRate: 1000 },
-    { name: 'Equipment Maintenance', category: 'Equipment', description: 'CCTV, sensors, alarm systems', defaultRate: 500 },
-    { name: 'Uniforms & Supplies', category: 'Supplies', description: 'Security uniforms and gear', defaultRate: 200 },
-    { name: 'Training & Certification', category: 'Training', description: 'Staff training programs', defaultRate: 300 },
-    { name: 'Insurance Premiums', category: 'Insurance', description: 'Liability insurance', defaultRate: 400 }
+    { name: 'Security Personnel Wages', category: 'Labor', description: 'Monthly wages for security staff' },
+    { name: 'Equipment Maintenance', category: 'Equipment', description: 'CCTV, sensors, alarm systems' },
+    { name: 'Uniforms & Supplies', category: 'Supplies', description: 'Security uniforms and gear' },
+    { name: 'Training & Certification', category: 'Training', description: 'Staff training programs' },
+    { name: 'Insurance Premiums', category: 'Insurance', description: 'Liability insurance' }
   ],
   currencies: ['USD', 'EUR', 'KRW', 'JPY', 'SGD', 'HKD', 'THB'],
   paymentMethods: ['Bank Transfer', 'Credit Card', 'Cash', 'Check', 'Online Payment']
@@ -298,16 +315,7 @@ function App() {
     const newItems = [...costItems];
     newItems[index].item = itemName;
 
-    const selectedItem = settings.costItems.find(item => item.name === itemName);
-    if (selectedItem && !newItems[index].unitPrice) {
-      newItems[index].unitPrice = selectedItem.defaultRate?.toString() || '';
-      // unitPrice가 채워지고 quantity가 있으면 estimatedCost 계산
-      const price = parseFloat(newItems[index].unitPrice) || 0;
-      const qty = parseFloat(newItems[index].quantity) || 0;
-      if (price > 0 && qty > 0) {
-        newItems[index].estimatedCost = (price * qty).toString();
-      }
-    }
+    // defaultRate 제거됨 - 이전 데이터에서만 unitPrice 자동 채움
 
     if (branchName && targetMonth) {
       try {
@@ -1063,12 +1071,14 @@ function App() {
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Unit Price</label>
                         <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleInputChange(index, 'unitPrice', e.target.value)}
+                          type="text"
+                          inputMode="decimal"
+                          value={item._unitPriceFocused ? stripCommas(item.unitPrice) : formatInputDisplay(item.unitPrice)}
+                          onChange={(e) => handleInputChange(index, 'unitPrice', stripCommas(e.target.value))}
+                          onFocus={() => { const n = [...costItems]; n[index]._unitPriceFocused = true; setCostItems(n); }}
+                          onBlur={() => { const n = [...costItems]; n[index]._unitPriceFocused = false; setCostItems(n); }}
                           disabled={!canEditEstimatedCost()}
                           placeholder="0"
-                          min="0" step="0.01"
                           style={{
                             width: '100%', padding: '0.4rem',
                             border: `1px solid #d1d5db`, borderRadius: '0.375rem',
@@ -1081,12 +1091,14 @@ function App() {
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Qty</label>
                         <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => handleInputChange(index, 'quantity', e.target.value)}
+                          type="text"
+                          inputMode="numeric"
+                          value={item._qtyFocused ? stripCommas(item.quantity) : formatInputDisplay(item.quantity, 0)}
+                          onChange={(e) => handleInputChange(index, 'quantity', stripCommas(e.target.value))}
+                          onFocus={() => { const n = [...costItems]; n[index]._qtyFocused = true; setCostItems(n); }}
+                          onBlur={() => { const n = [...costItems]; n[index]._qtyFocused = false; setCostItems(n); }}
                           disabled={!canEditEstimatedCost()}
                           placeholder="0"
-                          min="0" step="1"
                           style={{
                             width: '100%', padding: '0.4rem',
                             border: `1px solid #d1d5db`, borderRadius: '0.375rem',
@@ -1151,12 +1163,14 @@ function App() {
                       <div>
                         <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Actual Cost</label>
                         <input
-                          type="number"
-                          value={item.actualCost}
-                          onChange={(e) => handleInputChange(index, 'actualCost', e.target.value)}
+                          type="text"
+                          inputMode="decimal"
+                          value={item._actualCostFocused ? stripCommas(item.actualCost) : formatInputDisplay(item.actualCost)}
+                          onChange={(e) => handleInputChange(index, 'actualCost', stripCommas(e.target.value))}
+                          onFocus={() => { const n = [...costItems]; n[index]._actualCostFocused = true; setCostItems(n); }}
+                          onBlur={() => { const n = [...costItems]; n[index]._actualCostFocused = false; setCostItems(n); }}
                           disabled={!canEditActualCost()}
                           placeholder={canEditActualCost() ? "Enter amount" : "After 28th"}
-                          min="0" step="0.01"
                           style={{
                             width: '100%', padding: '0.4rem',
                             border: `1px solid #d1d5db`, borderRadius: '0.375rem',

@@ -219,8 +219,7 @@ function Settings({ settings, onSave, onClose }) {
       ...localSettings,
       costItems: [...localSettings.costItems, {
         name: '',
-        description: '',
-        defaultRate: 0
+        description: ''
       }]
     });
   };
@@ -574,7 +573,7 @@ function Settings({ settings, onSave, onClose }) {
                     borderRadius: '0.5rem',
                     border: `1px solid ${COLORS.text.light}`
                   }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr 1fr auto', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '1rem', alignItems: 'center' }}>
                       <div>
                         <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
                           Item Name
@@ -602,23 +601,6 @@ function Settings({ settings, onSave, onClose }) {
                           value={item.description || ''}
                           onChange={(e) => handleCostItemChange(index, 'description', e.target.value)}
                           placeholder="Item description"
-                          style={{
-                            width: '100%',
-                            padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
-                            borderRadius: '0.375rem'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
-                          Default Rate
-                        </label>
-                        <input
-                          type="number"
-                          value={item.defaultRate}
-                          onChange={(e) => handleCostItemChange(index, 'defaultRate', parseFloat(e.target.value) || 0)}
                           style={{
                             width: '100%',
                             padding: '0.5rem',
