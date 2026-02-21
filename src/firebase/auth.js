@@ -5,8 +5,10 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithCredential,
-  OAuthProvider
+  sendPasswordResetEmail,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential
 } from 'firebase/auth';
 import { 
   doc, 
@@ -21,36 +23,44 @@ import {
 import { auth, db } from './config';
 import { COLLECTIONS } from './collections';
 
-// 🔑 로그인 함수
+// ============================================================
+// 로그인 / 로그아웃
+// ============================================================
+
+// 🔑 이메일 로그인
 export const loginUser = async (email, password) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Firestore에서 사용자 정보 가져오기
+    // Firestore 프로필 확인
     const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
     
-    if (!userDoc.exists()) {
-      throw new Error('User profile not found');
+    if (userDoc.exists()) {
+      await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+        lastLogin: serverTimestamp()
+      });
+      return { uid: user.uid, email: user.email, ...userDoc.data() };
     }
     
-    // lastLogin 업데이트
-    await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
-      lastLogin: serverTimestamp()
-    });
-    
-    return {
-      uid: user.uid,
+    // 프로필 없으면 기본 생성 (branchName 없이)
+    const newProfile = {
       email: user.email,
-      ...userDoc.data()
+      role: 'branch_user',
+      branchName: '',
+      displayName: '',
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
     };
+    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
+    return { uid: user.uid, ...newProfile };
   } catch (error) {
     console.error('Login error:', error);
     throw error;
   }
 };
 
-// 🚪 로그아웃 함수
+// 🚪 로그아웃
 export const logoutUser = async () => {
   try {
     await signOut(auth);
@@ -60,7 +70,77 @@ export const logoutUser = async () => {
   }
 };
 
-// 👤 현재 사용자 정보 가져오기
+// ============================================================
+// 회원가입 (셀프 등록)
+// ============================================================
+
+// 🆕 이메일 회원가입 — 계정 생성 + Firestore 프로필 (branchName 미지정)
+export const registerUser = async (email, password, displayName = '') => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    const profile = {
+      email: user.email,
+      role: 'branch_user',
+      branchName: '',  // 가입 직후에는 비어 있음 → BranchSelection에서 선택
+      displayName: displayName || '',
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
+    };
+    
+    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), profile);
+    console.log('[Auth] 새 이메일 사용자 가입 완료:', email);
+    
+    return { uid: user.uid, ...profile };
+  } catch (error) {
+    console.error('Register error:', error);
+    throw error;
+  }
+};
+
+// ============================================================
+// 비밀번호 관리
+// ============================================================
+
+// 📧 비밀번호 재설정 이메일 발송
+export const resetPassword = async (email) => {
+  try {
+    await sendPasswordResetEmail(auth, email);
+    console.log('[Auth] 비밀번호 재설정 이메일 발송:', email);
+    return { success: true };
+  } catch (error) {
+    console.error('Password reset error:', error);
+    throw error;
+  }
+};
+
+// 🔒 비밀번호 변경 (로그인 상태에서)
+export const changePassword = async (currentPassword, newPassword) => {
+  try {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No authenticated user');
+    if (!user.email) throw new Error('User has no email (Google-only account)');
+    
+    // 기존 비밀번호로 재인증
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    
+    // 새 비밀번호 설정
+    await updatePassword(user, newPassword);
+    console.log('[Auth] 비밀번호 변경 완료');
+    return { success: true };
+  } catch (error) {
+    console.error('Change password error:', error);
+    throw error;
+  }
+};
+
+// ============================================================
+// 프로필 / 브랜치 관리
+// ============================================================
+
+// 👤 현재 사용자 프로필 가져오기
 export const getCurrentUserProfile = async (uid) => {
   try {
     const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, uid));
@@ -74,7 +154,28 @@ export const getCurrentUserProfile = async (uid) => {
   }
 };
 
-// 👂 인증 상태 리스너
+// 🏢 사용자 브랜치 등록/변경
+export const updateUserBranch = async (uid, branchName) => {
+  try {
+    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+      branchName,
+      updatedAt: serverTimestamp()
+    });
+    console.log('[Auth] 브랜치 등록 완료:', uid, '→', branchName);
+    return { success: true };
+  } catch (error) {
+    console.error('Update branch error:', error);
+    throw error;
+  }
+};
+
+// ============================================================
+// 인증 상태 리스너
+// ============================================================
+
+// 👂 인증 상태 변경 감지
+// callback(profile | null)
+// profile에는 반드시 branchName 포함 (비어있을 수 있음)
 export const listenToAuthChanges = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -83,34 +184,35 @@ export const listenToAuthChanges = (callback) => {
         let profile = await getCurrentUserProfile(user.uid);
         
         // 프로필이 아직 없으면 (Google 로그인 직후 race condition)
-        // 잠시 대기 후 재시도
         if (!profile) {
           console.log('[Auth] 프로필 없음, 1초 후 재시도...');
           await new Promise(resolve => setTimeout(resolve, 1000));
           profile = await getCurrentUserProfile(user.uid);
         }
         
-        // 그래도 없으면 기본 프로필 생성 (Google 로그인 사용자)
+        // 그래도 없으면 최소 프로필 반환 (Firestore 쓰기 없이)
         if (!profile) {
-          console.log('[Auth] 프로필 여전히 없음, 기본 프로필 생성');
+          console.log('[Auth] 프로필 없음 - 신규 사용자 대기 상태');
           profile = {
             uid: user.uid,
             email: user.email,
             role: 'branch_user',
+            branchName: '',
             displayName: user.displayName || '',
-            photoURL: user.photoURL || ''
+            photoURL: user.photoURL || '',
+            _isNewUser: true  // 아직 Firestore에 저장되지 않은 사용자
           };
         }
         
-        console.log('[Auth] 프로필 로드 성공:', profile.email, '역할:', profile.role);
+        console.log('[Auth] 프로필 로드:', profile.email, '역할:', profile.role, '브랜치:', profile.branchName || '(미지정)');
         callback(profile);
       } catch (error) {
         console.error('[Auth] 프로필 로드 에러:', error);
-        // 에러가 발생해도 기본 정보로 로그인 허용
         callback({
           uid: user.uid,
           email: user.email,
           role: 'branch_user',
+          branchName: '',
           displayName: user.displayName || '',
           photoURL: user.photoURL || ''
         });
@@ -122,32 +224,9 @@ export const listenToAuthChanges = (callback) => {
   });
 };
 
-// 🆕 새 사용자 생성 (관리자 전용)
-export const createUser = async (email, password, userData) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    // Firestore에 사용자 프로필 생성
-    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), {
-      email,
-      role: userData.role || 'branch_user',
-      branchName: userData.branchName || '',
-      branchCode: userData.branchCode || '',
-      createdAt: serverTimestamp(),
-      lastLogin: serverTimestamp()
-    });
-    
-    return {
-      uid: user.uid,
-      email: user.email,
-      ...userData
-    };
-  } catch (error) {
-    console.error('Create user error:', error);
-    throw error;
-  }
-};
+// ============================================================
+// 관리자 전용 기능
+// ============================================================
 
 // 🔐 관리자 권한 확인
 export const isAdmin = (user) => {
@@ -160,17 +239,38 @@ export const checkPermission = (user, permission) => {
     'hq_admin': ['view_all', 'edit_all', 'manage_users', 'manage_settings'],
     'branch_user': ['view_own', 'edit_own']
   };
-  
   return user && permissions[user.role]?.includes(permission);
 };
 
-// 🆕 관리자 전용: 모든 사용자 목록 가져오기
+// 🆕 관리자 전용: 새 사용자 생성 (관리자가 직접)
+export const createUser = async (email, password, userData) => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+      email,
+      role: userData.role || 'branch_user',
+      branchName: userData.branchName || '',
+      branchCode: userData.branchCode || '',
+      createdAt: serverTimestamp(),
+      lastLogin: serverTimestamp()
+    });
+    
+    return { uid: user.uid, email: user.email, ...userData };
+  } catch (error) {
+    console.error('Create user error:', error);
+    throw error;
+  }
+};
+
+// 📋 관리자 전용: 모든 사용자 목록
 export const getAllUsers = async () => {
   try {
     const usersSnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
-    return usersSnapshot.docs.map(doc => ({
-      uid: doc.id,
-      ...doc.data()
+    return usersSnapshot.docs.map(d => ({
+      uid: d.id,
+      ...d.data()
     }));
   } catch (error) {
     console.error('Get all users error:', error);
@@ -178,7 +278,7 @@ export const getAllUsers = async () => {
   }
 };
 
-// 🆕 관리자 전용: 사용자 역할 변경
+// 🔄 관리자 전용: 사용자 역할 변경
 export const updateUserRole = async (uid, newRole) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -192,7 +292,7 @@ export const updateUserRole = async (uid, newRole) => {
   }
 };
 
-// 🆕 관리자 전용: 사용자 활성화/비활성화
+// ⚡ 관리자 전용: 사용자 활성화/비활성화
 export const toggleUserStatus = async (uid, active) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -206,10 +306,10 @@ export const toggleUserStatus = async (uid, active) => {
   }
 };
 
-// 🔥 사용자 프로필 삭제 (Firestore만)
+// 🗑️ 사용자 프로필 삭제 (Firestore만)
 export const deleteUserProfile = async (userId) => {
   try {
-    await deleteDoc(doc(db, 'users', userId));
+    await deleteDoc(doc(db, COLLECTIONS.USERS, userId));
     return { success: true };
   } catch (error) {
     console.error('Error deleting user profile:', error);
@@ -217,65 +317,53 @@ export const deleteUserProfile = async (userId) => {
   }
 };
 
-// Google 로그인 - Firestore 프로필 처리 (공통 로직)
+// ============================================================
+// Google 로그인
+// ============================================================
+
+// Google 로그인 후 Firestore 프로필 처리
 const handleGoogleUserProfile = async (user) => {
   const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
   
   if (!userDoc.exists()) {
-    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+    // 신규 Google 사용자 → branchName 비워둠 (BranchSelection에서 선택)
+    const newProfile = {
       email: user.email,
       role: 'branch_user',
+      branchName: '',  // 비어있음 → BranchSelection 화면으로 이동
       displayName: user.displayName || '',
       photoURL: user.photoURL || '',
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp()
-    });
-    
-    console.log('New Google user profile created');
-    
-    return {
-      uid: user.uid,
-      email: user.email,
-      role: 'branch_user',
-      displayName: user.displayName,
-      photoURL: user.photoURL
     };
+    
+    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
+    console.log('[Auth] 신규 Google 사용자 프로필 생성 (브랜치 미지정)');
+    
+    return { uid: user.uid, ...newProfile };
   } else {
+    // 기존 사용자 → lastLogin 업데이트
     await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
       lastLogin: serverTimestamp()
     });
+    console.log('[Auth] 기존 Google 사용자 로그인');
     
-    console.log('Existing Google user logged in');
-    
-    return {
-      uid: user.uid,
-      email: user.email,
-      ...userDoc.data()
-    };
+    return { uid: user.uid, email: user.email, ...userDoc.data() };
   }
 };
 
 // 🆕 Google 로그인 함수
-//
-// 전략:
-// 1차: signInWithPopup 시도 (표준 Firebase 방식)
-// 2차: auth/unauthorized-domain 에러 시 → 커스텀 OAuth 팝업으로 폴백
-//      (Firebase의 authDomain 대신 직접 Google OAuth 엔드포인트 호출)
-//
 export const loginWithGoogle = async () => {
   const currentDomain = window.location.hostname;
   const currentOrigin = window.location.origin;
   
   console.log('[Google Login] 시작...');
   console.log('[Google Login] 현재 도메인:', currentDomain);
-  console.log('[Google Login] Auth 도메인:', auth.config?.authDomain);
   
-  // 1차: signInWithPopup 시도
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     
-    console.log('[Google Login] signInWithPopup 시도...');
     const result = await signInWithPopup(auth, provider);
     console.log('[Google Login] signInWithPopup 성공!');
     return await handleGoogleUserProfile(result.user);
@@ -283,58 +371,41 @@ export const loginWithGoogle = async () => {
   } catch (popupError) {
     console.warn('[Google Login] signInWithPopup 실패:', popupError.code);
     
-    // 사용자가 취소한 경우 - 바로 에러
     if (popupError.code === 'auth/popup-closed-by-user' || 
         popupError.code === 'auth/cancelled-popup-request') {
-      throw new Error('Google 로그인이 취소되었습니다.');
+      throw new Error('Google login was cancelled.');
     }
     
-    // unauthorized-domain / invalid-continue-uri → 상세 안내
     if (popupError.code === 'auth/unauthorized-domain' || 
         popupError.code === 'auth/invalid-continue-uri') {
-      
-      console.error('[Google Login] 도메인 미승인 에러!');
-      console.error(`현재 도메인 "${currentDomain}"이 Firebase/GCP에서 승인되지 않음.`);
-      
-      // 상세한 해결 안내 메시지
       throw new Error(
-        `Google 로그인에 필요한 도메인 설정이 완료되지 않았습니다.\n\n` +
-        `현재 도메인: ${currentDomain}\n\n` +
-        `두 곳 모두에서 설정이 필요합니다:\n\n` +
-        `[1단계] Firebase Console:\n` +
-        `  → Authentication > 설정 > 승인된 도메인\n` +
-        `  → "${currentDomain}" 추가 (이미 추가됨 ✓)\n\n` +
-        `[2단계] Google Cloud Console (필수!):\n` +
-        `  1. console.cloud.google.com 접속\n` +
-        `  2. 프로젝트 선택기 → "airzeta-security-system" 선택\n` +
-        `     (안 보이면 프로젝트 번호 803391050005 검색)\n` +
-        `  3. APIs & Services > 사용자 인증 정보\n` +
-        `  4. "OAuth 2.0 클라이언트 ID" 목록에서\n` +
-        `     "Web client (auto created by Google Service)" 클릭\n` +
-        `  5. "승인된 JavaScript 출처"에 추가:\n` +
+        `Google login requires domain authorization.\n\n` +
+        `Current domain: ${currentDomain}\n\n` +
+        `Please configure both:\n\n` +
+        `[Step 1] Firebase Console:\n` +
+        `  → Authentication > Settings > Authorized domains\n` +
+        `  → Add "${currentDomain}"\n\n` +
+        `[Step 2] Google Cloud Console:\n` +
+        `  1. Go to console.cloud.google.com\n` +
+        `  2. Select project "airzeta-security-system"\n` +
+        `  3. APIs & Services > Credentials\n` +
+        `  4. Edit OAuth 2.0 Client ID\n` +
+        `  5. Add to "Authorized JavaScript origins":\n` +
         `     ${currentOrigin}\n` +
-        `  6. "승인된 리디렉션 URI" 확인:\n` +
-        `     https://airzeta-security-system.firebaseapp.com/__/auth/handler\n` +
-        `  7. 저장 후 5~10분 대기\n\n` +
-        `[참고] OAuth 동의 화면도 설정되어야 합니다:\n` +
-        `  → APIs & Services > OAuth 동의 화면\n` +
-        `  → 앱 이름, 지원 이메일 등 입력 후 저장`
+        `  6. Save and wait 5-10 minutes`
       );
     }
     
-    // 팝업 차단
     if (popupError.code === 'auth/popup-blocked') {
       throw new Error(
-        'Google 로그인 팝업이 차단되었습니다.\n\n' +
-        '브라우저 주소창 오른쪽의 팝업 차단 아이콘을 클릭하여\n' +
-        '이 사이트의 팝업을 허용한 후 다시 시도해주세요.'
+        'Google login popup was blocked.\n\n' +
+        'Please allow popups for this site and try again.'
       );
     }
     
-    // 기타 에러
     throw new Error(
-      `Google 로그인 실패: ${popupError.message}\n` +
-      `(에러 코드: ${popupError.code || 'unknown'})`
+      `Google login failed: ${popupError.message}\n` +
+      `(Error code: ${popupError.code || 'unknown'})`
     );
   }
 };
