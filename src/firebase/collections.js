@@ -149,6 +149,41 @@ export const getSecurityCostsByBranchYear = async (branch, year) => {
   }
 };
 
+// 특정 브랜치+월의 Security Costs 전체 삭제 (관리자 전용)
+export const deleteSecurityCostsByBranchMonth = async (branch, month) => {
+  try {
+    await ensureAuthenticated();
+    
+    console.log(`[Delete] ${branch} - ${month} 비용 데이터 삭제 시작...`);
+    
+    const q = query(
+      collection(db, COLLECTIONS.SECURITY_COSTS),
+      where('branchName', '==', branch),
+      where('targetMonth', '==', month)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const deleteCount = querySnapshot.docs.length;
+    
+    if (deleteCount === 0) {
+      console.log(`[Delete] ${branch} - ${month}: 삭제할 문서 없음`);
+      return 0;
+    }
+    
+    // 모든 문서 삭제
+    const deletePromises = querySnapshot.docs.map(d => 
+      deleteDoc(doc(db, COLLECTIONS.SECURITY_COSTS, d.id))
+    );
+    await Promise.all(deletePromises);
+    
+    console.log(`[Delete] ${branch} - ${month}: ${deleteCount}건 삭제 완료`);
+    return deleteCount;
+  } catch (error) {
+    console.error('[Delete] 비용 데이터 삭제 에러:', error);
+    throw error;
+  }
+};
+
 // 브랜치 매니저 이름 업데이트 (제출 시 동기화)
 export const updateBranchManager = async (branchName, newManager) => {
   try {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2 } from 'lucide-react';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
 import { 
@@ -7,7 +7,8 @@ import {
   getSecurityCostsByBranch, 
   submitSecurityCost,
   loadSettingsFromFirestore,
-  updateBranchManager 
+  updateBranchManager,
+  deleteSecurityCostsByBranchMonth 
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -1102,18 +1103,35 @@ function App() {
                   <Plus size={18} />
                   Add Item
                 </button>
-                {/* 관리자 전용: 현재 브랜치+월 데이터 초기화 */}
+                {/* 관리자 전용: 현재 브랜치+월 데이터 Firestore에서 삭제 */}
                 {isAdmin(currentUser) && branchName && targetMonth && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Clear all cost items for ${branchName} - ${targetMonth}?\nThis will reset the form to default state.`)) {
+                    onClick={async () => {
+                      if (!window.confirm(`Delete all cost data for ${branchName} - ${targetMonth}?\n\nThis will permanently remove the records from the database.`)) return;
+                      try {
+                        setIsSubmitting(true);
+                        const deleted = await deleteSecurityCostsByBranchMonth(branchName, targetMonth);
                         resetCostItems();
                         setKrwExchangeRate('');
-                        setMessage({ type: 'info', text: `Cost items cleared for ${branchName} - ${targetMonth}. Submit to save.` });
+                        // 대시보드 + 히스토리 그래프 리프레시
+                        setDashboardRefreshKey(prev => prev + 1);
+                        setHistoryRefreshKey(prev => prev + 1);
+                        setMessage({ 
+                          type: 'success', 
+                          text: deleted > 0 
+                            ? `${deleted} record(s) deleted for ${branchName} - ${targetMonth}.` 
+                            : `No records found for ${branchName} - ${targetMonth}.`
+                        });
                         window.scrollTo({ top: 0, behavior: 'smooth' });
+                      } catch (error) {
+                        console.error('[ClearData] Error:', error);
+                        setMessage({ type: 'error', text: 'Failed to delete data: ' + error.message });
+                      } finally {
+                        setIsSubmitting(false);
                       }
                     }}
+                    disabled={isSubmitting}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1123,12 +1141,13 @@ function App() {
                       color: COLORS.error,
                       border: `1px solid ${COLORS.error}`,
                       borderRadius: '0.5rem',
-                      cursor: 'pointer',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
                       fontSize: '0.875rem',
-                      fontWeight: '500'
+                      fontWeight: '500',
+                      opacity: isSubmitting ? 0.6 : 1
                     }}
                   >
-                    <RotateCcw size={16} />
+                    <Trash2 size={16} />
                     Clear Data
                   </button>
                 )}
