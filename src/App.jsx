@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2 } from 'lucide-react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, RotateCcw } from 'lucide-react';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
 import { 
@@ -131,6 +131,7 @@ function App() {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [autoLoadMessage, setAutoLoadMessage] = useState(''); // 관리자 자동로드 메시지
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0); // BranchCostHistory 강제 리프레시용
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0); // AdminDashboard 강제 리프레시용
 
   // 인증 상태 리스너
   useEffect(() => {
@@ -576,6 +577,11 @@ function App() {
       // BranchCostHistory 그래프 강제 리프레시
       setHistoryRefreshKey(prev => prev + 1);
       
+      // AdminDashboard 대시보드 강제 리프레시 (관리자)
+      if (currentUser?.role === 'hq_admin') {
+        setDashboardRefreshKey(prev => prev + 1);
+      }
+      
       // 폼 초기화 후 방금 제출한 데이터 다시 로드
       if (currentUser?.role === 'hq_admin') {
         // 관리자: 브랜치/매니저 초기화 → 새 브랜치 선택 유도
@@ -860,6 +866,7 @@ function App() {
         {/* 관리자 대시보드 */}
         {isAdmin(currentUser) && (
           <AdminDashboard
+            key={`dashboard-${dashboardRefreshKey}`}
             branches={settings.branches.filter(b => b.name !== 'HQ' && b.name !== 'hq')}
             onCellClick={(branch, month) => {
               console.log('[App] Dashboard cell clicked:', branch, month);
@@ -1095,6 +1102,36 @@ function App() {
                   <Plus size={18} />
                   Add Item
                 </button>
+                {/* 관리자 전용: 현재 브랜치+월 데이터 초기화 */}
+                {isAdmin(currentUser) && branchName && targetMonth && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Clear all cost items for ${branchName} - ${targetMonth}?\nThis will reset the form to default state.`)) {
+                        resetCostItems();
+                        setKrwExchangeRate('');
+                        setMessage({ type: 'info', text: `Cost items cleared for ${branchName} - ${targetMonth}. Submit to save.` });
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.5rem 1rem',
+                      background: 'white',
+                      color: COLORS.error,
+                      border: `1px solid ${COLORS.error}`,
+                      borderRadius: '0.5rem',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: '500'
+                    }}
+                  >
+                    <RotateCcw size={16} />
+                    Clear Data
+                  </button>
+                )}
               </div>
             </div>
 
