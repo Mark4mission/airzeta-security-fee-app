@@ -495,7 +495,7 @@ function App() {
       return;
     }
 
-    if (costItems.some(item => item.actualCost && !canEditActualCost())) {
+    if (costItems.some(item => parseFloat(item.actualCost) > 0 && !canEditActualCost())) {
       setMessage({ 
         type: 'error', 
         text: 'Actual Cost can only be entered after the 28th of the month' 
@@ -513,7 +513,7 @@ function App() {
     // 유효한 항목만 필터: item명이 있고, 비용 데이터가 있는 것
     const validItems = costItems.filter(item => {
       const hasItem = item.item && item.item.trim() !== '';
-      const hasCost = item.estimatedCost || item.actualCost || (item.unitPrice && item.quantity);
+      const hasCost = parseFloat(item.estimatedCost) > 0 || parseFloat(item.actualCost) > 0 || (parseFloat(item.unitPrice) > 0 && parseFloat(item.quantity) > 0);
       return hasItem && hasCost;
     });
 
