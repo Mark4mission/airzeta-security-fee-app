@@ -306,6 +306,51 @@ const saveBranchesToFirestore = async (branches) => {
   }
 };
 
+// ============================================================
+// Exchange Rate 관련 함수 (환율 테이블)
+// ============================================================
+
+/**
+ * 환율 데이터를 Firestore에 저장 (기존 데이터 덮어쓰기)
+ * @param {Array} rates - [{currency, rate, ratio}] 형태의 환율 배열
+ * @param {string} fileName - 업로드한 파일명
+ */
+export const saveExchangeRates = async (rates, fileName) => {
+  try {
+    await ensureAuthenticated();
+    const ratesRef = doc(db, 'settings', 'exchangeRates');
+    await setDoc(ratesRef, {
+      rates,
+      fileName,
+      uploadedAt: serverTimestamp()
+    });
+    console.log(`[ExchangeRate] ${rates.length}건 환율 저장 완료 (${fileName})`);
+    return { success: true };
+  } catch (error) {
+    console.error('[ExchangeRate] 저장 에러:', error);
+    throw error;
+  }
+};
+
+/**
+ * Firestore에서 환율 데이터 로드
+ * @returns {{ rates: Array, fileName: string, uploadedAt: any } | null}
+ */
+export const loadExchangeRates = async () => {
+  try {
+    await ensureAuthenticated();
+    const ratesRef = doc(db, 'settings', 'exchangeRates');
+    const ratesDoc = await getDoc(ratesRef);
+    if (ratesDoc.exists()) {
+      return ratesDoc.data();
+    }
+    return null;
+  } catch (error) {
+    console.error('[ExchangeRate] 로드 에러:', error);
+    return null;
+  }
+};
+
 /**
  * Firestore에서 Settings 로드
  * branchCodes 컬렉션 + settings/appSettings 문서를 합쳐서 반환

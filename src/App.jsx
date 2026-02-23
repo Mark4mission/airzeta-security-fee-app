@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2 } from 'lucide-react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload } from 'lucide-react';
+import readXlsxFile from 'read-excel-file';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
 import { 
@@ -8,7 +9,9 @@ import {
   submitSecurityCost,
   loadSettingsFromFirestore,
   updateBranchManager,
-  deleteSecurityCostsByBranchMonth 
+  deleteSecurityCostsByBranchMonth,
+  saveExchangeRates,
+  loadExchangeRates
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -117,8 +120,12 @@ function App() {
   const [targetMonth, setTargetMonth] = useState('');
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('');
   const [costItems, setCostItems] = useState([
-    { item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
+    { item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
   ]);
+
+  // 환율 테이블 상태
+  const [exchangeRates, setExchangeRates] = useState(null); // { rates: [...], fileName, uploadedAt }
+  const [showExchangeRateTable, setShowExchangeRateTable] = useState(false);
 
   // 설정 상태
   const [settings, setSettings] = useState(() => {
@@ -185,6 +192,24 @@ function App() {
   useEffect(() => {
     localStorage.setItem('securityAppSettings', JSON.stringify(settings));
   }, [settings]);
+
+  // 환율 데이터 로드
+  useEffect(() => {
+    const loadRates = async () => {
+      if (!authLoading && currentUser) {
+        try {
+          const ratesData = await loadExchangeRates();
+          if (ratesData) {
+            setExchangeRates(ratesData);
+            console.log('[App] Exchange rates loaded:', ratesData.rates?.length, 'currencies');
+          }
+        } catch (error) {
+          console.error('[App] Exchange rates load failed:', error);
+        }
+      }
+    };
+    loadRates();
+  }, [authLoading, currentUser]);
 
   // 메시지 자동 제거
   useEffect(() => {
@@ -257,6 +282,7 @@ function App() {
             item: item.item || '',
             unitPrice: item.unitPrice?.toString() || '',
             quantity: item.quantity?.toString() || '',
+            qtyUnit: item.qtyUnit || '',
             estimatedCost: item.estimatedCost?.toString() || '',
             actualCost: item.actualCost?.toString() || '',
             currency: item.currency || currency,
@@ -283,7 +309,7 @@ function App() {
 
   const resetCostItems = () => {
     setCostItems([{
-      item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '',
+      item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '',
       currency: currency, paymentMethod: defaultPaymentMethod, notes: ''
     }]);
   };
@@ -307,7 +333,7 @@ function App() {
       setKrwExchangeRate('');
       setDefaultPaymentMethod('');
       setTargetMonth('');
-      setCostItems([{ item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }]);
+      setCostItems([{ item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }]);
       setAutoLoadMessage('');
       setMessage({ type: 'success', text: 'Successfully logged out' });
     } catch (error) {
@@ -395,6 +421,7 @@ function App() {
             if (matchingItem.unitPrice) {
               newItems[index].unitPrice = matchingItem.unitPrice?.toString() || newItems[index].unitPrice;
               newItems[index].quantity = matchingItem.quantity?.toString() || '';
+              newItems[index].qtyUnit = matchingItem.qtyUnit || '';
               const price = parseFloat(newItems[index].unitPrice) || 0;
               const qty = parseFloat(newItems[index].quantity) || 0;
               newItems[index].estimatedCost = (price * qty) > 0 ? (price * qty).toString() : '';
@@ -418,6 +445,7 @@ function App() {
       item: '', 
       unitPrice: '',
       quantity: '',
+      qtyUnit: '',
       estimatedCost: '', 
       actualCost: '', 
       currency: currency, 
@@ -483,6 +511,58 @@ function App() {
     return amt * rate;
   };
 
+  // 환율 테이블에서 특정 통화의 KRW 환율 조회
+  const getExchangeRateForCurrency = useCallback((currencyCode) => {
+    if (!exchangeRates?.rates) return null;
+    const entry = exchangeRates.rates.find(r => r.currency === currencyCode);
+    if (!entry) return null;
+    // ratio가 100인 경우 (예: 100 JPY = 936 KRW), 1단위 환율로 변환
+    const ratio = entry.ratio || 1;
+    return entry.rate / ratio;
+  }, [exchangeRates]);
+
+  // XLSX 파일 업로드 처리
+  const handleExchangeRateUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const rows = await readXlsxFile(file);
+      
+      // Skip header row, parse currency data
+      const rates = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length < 5) continue;
+        const ratio = parseFloat(row[0]) || 1;
+        const currency = String(row[1]).trim();
+        const targetCurrency = String(row[3]).trim();
+        const rateStr = String(row[4]).replace(/,/g, '').trim();
+        const rate = parseFloat(rateStr);
+        
+        if (currency && targetCurrency === 'KRW' && !isNaN(rate)) {
+          rates.push({ currency, rate, ratio });
+        }
+      }
+      
+      if (rates.length === 0) {
+        setMessage({ type: 'error', text: 'No valid exchange rate data found in the file.' });
+        return;
+      }
+      
+      await saveExchangeRates(rates, file.name);
+      setExchangeRates({ rates, fileName: file.name, uploadedAt: new Date() });
+      setMessage({ type: 'success', text: `Exchange rates uploaded: ${rates.length} currencies from ${file.name}` });
+      // Refresh dashboard
+      setDashboardRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('[ExchangeRate] Upload error:', error);
+      setMessage({ type: 'error', text: 'Failed to parse exchange rate file: ' + error.message });
+    }
+    // Reset file input
+    e.target.value = '';
+  };
+
   // 제출
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -541,6 +621,7 @@ function App() {
           item: item.item,
           unitPrice: parseFloat(item.unitPrice) || 0,
           quantity: parseFloat(item.quantity) || 0,
+          qtyUnit: item.qtyUnit || '',
           estimatedCost: parseFloat(item.estimatedCost) || 0,
           actualCost: parseFloat(item.actualCost) || 0,
           currency: item.currency || currency,
@@ -589,7 +670,7 @@ function App() {
         setBranchName('');
         setManagerName('');
         setCostItems([{ 
-          item: '', unitPrice: '', quantity: '', estimatedCost: '', actualCost: '', 
+          item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '', 
           currency: currency, paymentMethod: defaultPaymentMethod, notes: '' 
         }]);
       } else {
@@ -869,6 +950,9 @@ function App() {
           <AdminDashboard
             key={`dashboard-${dashboardRefreshKey}`}
             branches={settings.branches.filter(b => b.name !== 'HQ' && b.name !== 'hq')}
+            exchangeRates={exchangeRates}
+            isAdmin={isAdmin(currentUser)}
+            onExchangeRateUpload={handleExchangeRateUpload}
             onCellClick={(branch, month) => {
               console.log('[App] Dashboard cell clicked:', branch, month);
               handleBranchChange(branch);
@@ -1248,10 +1332,10 @@ function App() {
                       </button>
                     </div>
 
-                    {/* Row 1: Cost Item | Currency | Unit Price | Qty | Payment Method */}
+                    {/* Row 1: Cost Item | Currency | Unit Price | Qty | Unit | Payment Method */}
                     <div style={{
                       display: 'grid',
-                      gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
+                      gridTemplateColumns: '2fr 1fr 1fr 0.8fr 0.6fr 1fr',
                       gap: '0.5rem',
                       padding: '0.5rem 0.75rem',
                       alignItems: 'end'
@@ -1332,6 +1416,22 @@ function App() {
                             border: `1px solid #d1d5db`, borderRadius: '0.375rem',
                             fontSize: '0.8rem', textAlign: 'right',
                             background: !canEditEstimatedCost() ? '#f9fafb' : 'white'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.2rem' }}>Unit</label>
+                        <input
+                          type="text"
+                          value={item.qtyUnit || ''}
+                          onChange={(e) => handleInputChange(index, 'qtyUnit', e.target.value)}
+                          placeholder="kg, hr..."
+                          style={{
+                            width: '100%', padding: '0.4rem',
+                            border: `1px solid #d1d5db`, borderRadius: '0.375rem',
+                            fontSize: '0.75rem', background: 'white',
+                            textAlign: 'center'
                           }}
                         />
                       </div>
