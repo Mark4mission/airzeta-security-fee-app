@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload, Eye, Trash, FileText } from 'lucide-react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload, Eye, Trash } from 'lucide-react';
 import readXlsxFile from 'read-excel-file';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
@@ -1224,8 +1224,8 @@ function App() {
                 </div>
               </div>
 
-              {/* 🔥 관리자만 계약서 파일 업로드 (연도별) */}
-              {currentUser.role === 'hq_admin' && (
+              {/* 계약서 파일 업로드 (연도별) - 관리자 및 지점 사용자 모두 */}
+              {(currentUser.role === 'hq_admin' || currentUser.role === 'branch_user') && (
                 <div>
                   <label style={{ 
                     display: 'block',
@@ -1233,7 +1233,6 @@ function App() {
                     fontWeight: '500',
                     color: COLORS.text.primary
                   }}>
-                    <FileText size={14} style={{ verticalAlign: 'middle', marginRight: '0.3rem' }} />
                     Contract File
                   </label>
                   <div style={{
