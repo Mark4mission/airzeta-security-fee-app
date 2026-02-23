@@ -232,7 +232,7 @@ function UserManagement({ branches }) {
               onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
               style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
             >
-              <option value="branch_user">Branch User</option>
+              <option value="branch_user">Station User</option>
               <option value="hq_admin">HQ Admin</option>
             </select>
             <select
@@ -241,7 +241,7 @@ function UserManagement({ branches }) {
               required={newUser.role === 'branch_user'}
               style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
             >
-              <option value="">Select Branch</option>
+              <option value="">Select Station</option>
               {branches && branches.map(branch => (
                 <option key={branch.branchName} value={branch.branchName}>
                   {branch.branchName}

@@ -115,7 +115,7 @@ function AdminDashboard({ branches, onCellClick }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: COLORS.text.primary, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
           <BarChart3 size={22} color={COLORS.primary} />
-          All Branches - Cost Status
+          All Stations - Cost Status
         </h2>
         <button onClick={loadData} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.8rem', background: COLORS.info, color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.75rem' }}>
           <RefreshCw size={14} /> Refresh
@@ -133,7 +133,7 @@ function AdminDashboard({ branches, onCellClick }) {
           {months.map((m, i) => <option key={m} value={m}>{monthLabels[i]}</option>)}
         </select>
         <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
-          <option value="">All Branches</option>
+          <option value="">All Stations</option>
           {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
         </select>
       </div>
@@ -168,7 +168,7 @@ function AdminDashboard({ branches, onCellClick }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
           <thead>
             <tr style={{ background: '#f1f5f9' }}>
-              <th style={{ padding: '0.5rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '700', color: COLORS.primary, minWidth: '90px' }}>Branch</th>
+              <th style={{ padding: '0.5rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '700', color: COLORS.primary, minWidth: '90px' }}>Station</th>
               {activeMonths.map((m, i) => (
                 <th key={m} style={{ padding: '0.5rem 0.25rem', textAlign: 'center', borderBottom: '2px solid #d1d5db', fontWeight: '600', color: COLORS.text.secondary, minWidth: '70px' }}>
                   {monthLabels[parseInt(m) - 1]}
@@ -274,7 +274,7 @@ function AdminDashboard({ branches, onCellClick }) {
 
       {displayBranches.length === 0 && (
         <div style={{ textAlign: 'center', padding: '1.5rem', color: COLORS.text.secondary, fontSize: '0.85rem' }}>
-          No branches found. Add branches in Settings.
+          No stations found. Add stations in Settings.
         </div>
       )}
     </section>

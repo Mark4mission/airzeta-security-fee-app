@@ -81,7 +81,7 @@ function Settings({ settings, onSave, onClose }) {
     if (addUserMode === 'existing') {
       // 기존 Google 로그인 사용자의 브랜치/역할 배정
       if (!newUser.email || !newUser.branchName) {
-        setMessage({ type: 'error', text: 'Please fill email and branch fields' });
+        setMessage({ type: 'error', text: 'Please fill email and station fields' });
         return;
       }
       
@@ -206,7 +206,7 @@ function Settings({ settings, onSave, onClose }) {
   };
 
   const handleRejectPendingAdmin = async (uid) => {
-    if (!window.confirm('Reject this admin request? The user will need to re-select a branch.')) return;
+    if (!window.confirm('Reject this admin request? The user will need to re-select a station.')) return;
     try {
       await rejectPendingAdmin(uid);
       setMessage({ type: 'success', text: 'Admin request rejected.' });
@@ -321,7 +321,7 @@ function Settings({ settings, onSave, onClose }) {
   };
 
   const tabs = [
-    { id: 'branches', label: 'Branches', icon: Building2 },
+    { id: 'branches', label: 'Stations', icon: Building2 },
     { id: 'costItems', label: 'Cost Items', icon: DollarSign },
     { id: 'currencies', label: 'Currencies', icon: Globe },
     { id: 'paymentMethods', label: 'Payment Methods', icon: CreditCard },
@@ -436,7 +436,7 @@ function Settings({ settings, onSave, onClose }) {
           {activeTab === 'branches' && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: 0, color: COLORS.text.primary }}>Branch Management</h3>
+                <h3 style={{ margin: 0, color: COLORS.text.primary }}>Station Management</h3>
                 <button
                   onClick={handleAddBranch}
                   style={{
@@ -453,7 +453,7 @@ function Settings({ settings, onSave, onClose }) {
                   }}
                 >
                   <Plus size={20} />
-                  Add Branch
+                  Add Station
                 </button>
               </div>
               
@@ -469,13 +469,13 @@ function Settings({ settings, onSave, onClose }) {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '1rem', alignItems: 'center' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
-                            Branch Name
+                            Station Name
                           </label>
                           <input
                             type="text"
                             value={branch.name || ''}
                             onChange={(e) => handleBranchChange(index, 'name', e.target.value)}
-                            placeholder="e.g., Seoul Branch"
+                            placeholder="e.g., Seoul Station"
                             style={{
                               width: '100%',
                               padding: '0.5rem',
@@ -561,7 +561,7 @@ function Settings({ settings, onSave, onClose }) {
                   ))
                 ) : (
                   <p style={{ color: COLORS.text.secondary, textAlign: 'center', padding: '2rem' }}>
-                    No branches found. Click "Add Branch" to create one.
+                    No stations found. Click "Add Station" to create one.
                   </p>
                 )}
               </div>
@@ -933,7 +933,7 @@ function Settings({ settings, onSave, onClose }) {
                         fontSize: '0.875rem'
                       }}
                     >
-                      Assign Google User to Branch
+                      Assign Google User to Station
                     </button>
                     <button
                       type="button"
@@ -956,7 +956,7 @@ function Settings({ settings, onSave, onClose }) {
 
                   <h4 style={{ marginTop: 0, color: COLORS.text.primary }}>
                     {addUserMode === 'existing' 
-                      ? 'Assign Google User to Branch' 
+                      ? 'Assign Google User to Station' 
                       : 'Create New Email/Password User'}
                   </h4>
                   
@@ -1025,7 +1025,7 @@ function Settings({ settings, onSave, onClose }) {
                       )}
                       <div>
                         <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
-                          Branch *
+                          Station *
                         </label>
                         <select
                           required
@@ -1038,7 +1038,7 @@ function Settings({ settings, onSave, onClose }) {
                             borderRadius: '0.375rem'
                           }}
                         >
-                          <option value="">Select Branch</option>
+                          <option value="">Select Station</option>
                           {localSettings.branches && localSettings.branches.length > 0 ? (
                             localSettings.branches.map((branch, idx) => (
                               <option key={idx} value={branch.name}>
@@ -1046,7 +1046,7 @@ function Settings({ settings, onSave, onClose }) {
                               </option>
                             ))
                           ) : (
-                            <option value="" disabled>No branches available</option>
+                            <option value="" disabled>No stations available</option>
                           )}
                         </select>
                       </div>
@@ -1064,7 +1064,7 @@ function Settings({ settings, onSave, onClose }) {
                             borderRadius: '0.375rem'
                           }}
                         >
-                          <option value="branch_user">Branch User</option>
+                          <option value="branch_user">Station User</option>
                           <option value="hq_admin">HQ Admin</option>
                         </select>
                       </div>
@@ -1082,7 +1082,7 @@ function Settings({ settings, onSave, onClose }) {
                           fontWeight: 'bold'
                         }}
                       >
-                        {addUserMode === 'existing' ? 'Assign Branch' : 'Create User'}
+                        {addUserMode === 'existing' ? 'Assign Station' : 'Create User'}
                       </button>
                       <button
                         type="button"
@@ -1136,7 +1136,7 @@ function Settings({ settings, onSave, onClose }) {
                       </div>
                       <div>
                         <label style={{ display: 'block', fontSize: '0.875rem', color: COLORS.text.secondary, marginBottom: '0.25rem' }}>
-                          Branch *
+                          Station *
                         </label>
                         <select
                           required
@@ -1149,7 +1149,7 @@ function Settings({ settings, onSave, onClose }) {
                             borderRadius: '0.375rem'
                           }}
                         >
-                          <option value="">Select Branch</option>
+                          <option value="">Select Station</option>
                           {localSettings.branches && localSettings.branches.length > 0 ? (
                             localSettings.branches.map((branch, idx) => (
                               <option key={idx} value={branch.name}>
@@ -1157,7 +1157,7 @@ function Settings({ settings, onSave, onClose }) {
                               </option>
                             ))
                           ) : (
-                            <option value="" disabled>No branches available</option>
+                            <option value="" disabled>No stations available</option>
                           )}
                         </select>
                       </div>
@@ -1175,7 +1175,7 @@ function Settings({ settings, onSave, onClose }) {
                             borderRadius: '0.375rem'
                           }}
                         >
-                          <option value="branch_user">Branch User</option>
+                          <option value="branch_user">Station User</option>
                           <option value="hq_admin">HQ Admin</option>
                         </select>
                       </div>
