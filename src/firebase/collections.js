@@ -307,24 +307,26 @@ const saveBranchesToFirestore = async (branches) => {
 };
 
 // ============================================================
-// Exchange Rate 관련 함수 (환율 테이블)
+// Exchange Rate 관련 함수 (월별 환율 테이블)
 // ============================================================
 
 /**
- * 환율 데이터를 Firestore에 저장 (기존 데이터 덮어쓰기)
+ * 특정 월의 환율 데이터를 Firestore에 저장 (기존 데이터 덮어쓰기)
+ * @param {string} yearMonth - '2026-01' 형태
  * @param {Array} rates - [{currency, rate, ratio}] 형태의 환율 배열
  * @param {string} fileName - 업로드한 파일명
  */
-export const saveExchangeRates = async (rates, fileName) => {
+export const saveExchangeRates = async (rates, fileName, yearMonth) => {
   try {
     await ensureAuthenticated();
-    const ratesRef = doc(db, 'settings', 'exchangeRates');
+    const ratesRef = doc(db, 'exchangeRates', yearMonth);
     await setDoc(ratesRef, {
       rates,
       fileName,
+      yearMonth,
       uploadedAt: serverTimestamp()
     });
-    console.log(`[ExchangeRate] ${rates.length}건 환율 저장 완료 (${fileName})`);
+    console.log(`[ExchangeRate] ${yearMonth}: ${rates.length}건 환율 저장 완료 (${fileName})`);
     return { success: true };
   } catch (error) {
     console.error('[ExchangeRate] 저장 에러:', error);
@@ -333,8 +335,31 @@ export const saveExchangeRates = async (rates, fileName) => {
 };
 
 /**
- * Firestore에서 환율 데이터 로드
- * @returns {{ rates: Array, fileName: string, uploadedAt: any } | null}
+ * 특정 연도의 모든 월별 환율 데이터 로드
+ * @param {string} year - '2026' 형태
+ * @returns {Object} { '2026-01': { rates, fileName, ... }, '2026-02': {...}, ... }
+ */
+export const loadExchangeRatesByYear = async (year) => {
+  try {
+    await ensureAuthenticated();
+    const snapshot = await getDocs(collection(db, 'exchangeRates'));
+    const result = {};
+    snapshot.docs.forEach(d => {
+      const data = d.data();
+      if (d.id.startsWith(year)) {
+        result[d.id] = data;
+      }
+    });
+    console.log(`[ExchangeRate] ${year}년 환율 로드: ${Object.keys(result).length}개월`);
+    return result;
+  } catch (error) {
+    console.error('[ExchangeRate] 로드 에러:', error);
+    return {};
+  }
+};
+
+/**
+ * Firestore에서 단일 환율 데이터 로드 (하위 호환)
  */
 export const loadExchangeRates = async () => {
   try {
