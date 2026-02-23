@@ -376,6 +376,82 @@ export const loadExchangeRates = async () => {
   }
 };
 
+// ============================================================
+// Contract File 관련 함수 (연도별 계약서 파일)
+// ============================================================
+
+/**
+ * 계약서 파일을 Firestore에 저장 (base64)
+ * 문서 ID: {branchName}_{year} (예: "Seoul Station_2026")
+ * @param {string} branchName - 지점명
+ * @param {string} year - 연도 (예: '2026')
+ * @param {string} fileName - 파일명
+ * @param {string} fileBase64 - base64 인코딩된 파일 데이터
+ * @param {string} fileType - MIME type (예: 'application/pdf')
+ * @param {number} fileSize - 파일 크기 (bytes)
+ */
+export const saveContractFile = async (branchName, year, fileName, fileBase64, fileType, fileSize) => {
+  try {
+    await ensureAuthenticated();
+    const docId = `${branchName}_${year}`;
+    const contractRef = doc(db, 'contracts', docId);
+    await setDoc(contractRef, {
+      branchName,
+      year,
+      fileName,
+      fileBase64,
+      fileType,
+      fileSize,
+      uploadedAt: serverTimestamp()
+    });
+    console.log(`[Contract] ${docId}: 계약서 저장 완료 (${fileName}, ${(fileSize / 1024).toFixed(1)}KB)`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Contract] 저장 에러:', error);
+    throw error;
+  }
+};
+
+/**
+ * 특정 지점의 특정 연도 계약서 파일 로드
+ * @param {string} branchName - 지점명
+ * @param {string} year - 연도
+ * @returns {{ fileName, fileBase64, fileType, fileSize, uploadedAt } | null}
+ */
+export const loadContractFile = async (branchName, year) => {
+  try {
+    await ensureAuthenticated();
+    const docId = `${branchName}_${year}`;
+    const contractRef = doc(db, 'contracts', docId);
+    const contractDoc = await getDoc(contractRef);
+    if (contractDoc.exists()) {
+      return contractDoc.data();
+    }
+    return null;
+  } catch (error) {
+    console.error('[Contract] 로드 에러:', error);
+    return null;
+  }
+};
+
+/**
+ * 특정 지점의 특정 연도 계약서 파일 삭제
+ * @param {string} branchName - 지점명
+ * @param {string} year - 연도
+ */
+export const deleteContractFile = async (branchName, year) => {
+  try {
+    await ensureAuthenticated();
+    const docId = `${branchName}_${year}`;
+    await deleteDoc(doc(db, 'contracts', docId));
+    console.log(`[Contract] ${docId}: 계약서 삭제 완료`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Contract] 삭제 에러:', error);
+    throw error;
+  }
+};
+
 /**
  * Firestore에서 Settings 로드
  * branchCodes 컬렉션 + settings/appSettings 문서를 합쳐서 반환

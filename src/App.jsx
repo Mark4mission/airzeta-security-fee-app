@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload } from 'lucide-react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload, Eye, Trash, FileText } from 'lucide-react';
 import readXlsxFile from 'read-excel-file';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
@@ -11,7 +11,10 @@ import {
   updateBranchManager,
   deleteSecurityCostsByBranchMonth,
   saveExchangeRates,
-  loadExchangeRatesByYear
+  loadExchangeRatesByYear,
+  saveContractFile,
+  loadContractFile,
+  deleteContractFile
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -115,7 +118,7 @@ function App() {
   // 폼 데이터 상태 (🔥 branchCode 제거)
   const [branchName, setBranchName] = useState('');
   const [currency, setCurrency] = useState('USD');
-  const [krwExchangeRate, setKrwExchangeRate] = useState('');
+
   const [managerName, setManagerName] = useState('');
   const [targetMonth, setTargetMonth] = useState('');
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState('');
@@ -126,6 +129,12 @@ function App() {
   // 월별 환율 테이블 상태: { '2026-01': { rates, fileName, ... }, ... }
   const [monthlyExchangeRates, setMonthlyExchangeRates] = useState({});
   const [exchangeRateYear, setExchangeRateYear] = useState(new Date().getFullYear().toString());
+
+  // 계약서 파일 상태
+  const [contractYear, setContractYear] = useState(new Date().getFullYear().toString());
+  const [contractFile, setContractFile] = useState(null); // { fileName, fileType, fileSize, uploadedAt }
+  const [contractLoading, setContractLoading] = useState(false);
+  const contractInputRef = React.useRef(null);
 
   // 설정 상태
   const [settings, setSettings] = useState(() => {
@@ -215,6 +224,31 @@ function App() {
     };
     loadRates();
   }, [authLoading, currentUser, exchangeRateYear]);
+
+  // 계약서 파일 로드 (branchName + contractYear 변경 시)
+  useEffect(() => {
+    const loadContract = async () => {
+      if (!authLoading && currentUser && branchName && contractYear) {
+        setContractLoading(true);
+        try {
+          const data = await loadContractFile(branchName, contractYear);
+          if (data) {
+            setContractFile({ fileName: data.fileName, fileType: data.fileType, fileSize: data.fileSize, uploadedAt: data.uploadedAt });
+          } else {
+            setContractFile(null);
+          }
+        } catch (error) {
+          console.error('[App] Contract file load failed:', error);
+          setContractFile(null);
+        } finally {
+          setContractLoading(false);
+        }
+      } else {
+        setContractFile(null);
+      }
+    };
+    loadContract();
+  }, [authLoading, currentUser, branchName, contractYear]);
 
   // 메시지 자동 제거
   useEffect(() => {
@@ -335,7 +369,6 @@ function App() {
       setBranchName('');
       setManagerName('');
       setCurrency('USD');
-      setKrwExchangeRate('');
       setDefaultPaymentMethod('');
       setTargetMonth('');
       setCostItems([{ item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }]);
@@ -504,22 +537,24 @@ function App() {
     return false;
   };
 
-  // 환율 변환
-  const convertToKRW = (amount, itemCurrency) => {
-    if (!krwExchangeRate || !amount) return null;
-    const rate = parseFloat(krwExchangeRate);
+  // 월별 업로드 환율을 이용한 KRW 변환 (targetMonth 기준)
+  const convertToKRW = useCallback((amount, itemCurrency) => {
+    if (!amount || !targetMonth) return null;
     const amt = parseFloat(amount);
-    if (isNaN(rate) || isNaN(amt)) return null;
-    
+    if (isNaN(amt)) return null;
     if (itemCurrency === 'KRW') return amt;
     
-    return amt * rate;
-  };
+    const monthData = monthlyExchangeRates?.[targetMonth];
+    if (!monthData?.rates) return null;
+    const entry = monthData.rates.find(r => r.currency === itemCurrency);
+    if (!entry) return null;
+    const ratio = entry.ratio || 1;
+    const ratePerUnit = entry.rate / ratio;
+    return amt * ratePerUnit;
+  }, [monthlyExchangeRates, targetMonth]);
 
-  // 환율 테이블에서 특정 통화의 KRW 환율 조회 (사용하지 않지만 하위 호환용 유지)
-  const getExchangeRateForCurrency = useCallback((currencyCode) => {
-    return null;
-  }, []);
+  // 현재 targetMonth에 환율 데이터가 있는지 여부
+  const hasMonthlyRate = !!(monthlyExchangeRates?.[targetMonth]?.rates);
 
   // XLSX 파일 업로드 처리 (월별)
   const handleExchangeRateUpload = async (e, yearMonth) => {
@@ -565,6 +600,90 @@ function App() {
     }
     // Reset file input
     e.target.value = '';
+  };
+
+  // 계약서 파일 업로드 처리
+  const handleContractUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !branchName || !contractYear) {
+      if (!branchName) setMessage({ type: 'error', text: 'Please select a station first.' });
+      return;
+    }
+    
+    // 파일 크기 제한 (1MB - Firestore 문서 크기 제한)
+    if (file.size > 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File size must be under 1MB. Please compress the file.' });
+      e.target.value = '';
+      return;
+    }
+    
+    try {
+      setContractLoading(true);
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const base64 = ev.target.result.split(',')[1]; // Remove data:...;base64, prefix
+          await saveContractFile(branchName, contractYear, file.name, base64, file.type, file.size);
+          setContractFile({ fileName: file.name, fileType: file.type, fileSize: file.size, uploadedAt: new Date() });
+          setMessage({ type: 'success', text: `Contract file uploaded: ${file.name} (${branchName} / ${contractYear})` });
+        } catch (error) {
+          console.error('[Contract] Upload error:', error);
+          setMessage({ type: 'error', text: 'Failed to upload contract file: ' + error.message });
+        } finally {
+          setContractLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('[Contract] Upload error:', error);
+      setMessage({ type: 'error', text: 'Failed to read file.' });
+      setContractLoading(false);
+    }
+    e.target.value = '';
+  };
+
+  // 계약서 파일 보기
+  const handleViewContract = async () => {
+    if (!branchName || !contractYear) return;
+    try {
+      setContractLoading(true);
+      const data = await loadContractFile(branchName, contractYear);
+      if (data?.fileBase64) {
+        const byteCharacters = atob(data.fileBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: data.fileType });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        setMessage({ type: 'warning', text: 'No contract file found.' });
+      }
+    } catch (error) {
+      console.error('[Contract] View error:', error);
+      setMessage({ type: 'error', text: 'Failed to load contract file.' });
+    } finally {
+      setContractLoading(false);
+    }
+  };
+
+  // 계약서 파일 삭제
+  const handleDeleteContract = async () => {
+    if (!branchName || !contractYear) return;
+    if (!window.confirm(`Delete contract file for ${branchName} (${contractYear})?`)) return;
+    try {
+      setContractLoading(true);
+      await deleteContractFile(branchName, contractYear);
+      setContractFile(null);
+      setMessage({ type: 'success', text: `Contract file deleted: ${branchName} / ${contractYear}` });
+    } catch (error) {
+      console.error('[Contract] Delete error:', error);
+      setMessage({ type: 'error', text: 'Failed to delete contract file.' });
+    } finally {
+      setContractLoading(false);
+    }
   };
 
   // 제출
@@ -620,7 +739,7 @@ function App() {
         managerName,
         targetMonth,
         currency,
-        krwExchangeRate: krwExchangeRate ? parseFloat(krwExchangeRate) : null,
+        krwExchangeRate: null, // deprecated: now using monthly exchange rates
         items: validItems.map(item => ({
           item: item.item,
           unitPrice: parseFloat(item.unitPrice) || 0,
@@ -1105,7 +1224,7 @@ function App() {
                 </div>
               </div>
 
-              {/* 🔥 관리자만 KRW 환율 입력 */}
+              {/* 🔥 관리자만 계약서 파일 업로드 (연도별) */}
               {currentUser.role === 'hq_admin' && (
                 <div>
                   <label style={{ 
@@ -1114,31 +1233,128 @@ function App() {
                     fontWeight: '500',
                     color: COLORS.text.primary
                   }}>
-                    KRW Exchange Rate
+                    <FileText size={14} style={{ verticalAlign: 'middle', marginRight: '0.3rem' }} />
+                    Contract File
                   </label>
-                  <div>
-                    <input
-                      type="number"
-                      value={krwExchangeRate}
-                      onChange={(e) => setKrwExchangeRate(e.target.value)}
-                      placeholder="e.g., 1460"
-                      step="0.01"
-                      min="0"
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 0.6rem',
+                    border: `1px solid ${COLORS.text.light}`,
+                    borderRadius: '0.5rem',
+                    background: '#fafbfc',
+                    minHeight: '2.6rem'
+                  }}>
+                    {/* 연도 선택 */}
+                    <select
+                      value={contractYear}
+                      onChange={(e) => setContractYear(e.target.value)}
                       style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        border: `1px solid ${COLORS.text.light}`,
-                        borderRadius: '0.5rem',
-                        fontSize: '1rem'
+                        padding: '0.3rem 0.4rem',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '0.375rem',
+                        fontSize: '0.8rem',
+                        background: 'white',
+                        cursor: 'pointer',
+                        minWidth: '70px',
+                        flexShrink: 0
                       }}
+                    >
+                      {[...Array(5)].map((_, i) => {
+                        const y = (new Date().getFullYear() - 2 + i).toString();
+                        return <option key={y} value={y}>{y}</option>;
+                      })}
+                    </select>
+
+                    {/* 파일 업로드 (숨김) */}
+                    <input
+                      ref={contractInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      onChange={handleContractUpload}
+                      style={{ display: 'none' }}
                     />
+
+                    {/* 파일 상태 표시 */}
+                    {contractLoading ? (
+                      <span style={{ fontSize: '0.7rem', color: COLORS.text.light, flex: 1 }}>Loading...</span>
+                    ) : contractFile ? (
+                      <span style={{
+                        fontSize: '0.7rem', color: COLORS.primary, flex: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        fontWeight: '500'
+                      }} title={contractFile.fileName}>
+                        {contractFile.fileName}
+                      </span>
+                    ) : (
+                      <span
+                        onClick={() => branchName ? contractInputRef.current?.click() : setMessage({ type: 'error', text: 'Please select a station first.' })}
+                        style={{
+                          fontSize: '0.7rem', color: COLORS.text.light, flex: 1,
+                          cursor: 'pointer', fontStyle: 'italic'
+                        }}
+                      >
+                        No file — click to upload
+                      </span>
+                    )}
+
+                    {/* 아이콘 버튼 그룹 */}
+                    <div style={{ display: 'flex', gap: '2px', flexShrink: 0 }}>
+                      {/* 업로드 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => branchName ? contractInputRef.current?.click() : setMessage({ type: 'error', text: 'Please select a station first.' })}
+                        disabled={contractLoading}
+                        title={`Upload contract for ${branchName || '(select station)'} / ${contractYear}`}
+                        style={{
+                          background: 'none', border: 'none', cursor: contractLoading ? 'not-allowed' : 'pointer',
+                          padding: '3px', borderRadius: '0.25rem', display: 'flex', alignItems: 'center',
+                          color: COLORS.primary, opacity: contractLoading ? 0.4 : 1
+                        }}
+                      >
+                        <Upload size={14} />
+                      </button>
+                      {/* 보기 버튼 */}
+                      {contractFile && (
+                        <button
+                          type="button"
+                          onClick={handleViewContract}
+                          disabled={contractLoading}
+                          title={`View ${contractFile.fileName}`}
+                          style={{
+                            background: 'none', border: 'none', cursor: contractLoading ? 'not-allowed' : 'pointer',
+                            padding: '3px', borderRadius: '0.25rem', display: 'flex', alignItems: 'center',
+                            color: COLORS.info, opacity: contractLoading ? 0.4 : 1
+                          }}
+                        >
+                          <Eye size={14} />
+                        </button>
+                      )}
+                      {/* 삭제 버튼 */}
+                      {contractFile && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteContract}
+                          disabled={contractLoading}
+                          title={`Delete contract for ${branchName} / ${contractYear}`}
+                          style={{
+                            background: 'none', border: 'none', cursor: contractLoading ? 'not-allowed' : 'pointer',
+                            padding: '3px', borderRadius: '0.25rem', display: 'flex', alignItems: 'center',
+                            color: COLORS.error, opacity: contractLoading ? 0.4 : 1
+                          }}
+                        >
+                          <Trash size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p style={{ 
-                    fontSize: '0.75rem', 
+                    fontSize: '0.7rem', 
                     color: COLORS.text.secondary, 
-                    marginTop: '0.25rem' 
+                    marginTop: '0.2rem' 
                   }}>
-                    Enter the {currency} to KRW exchange rate
+                    {branchName ? `${branchName} / ${contractYear}` : 'Select a station first'} · Max 1MB
                   </p>
                 </div>
               )}
@@ -1202,7 +1418,6 @@ function App() {
                         setIsSubmitting(true);
                         const deleted = await deleteSecurityCostsByBranchMonth(branchName, targetMonth);
                         resetCostItems();
-                        setKrwExchangeRate('');
                         // 대시보드 + 히스토리 그래프 리프레시
                         setDashboardRefreshKey(prev => prev + 1);
                         setHistoryRefreshKey(prev => prev + 1);
@@ -1491,7 +1706,7 @@ function App() {
                         }}>
                           {estCost > 0 ? `${sym}${formatNumber(estCost)}` : '\u2014'}
                         </div>
-                        {estCost > 0 && krwExchangeRate && (
+                        {estCost > 0 && hasMonthlyRate && convertToKRW(estCost, itemCurrency) !== null && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
                             {`\u2248 \u20A9${formatNumberInt(convertToKRW(estCost, itemCurrency))}`}
                           </div>
@@ -1520,7 +1735,7 @@ function App() {
                             boxShadow: actCost > 0 ? '0 1px 4px rgba(233,69,96,0.12)' : 'none'
                           }}
                         />
-                        {actCost > 0 && krwExchangeRate && (
+                        {actCost > 0 && hasMonthlyRate && convertToKRW(actCost, itemCurrency) !== null && (
                           <div style={{ fontSize: '0.6rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.1rem' }}>
                             {`\u2248 \u20A9${formatNumberInt(convertToKRW(actCost, itemCurrency))}`}
                           </div>
