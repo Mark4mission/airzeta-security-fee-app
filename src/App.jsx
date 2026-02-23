@@ -11,7 +11,7 @@ import {
   updateBranchManager,
   deleteSecurityCostsByBranchMonth,
   saveExchangeRates,
-  loadExchangeRates
+  loadExchangeRatesByYear
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -123,9 +123,9 @@ function App() {
     { item: '', unitPrice: '', quantity: '', qtyUnit: '', estimatedCost: '', actualCost: '', currency: 'USD', paymentMethod: '', notes: '' }
   ]);
 
-  // 환율 테이블 상태
-  const [exchangeRates, setExchangeRates] = useState(null); // { rates: [...], fileName, uploadedAt }
-  const [showExchangeRateTable, setShowExchangeRateTable] = useState(false);
+  // 월별 환율 테이블 상태: { '2026-01': { rates, fileName, ... }, ... }
+  const [monthlyExchangeRates, setMonthlyExchangeRates] = useState({});
+  const [exchangeRateYear, setExchangeRateYear] = useState(new Date().getFullYear().toString());
 
   // 설정 상태
   const [settings, setSettings] = useState(() => {
@@ -193,15 +193,20 @@ function App() {
     localStorage.setItem('securityAppSettings', JSON.stringify(settings));
   }, [settings]);
 
-  // 환율 데이터 로드
+  // 월별 환율 데이터 로드 (선택된 연도 기준)
   useEffect(() => {
     const loadRates = async () => {
-      if (!authLoading && currentUser) {
+      if (!authLoading && currentUser && exchangeRateYear) {
         try {
-          const ratesData = await loadExchangeRates();
-          if (ratesData) {
-            setExchangeRates(ratesData);
-            console.log('[App] Exchange rates loaded:', ratesData.rates?.length, 'currencies');
+          const ratesData = await loadExchangeRatesByYear(exchangeRateYear);
+          if (ratesData && Object.keys(ratesData).length > 0) {
+            setMonthlyExchangeRates(prev => {
+              // 기존 다른 연도 데이터는 유지하면서 현재 연도 데이터 업데이트
+              const merged = { ...prev };
+              Object.keys(ratesData).forEach(k => { merged[k] = ratesData[k]; });
+              return merged;
+            });
+            console.log('[App] Monthly exchange rates loaded for', exchangeRateYear, ':', Object.keys(ratesData).length, 'months');
           }
         } catch (error) {
           console.error('[App] Exchange rates load failed:', error);
@@ -209,7 +214,7 @@ function App() {
       }
     };
     loadRates();
-  }, [authLoading, currentUser]);
+  }, [authLoading, currentUser, exchangeRateYear]);
 
   // 메시지 자동 제거
   useEffect(() => {
@@ -511,20 +516,15 @@ function App() {
     return amt * rate;
   };
 
-  // 환율 테이블에서 특정 통화의 KRW 환율 조회
+  // 환율 테이블에서 특정 통화의 KRW 환율 조회 (사용하지 않지만 하위 호환용 유지)
   const getExchangeRateForCurrency = useCallback((currencyCode) => {
-    if (!exchangeRates?.rates) return null;
-    const entry = exchangeRates.rates.find(r => r.currency === currencyCode);
-    if (!entry) return null;
-    // ratio가 100인 경우 (예: 100 JPY = 936 KRW), 1단위 환율로 변환
-    const ratio = entry.ratio || 1;
-    return entry.rate / ratio;
-  }, [exchangeRates]);
+    return null;
+  }, []);
 
-  // XLSX 파일 업로드 처리
-  const handleExchangeRateUpload = async (e) => {
+  // XLSX 파일 업로드 처리 (월별)
+  const handleExchangeRateUpload = async (e, yearMonth) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !yearMonth) return;
     
     try {
       const rows = await readXlsxFile(file);
@@ -550,9 +550,13 @@ function App() {
         return;
       }
       
-      await saveExchangeRates(rates, file.name);
-      setExchangeRates({ rates, fileName: file.name, uploadedAt: new Date() });
-      setMessage({ type: 'success', text: `Exchange rates uploaded: ${rates.length} currencies from ${file.name}` });
+      await saveExchangeRates(rates, file.name, yearMonth);
+      setMonthlyExchangeRates(prev => ({
+        ...prev,
+        [yearMonth]: { rates, fileName: file.name, yearMonth, uploadedAt: new Date() }
+      }));
+      const monthLabel = yearMonth.slice(5, 7);
+      setMessage({ type: 'success', text: `Exchange rates for ${yearMonth} uploaded: ${rates.length} currencies from ${file.name}` });
       // Refresh dashboard
       setDashboardRefreshKey(prev => prev + 1);
     } catch (error) {
@@ -950,9 +954,10 @@ function App() {
           <AdminDashboard
             key={`dashboard-${dashboardRefreshKey}`}
             branches={settings.branches.filter(b => b.name !== 'HQ' && b.name !== 'hq')}
-            exchangeRates={exchangeRates}
+            monthlyExchangeRates={monthlyExchangeRates}
             isAdmin={isAdmin(currentUser)}
             onExchangeRateUpload={handleExchangeRateUpload}
+            onYearChange={(year) => setExchangeRateYear(year)}
             onCellClick={(branch, month) => {
               console.log('[App] Dashboard cell clicked:', branch, month);
               handleBranchChange(branch);
