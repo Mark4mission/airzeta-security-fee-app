@@ -220,7 +220,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.25rem' }}>
             {monthlyExchangeRates[viewingRateMonth].rates.map(r => {
-              const perUnit = r.ratio > 1 ? `${r.ratio} ${r.currency}` : `1 ${r.currency}`;
+              const perUnit = r.currency;
               return (
                 <div key={r.currency} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
