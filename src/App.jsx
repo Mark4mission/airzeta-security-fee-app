@@ -87,11 +87,11 @@ const stripCommas = (val) => {
 // 기본 설정값
 const DEFAULT_SETTINGS = {
   branches: [
-    { name: 'Seoul Branch', address: '123 Gangnam-gu, Seoul', manager: 'Kim Min-soo', phone: '+82-2-1234-5678', currency: 'KRW' },
-    { name: 'Tokyo Branch', address: '456 Shibuya, Tokyo', manager: 'Tanaka Yuki', phone: '+81-3-1234-5678', currency: 'JPY' },
-    { name: 'Singapore Branch', address: '789 Marina Bay, Singapore', manager: 'Lee Wei Ming', phone: '+65-1234-5678', currency: 'SGD' },
-    { name: 'Hong Kong Branch', address: '321 Central, Hong Kong', manager: 'Wong Ka Fai', phone: '+852-1234-5678', currency: 'HKD' },
-    { name: 'Bangkok Branch', address: '654 Sukhumvit, Bangkok', manager: 'Somchai Prasert', phone: '+66-2-1234-5678', currency: 'THB' }
+    { name: 'Seoul Station', address: '123 Gangnam-gu, Seoul', manager: 'Kim Min-soo', phone: '+82-2-1234-5678', currency: 'KRW' },
+    { name: 'Tokyo Station', address: '456 Shibuya, Tokyo', manager: 'Tanaka Yuki', phone: '+81-3-1234-5678', currency: 'JPY' },
+    { name: 'Singapore Station', address: '789 Marina Bay, Singapore', manager: 'Lee Wei Ming', phone: '+65-1234-5678', currency: 'SGD' },
+    { name: 'Hong Kong Station', address: '321 Central, Hong Kong', manager: 'Wong Ka Fai', phone: '+852-1234-5678', currency: 'HKD' },
+    { name: 'Bangkok Station', address: '654 Sukhumvit, Bangkok', manager: 'Somchai Prasert', phone: '+66-2-1234-5678', currency: 'THB' }
   ],
   costItems: [
     { name: 'Security Personnel Wages', category: 'Labor', description: 'Monthly wages for security staff' },
@@ -269,11 +269,11 @@ function App() {
           setTimeout(() => setAutoLoadMessage(''), 4000);
         } else {
           resetCostItems();
-          setAutoLoadMessage('No input available to load for this branch/month.');
+          setAutoLoadMessage('No input available to load for this station/month.');
         }
       } else {
         resetCostItems();
-        setAutoLoadMessage('No input available to load for this branch/month.');
+        setAutoLoadMessage('No input available to load for this station/month.');
       }
     } catch (error) {
       console.error('[AutoLoad] Error:', error);
@@ -780,7 +780,7 @@ function App() {
           </div>
           <div>
             <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0, lineHeight: 1.2 }}>
-              Branch Security Cost Submission
+              Station Security Cost Submission
             </h1>
             <p style={{ fontSize: '0.75rem', opacity: 0.9, margin: '0.25rem 0 0 0' }}>
               {currentUser.email} | {currentUser.role === 'hq_admin' ? '🔑 Administrator' : '👤 User'}
@@ -911,7 +911,7 @@ function App() {
               gridTemplateColumns: currentUser.role === 'hq_admin' ? 'repeat(auto-fit, minmax(250px, 1fr))' : 'repeat(auto-fit, minmax(250px, 1fr))',
               gap: '1.5rem'
             }}>
-              {/* 🔥 관리자만 Branch 선택 표시 */}
+              {/* 🔥 관리자만 Station 선택 표시 */}
               {currentUser.role === 'hq_admin' && (
                 <div>
                   <label style={{ 
@@ -920,7 +920,7 @@ function App() {
                     fontWeight: '500',
                     color: COLORS.text.primary
                   }}>
-                    Branch Name *
+                    Station Name *
                   </label>
                   <select
                     value={branchName}
@@ -935,7 +935,7 @@ function App() {
                       cursor: 'pointer'
                     }}
                   >
-                    <option value="">Select Branch</option>
+                    <option value="">Select Station</option>
                     {settings.branches
                       .filter(branch => branch.name !== 'HQ' && branch.name !== 'hq')
                       .map((branch, idx) => (

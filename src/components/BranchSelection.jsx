@@ -51,7 +51,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
         console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개');
       } catch (err) {
         console.error('[BranchSelection] 브랜치 로드 실패:', err);
-        setError('Failed to load branch list. Please try again.');
+        setError('Failed to load station list. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -71,7 +71,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
   // 브랜치 선택 확정
   const handleConfirm = async () => {
     if (!selectedBranch) {
-      setError('Please select a branch.');
+      setError('Please select a station.');
       return;
     }
 
@@ -90,7 +90,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
       }
     } catch (err) {
       console.error('[BranchSelection] 브랜치 등록 실패:', err);
-      setError('Failed to save branch selection. Please try again.');
+      setError('Failed to save station selection. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -143,12 +143,12 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             color: COLORS.text.primary,
             marginBottom: '0.5rem'
           }}>
-            Select Your Branch
+            Select Your Station
           </h1>
           <p style={{ color: COLORS.text.secondary, fontSize: '0.875rem', lineHeight: '1.5' }}>
             Welcome, <strong>{currentUser.displayName || currentUser.email}</strong>
             <br />
-            Please select the branch you belong to.
+            Please select the station you belong to.
           </p>
         </div>
 
@@ -259,7 +259,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
         {!pendingAdminResult && loading ? (
           <div style={{ textAlign: 'center', padding: '3rem 0' }}>
             <Loader size={40} style={{ color: COLORS.primary, animation: 'spin 1s linear infinite' }} />
-            <p style={{ marginTop: '1rem', color: COLORS.text.secondary }}>Loading branches...</p>
+            <p style={{ marginTop: '1rem', color: COLORS.text.secondary }}>Loading stations...</p>
           </div>
         ) : !pendingAdminResult && branches.length === 0 ? (
           /* 브랜치 없을 때 */
@@ -271,9 +271,9 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             marginBottom: '1.5rem'
           }}>
             <p style={{ color: '#92400e', fontSize: '0.9rem', margin: 0 }}>
-              No branches are configured yet.
+              No stations are configured yet.
               <br />
-              Please contact your administrator to set up branches.
+              Please contact your administrator to set up stations.
             </p>
           </div>
         ) : !pendingAdminResult ? (
@@ -298,7 +298,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search branches..."
+                  placeholder="Search stations..."
                   style={{
                     width: '100%',
                     padding: '0.6rem 0.75rem 0.6rem 2.25rem',
@@ -384,7 +384,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
                   padding: '1.5rem 0',
                   margin: 0
                 }}>
-                  No branches matching "{searchQuery}"
+                  No stations matching "{searchQuery}"
                 </p>
               )}
             </div>
@@ -441,7 +441,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
               ) : isHQSelected ? (
                 <><ShieldAlert size={18} /> Request Admin Access</>
               ) : (
-                <><CheckCircle size={18} /> Confirm Branch Selection</>
+                <><CheckCircle size={18} /> Confirm Station Selection</>
               )}
             </button>
           </>

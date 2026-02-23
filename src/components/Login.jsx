@@ -170,7 +170,7 @@ function Login() {
       case 'forgot':
         return { title: 'Reset Password', subtitle: 'Enter your email to receive a reset link' };
       default:
-        return { title: 'Branch Security Cost Submission', subtitle: 'Sign in to continue' };
+        return { title: 'Station Security Cost Submission', subtitle: 'Sign in to continue' };
     }
   };
 
