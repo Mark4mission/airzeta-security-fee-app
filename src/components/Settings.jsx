@@ -13,12 +13,20 @@ const COLORS = {
   error: '#ef4444',
   warning: '#f59e0b',
   info: '#3b82f6',
-  background: '#f3f4f6',
-  surface: '#ffffff',
+  background: '#0F2030',
+  surface: '#132F4C',
+  surfaceLight: '#1A3A5C',
+  border: '#1E3A5F',
   text: {
-    primary: '#1f2937',
-    secondary: '#6b7280',
-    light: '#9ca3af'
+    primary: '#E8EAED',
+    secondary: '#8B99A8',
+    light: '#5F6B7A'
+  },
+  input: {
+    bg: '#1A3A5C',
+    border: '#2A5080',
+    text: '#E8EAED',
+    placeholder: '#5F6B7A'
   }
 };
 
@@ -330,6 +338,19 @@ function Settings({ settings, onSave, onClose }) {
 
   console.log('Rendering branches:', localSettings.branches);
 
+  // Dark theme input style shared across all form fields
+  const inputStyle = {
+    width: '100%',
+    padding: '0.5rem',
+    border: `1px solid ${COLORS.input.border}`,
+    background: COLORS.input.bg,
+    color: COLORS.input.text,
+    borderRadius: '0.375rem',
+    fontSize: '0.875rem',
+    outline: 'none',
+  };
+  const selectStyle = { ...inputStyle, cursor: 'pointer' };
+
   return (
     <div style={{
       position: 'fixed',
@@ -464,7 +485,7 @@ function Settings({ settings, onSave, onClose }) {
                       padding: '1.5rem',
                       background: COLORS.background,
                       borderRadius: '0.5rem',
-                      border: `1px solid ${COLORS.text.light}`
+                      border: `1px solid ${COLORS.border}`
                     }}>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '1rem', alignItems: 'center' }}>
                         <div>
@@ -479,8 +500,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           />
                         </div>
@@ -497,8 +520,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           />
                         </div>
@@ -513,8 +538,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           >
                             {localSettings.currencies.map(curr => (
@@ -533,8 +560,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           >
                             {localSettings.paymentMethods.map(method => (
@@ -599,7 +628,7 @@ function Settings({ settings, onSave, onClose }) {
                     padding: '1.5rem',
                     background: COLORS.background,
                     borderRadius: '0.5rem',
-                    border: `1px solid ${COLORS.text.light}`
+                    border: `1px solid ${COLORS.input.border}`
                   }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr auto', gap: '1rem', alignItems: 'center' }}>
                       <div>
@@ -614,7 +643,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         />
@@ -632,7 +663,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         />
@@ -671,9 +704,11 @@ function Settings({ settings, onSave, onClose }) {
                     placeholder="e.g., JPY"
                     style={{
                       padding: '0.75rem',
-                      border: `1px solid ${COLORS.text.light}`,
+                      border: `1px solid ${COLORS.input.border}`,
                       borderRadius: '0.5rem',
-                      width: '150px'
+                      width: '150px',
+                      background: COLORS.input.bg,
+                      color: COLORS.input.text
                     }}
                   />
                   <button
@@ -740,9 +775,11 @@ function Settings({ settings, onSave, onClose }) {
                     placeholder="e.g., Wire Transfer"
                     style={{
                       padding: '0.75rem',
-                      border: `1px solid ${COLORS.text.light}`,
+                      border: `1px solid ${COLORS.input.border}`,
                       borderRadius: '0.5rem',
-                      width: '200px'
+                      width: '200px',
+                      background: COLORS.input.bg,
+                      color: COLORS.input.text
                     }}
                   />
                   <button
@@ -827,18 +864,18 @@ function Settings({ settings, onSave, onClose }) {
               {pendingAdmins.length > 0 && !showAddUser && !editingUser && (
                 <div style={{
                   padding: '1.5rem',
-                  background: '#fef3c7',
-                  border: '2px solid #fbbf24',
+                  background: 'rgba(251, 191, 36, 0.08)',
+                  border: '2px solid rgba(251, 191, 36, 0.3)',
                   borderRadius: '0.75rem',
                   marginBottom: '1.5rem'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                    <Clock size={20} color="#92400e" />
-                    <h4 style={{ margin: 0, color: '#92400e', fontSize: '1rem' }}>
+                    <Clock size={20} color="#FBBF24" />
+                    <h4 style={{ margin: 0, color: '#FBBF24', fontSize: '1rem' }}>
                       Pending Admin Approvals ({pendingAdmins.length})
                     </h4>
                   </div>
-                  <p style={{ color: '#a16207', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: '1.5' }}>
+                  <p style={{ color: '#D4A843', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: '1.5' }}>
                     These users have requested HQ administrator access. Please review and approve or reject.
                   </p>
                   <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -848,9 +885,9 @@ function Settings({ settings, onSave, onClose }) {
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         padding: '0.75rem 1rem',
-                        background: 'white',
+                        background: COLORS.surfaceLight,
                         borderRadius: '0.5rem',
-                        border: '1px solid #fbbf24'
+                        border: '1px solid rgba(251, 191, 36, 0.3)'
                       }}>
                         <div>
                           <div style={{ fontWeight: '600', color: COLORS.text.primary, fontSize: '0.9rem' }}>
@@ -924,9 +961,9 @@ function Settings({ settings, onSave, onClose }) {
                       style={{
                         flex: 1,
                         padding: '0.75rem',
-                        background: addUserMode === 'existing' ? COLORS.primary : 'white',
+                        background: addUserMode === 'existing' ? COLORS.primary : COLORS.surfaceLight,
                         color: addUserMode === 'existing' ? 'white' : COLORS.text.primary,
-                        border: `2px solid ${addUserMode === 'existing' ? COLORS.primary : COLORS.text.light}`,
+                        border: `2px solid ${addUserMode === 'existing' ? COLORS.primary : COLORS.input.border}`,
                         borderRadius: '0.5rem',
                         cursor: 'pointer',
                         fontWeight: 'bold',
@@ -941,9 +978,9 @@ function Settings({ settings, onSave, onClose }) {
                       style={{
                         flex: 1,
                         padding: '0.75rem',
-                        background: addUserMode === 'new' ? COLORS.primary : 'white',
+                        background: addUserMode === 'new' ? COLORS.primary : COLORS.surfaceLight,
                         color: addUserMode === 'new' ? 'white' : COLORS.text.primary,
-                        border: `2px solid ${addUserMode === 'new' ? COLORS.primary : COLORS.text.light}`,
+                        border: `2px solid ${addUserMode === 'new' ? COLORS.primary : COLORS.input.border}`,
                         borderRadius: '0.5rem',
                         cursor: 'pointer',
                         fontWeight: 'bold',
@@ -980,8 +1017,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           >
                             <option value="">Select existing user</option>
@@ -998,8 +1037,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           />
                         )}
@@ -1017,8 +1058,10 @@ function Settings({ settings, onSave, onClose }) {
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: `1px solid ${COLORS.text.light}`,
-                              borderRadius: '0.375rem'
+                              border: `1px solid ${COLORS.input.border}`,
+                              background: COLORS.input.bg,
+                              color: COLORS.input.text,
+                              borderRadius: '0.375rem',
                             }}
                           />
                         </div>
@@ -1034,7 +1077,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         >
@@ -1060,7 +1105,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         >
@@ -1128,9 +1175,10 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
                             borderRadius: '0.375rem',
-                            background: '#f5f5f5'
+                            background: 'rgba(0,0,0,0.2)',
+                            color: COLORS.text.secondary
                           }}
                         />
                       </div>
@@ -1145,7 +1193,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         >
@@ -1171,7 +1221,9 @@ function Settings({ settings, onSave, onClose }) {
                           style={{
                             width: '100%',
                             padding: '0.5rem',
-                            border: `1px solid ${COLORS.text.light}`,
+                            border: `1px solid ${COLORS.input.border}`,
+                            background: COLORS.input.bg,
+                            color: COLORS.input.text,
                             borderRadius: '0.375rem'
                           }}
                         >
@@ -1218,7 +1270,7 @@ function Settings({ settings, onSave, onClose }) {
               {!showAddUser && !editingUser && (
                 <div style={{ overflowX: 'auto' }}>
                   {loadingUsers ? (
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>Loading users...</div>
+                    <div style={{ textAlign: 'center', padding: '2rem', color: COLORS.text.secondary }}>Loading users...</div>
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                       <thead>
@@ -1232,16 +1284,16 @@ function Settings({ settings, onSave, onClose }) {
                       </thead>
                       <tbody>
                         {users.map((user) => (
-                          <tr key={user.id} style={{ borderBottom: `1px solid ${COLORS.background}` }}>
-                            <td style={{ padding: '1rem' }}>{user.email}</td>
-                            <td style={{ padding: '1rem' }}>
+                          <tr key={user.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                            <td style={{ padding: '1rem', color: COLORS.text.primary }}>{user.email}</td>
+                            <td style={{ padding: '1rem', color: COLORS.text.primary }}>
                               {user.branchName ? (
                                 user.branchName
                               ) : (
                                 <span style={{
                                   padding: '0.2rem 0.6rem',
-                                  background: '#fef3c7',
-                                  color: '#92400e',
+                                  background: 'rgba(251, 191, 36, 0.15)',
+                                  color: '#FBBF24',
                                   borderRadius: '0.25rem',
                                   fontSize: '0.8rem'
                                 }}>
@@ -1343,7 +1395,7 @@ function Settings({ settings, onSave, onClose }) {
         {/* Footer */}
         <div style={{
           padding: '1.5rem',
-          borderTop: `1px solid ${COLORS.background}`,
+          borderTop: `1px solid ${COLORS.border}`,
           display: 'flex',
           justifyContent: 'flex-end',
           gap: '1rem',
@@ -1368,7 +1420,7 @@ function Settings({ settings, onSave, onClose }) {
             disabled={saving}
             style={{
               padding: '0.75rem 1.5rem',
-              background: saving ? COLORS.text.light : COLORS.success,
+              background: saving ? COLORS.input.border : COLORS.success,
               color: 'white',
               border: 'none',
               borderRadius: '0.5rem',
