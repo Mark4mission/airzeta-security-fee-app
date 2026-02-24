@@ -95,7 +95,7 @@ function ProtectedRoutes() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/security-fee" element={<SecurityFeePage />} />
-        <Route path="/bulletin" element={<BulletinPage />} />
+        <Route path="/bulletin/*" element={<BulletinPage />} />
         <Route path="/security-level" element={<SecurityLevelPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

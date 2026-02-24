@@ -9,3 +9,60 @@ body {
   background: #0F2030;
   color: #E8EAED;
 }
+
+/* Ensure dropdown options are always readable */
+option {
+  background: #1A3A5C;
+  color: #E8EAED;
+}
+
+/* Ensure inputs/selects within dark backgrounds are readable */
+input::placeholder,
+textarea::placeholder {
+  color: #5F6B7A;
+}
+
+/* Quill editor overrides for dark theme */
+.ql-toolbar.ql-snow {
+  border-color: #1E3A5F !important;
+  background: #132F4C !important;
+}
+.ql-toolbar.ql-snow .ql-stroke {
+  stroke: #8B99A8 !important;
+}
+.ql-toolbar.ql-snow .ql-fill {
+  fill: #8B99A8 !important;
+}
+.ql-toolbar.ql-snow .ql-picker-label {
+  color: #8B99A8 !important;
+}
+.ql-toolbar.ql-snow .ql-picker-options {
+  background: #132F4C !important;
+  border-color: #1E3A5F !important;
+}
+.ql-toolbar.ql-snow .ql-picker-item {
+  color: #E8EAED !important;
+}
+.ql-container.ql-snow {
+  border-color: #1E3A5F !important;
+  background: #1A3A5C !important;
+}
+.ql-editor {
+  color: #E8EAED !important;
+}
+.ql-editor.ql-blank::before {
+  color: #5F6B7A !important;
+}
+
+/* Print styles */
+@media print {
+  .print\\:hidden {
+    display: none !important;
+  }
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+  .print\\:border-none {
+    border: none !important;
+  }
+}
