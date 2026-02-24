@@ -515,3 +515,103 @@ export const loadSettingsFromFirestore = async () => {
     throw error;
   }
 };
+
+// ============================================================
+// Monthly Attachments 관련 함수 (지점+월별 첨부파일)
+// ============================================================
+
+/**
+ * 첨부파일을 Firestore에 저장
+ * 컬렉션: attachments, 문서 ID: 자동생성
+ * @param {string} branchName - 지점명
+ * @param {string} yearMonth - '2026-01' 형태
+ * @param {string} fileName - 파일명
+ * @param {string} fileBase64 - base64 인코딩된 파일 데이터
+ * @param {string} fileType - MIME type
+ * @param {number} fileSize - 파일 크기 (bytes)
+ */
+export const saveAttachment = async (branchName, yearMonth, fileName, fileBase64, fileType, fileSize) => {
+  try {
+    await ensureAuthenticated();
+    const docRef = await addDoc(collection(db, 'attachments'), {
+      branchName,
+      yearMonth,
+      fileName,
+      fileBase64,
+      fileType,
+      fileSize,
+      uploadedAt: serverTimestamp()
+    });
+    console.log(`[Attachment] ${branchName}/${yearMonth}: ${fileName} 저장 완료 (${(fileSize / 1024).toFixed(1)}KB)`);
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error('[Attachment] 저장 에러:', error);
+    throw error;
+  }
+};
+
+/**
+ * 특정 지점+월의 모든 첨부파일 메타 로드 (base64 제외, 목록용)
+ * @param {string} branchName
+ * @param {string} yearMonth
+ * @returns {Array<{id, fileName, fileType, fileSize, uploadedAt}>}
+ */
+export const loadAttachments = async (branchName, yearMonth) => {
+  try {
+    await ensureAuthenticated();
+    const q = query(
+      collection(db, 'attachments'),
+      where('branchName', '==', branchName),
+      where('yearMonth', '==', yearMonth)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        fileName: data.fileName,
+        fileType: data.fileType,
+        fileSize: data.fileSize,
+        uploadedAt: data.uploadedAt
+      };
+    });
+  } catch (error) {
+    console.error('[Attachment] 로드 에러:', error);
+    return [];
+  }
+};
+
+/**
+ * 특정 첨부파일의 전체 데이터 로드 (base64 포함, 미리보기용)
+ * @param {string} docId - Firestore 문서 ID
+ */
+export const loadAttachmentData = async (docId) => {
+  try {
+    await ensureAuthenticated();
+    const docRef = doc(db, 'attachments', docId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    return null;
+  } catch (error) {
+    console.error('[Attachment] 데이터 로드 에러:', error);
+    return null;
+  }
+};
+
+/**
+ * 특정 첨부파일 삭제
+ * @param {string} docId - Firestore 문서 ID
+ */
+export const deleteAttachment = async (docId) => {
+  try {
+    await ensureAuthenticated();
+    await deleteDoc(doc(db, 'attachments', docId));
+    console.log(`[Attachment] ${docId} 삭제 완료`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Attachment] 삭제 에러:', error);
+    throw error;
+  }
+};
