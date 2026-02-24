@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload, Eye, Trash } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Shield, DollarSign, Calendar, User, Settings as SettingsIcon, LogOut, Plus, Trash2, Upload, Eye, Trash, Paperclip, X } from 'lucide-react';
 import readXlsxFile from 'read-excel-file';
 import './App.css';
 import { serverTimestamp } from 'firebase/firestore';
@@ -14,7 +14,11 @@ import {
   loadExchangeRatesByYear,
   saveContractFile,
   loadContractFile,
-  deleteContractFile
+  deleteContractFile,
+  saveAttachment,
+  loadAttachments,
+  loadAttachmentData,
+  deleteAttachment
 } from './firebase/collections';
 import { 
   listenToAuthChanges, 
@@ -134,7 +138,14 @@ function App() {
   const [contractYear, setContractYear] = useState(new Date().getFullYear().toString());
   const [contractFile, setContractFile] = useState(null); // { fileName, fileType, fileSize, uploadedAt }
   const [contractLoading, setContractLoading] = useState(false);
-  const contractInputRef = React.useRef(null);
+  const contractInputRef = useRef(null);
+
+  // 월별 첨부파일 상태
+  const [attachments, setAttachments] = useState([]); // [{id, fileName, fileType, fileSize, uploadedAt}]
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const attachmentInputRef = useRef(null);
 
   // 설정 상태
   const [settings, setSettings] = useState(() => {
@@ -249,6 +260,27 @@ function App() {
     };
     loadContract();
   }, [authLoading, currentUser, branchName, contractYear]);
+
+  // 월별 첨부파일 로드 (branchName + targetMonth 변경 시)
+  useEffect(() => {
+    const loadFiles = async () => {
+      if (!authLoading && currentUser && branchName && targetMonth) {
+        setAttachmentsLoading(true);
+        try {
+          const files = await loadAttachments(branchName, targetMonth);
+          setAttachments(files);
+        } catch (error) {
+          console.error('[App] Attachments load failed:', error);
+          setAttachments([]);
+        } finally {
+          setAttachmentsLoading(false);
+        }
+      } else {
+        setAttachments([]);
+      }
+    };
+    loadFiles();
+  }, [authLoading, currentUser, branchName, targetMonth]);
 
   // 메시지 자동 제거
   useEffect(() => {
@@ -683,6 +715,97 @@ function App() {
       setMessage({ type: 'error', text: 'Failed to delete contract file.' });
     } finally {
       setContractLoading(false);
+    }
+  };
+
+  // 월별 첨부파일 업로드 처리 (멀티 파일)
+  const handleAttachmentUpload = async (files) => {
+    if (!branchName || !targetMonth) {
+      setMessage({ type: 'error', text: 'Please select a station and target month first.' });
+      return;
+    }
+    const fileList = Array.from(files);
+    if (fileList.length === 0) return;
+
+    // 개별 파일 크기 제한 (1MB)
+    const oversized = fileList.filter(f => f.size > 1024 * 1024);
+    if (oversized.length > 0) {
+      setMessage({ type: 'error', text: `File(s) too large (max 1MB each): ${oversized.map(f => f.name).join(', ')}` });
+      return;
+    }
+
+    setAttachmentUploading(true);
+    let uploaded = 0;
+    try {
+      for (const file of fileList) {
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target.result.split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        await saveAttachment(branchName, targetMonth, file.name, base64, file.type, file.size);
+        uploaded++;
+      }
+      // 목록 리프레시
+      const refreshed = await loadAttachments(branchName, targetMonth);
+      setAttachments(refreshed);
+      setMessage({ type: 'success', text: `${uploaded} file(s) uploaded for ${branchName} — ${targetMonth}` });
+    } catch (error) {
+      console.error('[Attachment] Upload error:', error);
+      setMessage({ type: 'error', text: `Uploaded ${uploaded}/${fileList.length} file(s). Error: ${error.message}` });
+      // 부분 성공 시에도 목록 리프레시
+      const refreshed = await loadAttachments(branchName, targetMonth);
+      setAttachments(refreshed);
+    } finally {
+      setAttachmentUploading(false);
+    }
+  };
+
+  // 첨부파일 미리보기
+  const handleViewAttachment = async (docId) => {
+    try {
+      const data = await loadAttachmentData(docId);
+      if (data?.fileBase64) {
+        const byteCharacters = atob(data.fileBase64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: data.fileType });
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+      } else {
+        setMessage({ type: 'warning', text: 'File data not found.' });
+      }
+    } catch (error) {
+      console.error('[Attachment] View error:', error);
+      setMessage({ type: 'error', text: 'Failed to open file.' });
+    }
+  };
+
+  // 첨부파일 삭제
+  const handleDeleteAttachment = async (docId, fileName) => {
+    if (!window.confirm(`Delete "${fileName}"?`)) return;
+    try {
+      await deleteAttachment(docId);
+      setAttachments(prev => prev.filter(a => a.id !== docId));
+      setMessage({ type: 'success', text: `Deleted: ${fileName}` });
+    } catch (error) {
+      console.error('[Attachment] Delete error:', error);
+      setMessage({ type: 'error', text: 'Failed to delete file.' });
+    }
+  };
+
+  // 드래그앤드롭 핸들러
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setIsDragOver(false); };
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      handleAttachmentUpload(e.dataTransfer.files);
     }
   };
 
@@ -1851,6 +1974,173 @@ function App() {
             </button>
           </div>
         </form>
+
+        {/* 월별 첨부파일 섹션 */}
+        {branchName && targetMonth && (
+          <section style={{
+            background: COLORS.surface,
+            padding: '1.5rem 2rem',
+            borderRadius: '1rem',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            marginTop: '2rem',
+            marginBottom: '2rem'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem'
+            }}>
+              <h2 style={{
+                fontSize: '1.25rem',
+                fontWeight: 'bold',
+                color: COLORS.text.primary,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                margin: 0
+              }}>
+                <Paperclip size={22} color={COLORS.primary} />
+                Attachments
+                <span style={{ fontSize: '0.75rem', fontWeight: '400', color: COLORS.text.secondary }}>
+                  — {branchName} / {targetMonth}
+                </span>
+              </h2>
+              {attachments.length > 0 && (
+                <span style={{ fontSize: '0.7rem', color: COLORS.text.light }}>
+                  {attachments.length} file{attachments.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {/* 드래그 앤 드롭 / 파일 선택 영역 */}
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => attachmentInputRef.current?.click()}
+              style={{
+                border: `2px dashed ${isDragOver ? COLORS.primary : '#d1d5db'}`,
+                borderRadius: '0.75rem',
+                padding: '1.25rem',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: isDragOver ? '#eef2ff' : '#fafbfc',
+                transition: 'all 0.2s ease',
+                marginBottom: attachments.length > 0 ? '1rem' : 0
+              }}
+            >
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt,.csv,.zip"
+                onChange={(e) => {
+                  handleAttachmentUpload(e.target.files);
+                  e.target.value = '';
+                }}
+                style={{ display: 'none' }}
+              />
+              {attachmentUploading ? (
+                <div style={{ color: COLORS.primary, fontSize: '0.85rem', fontWeight: '500' }}>
+                  <div style={{
+                    width: '20px', height: '20px',
+                    border: `3px solid ${COLORS.text.light}`,
+                    borderTop: `3px solid ${COLORS.primary}`,
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    display: 'inline-block', verticalAlign: 'middle', marginRight: '0.5rem'
+                  }} />
+                  Uploading...
+                </div>
+              ) : (
+                <>
+                  <Upload size={24} color={isDragOver ? COLORS.primary : COLORS.text.light} style={{ marginBottom: '0.4rem' }} />
+                  <p style={{ fontSize: '0.85rem', color: isDragOver ? COLORS.primary : COLORS.text.secondary, margin: '0 0 0.2rem 0', fontWeight: '500' }}>
+                    {isDragOver ? 'Drop files here' : 'Drag & drop files here, or click to browse'}
+                  </p>
+                  <p style={{ fontSize: '0.7rem', color: COLORS.text.light, margin: 0 }}>
+                    PDF, DOC, XLS, JPG, PNG, ZIP, etc. · Max 1MB per file
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* 첨부파일 목록 */}
+            {attachmentsLoading ? (
+              <div style={{ textAlign: 'center', padding: '1rem', color: COLORS.text.light, fontSize: '0.8rem' }}>
+                Loading files...
+              </div>
+            ) : attachments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {attachments.map(att => {
+                  const sizeKB = att.fileSize ? (att.fileSize / 1024).toFixed(1) : '?';
+                  const isImage = att.fileType?.startsWith('image/');
+                  const isPdf = att.fileType === 'application/pdf';
+                  return (
+                    <div key={att.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.5rem 0.75rem',
+                      background: '#f9fafb',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.8rem'
+                    }}>
+                      {/* 파일 아이콘 */}
+                      <div style={{
+                        width: '28px', height: '28px', borderRadius: '0.25rem',
+                        background: isImage ? '#dbeafe' : isPdf ? '#fee2e2' : '#f3f4f6',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <Paperclip size={14} color={isImage ? COLORS.info : isPdf ? COLORS.error : COLORS.text.secondary} />
+                      </div>
+                      {/* 파일명 */}
+                      <span style={{
+                        flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        color: COLORS.text.primary, fontWeight: '500'
+                      }} title={att.fileName}>
+                        {att.fileName}
+                      </span>
+                      {/* 크기 */}
+                      <span style={{ fontSize: '0.65rem', color: COLORS.text.light, flexShrink: 0 }}>
+                        {sizeKB}KB
+                      </span>
+                      {/* 보기 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handleViewAttachment(att.id)}
+                        title="View file"
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: '3px', display: 'flex', alignItems: 'center',
+                          color: COLORS.info, borderRadius: '0.25rem'
+                        }}
+                      >
+                        <Eye size={15} />
+                      </button>
+                      {/* 삭제 버튼 */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttachment(att.id, att.fileName)}
+                        title="Delete file"
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: '3px', display: 'flex', alignItems: 'center',
+                          color: COLORS.error, borderRadius: '0.25rem'
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 비용 히스토리 - 관리자(브랜치 선택 시) 및 지점 사용자 모두 표시 */}
         {branchName && (
