@@ -377,34 +377,42 @@ export const loadExchangeRates = async () => {
 };
 
 // ============================================================
-// Contract File 관련 함수 (연도별 계약서 파일)
+// Contract File 관련 함수 (연도별 계약서 파일 - chunk 분할 저장)
 // ============================================================
 
+// Firestore 문서 최대 크기 ~1MB → base64 chunk 크기를 700KB로 설정
+const CHUNK_SIZE = 700 * 1024; // 700KB per chunk (base64 string length)
+
 /**
- * 계약서 파일을 Firestore에 저장 (base64)
- * 문서 ID: {branchName}_{year} (예: "Seoul Station_2026")
- * @param {string} branchName - 지점명
- * @param {string} year - 연도 (예: '2026')
- * @param {string} fileName - 파일명
- * @param {string} fileBase64 - base64 인코딩된 파일 데이터
- * @param {string} fileType - MIME type (예: 'application/pdf')
- * @param {number} fileSize - 파일 크기 (bytes)
+ * 계약서 파일을 Firestore에 저장 (chunk 분할)
+ * 메타 문서: contracts/{branchName}_{year}
+ * 청크: contracts/{branchName}_{year}/chunks/0, 1, 2, ...
  */
 export const saveContractFile = async (branchName, year, fileName, fileBase64, fileType, fileSize) => {
   try {
     await ensureAuthenticated();
     const docId = `${branchName}_${year}`;
     const contractRef = doc(db, 'contracts', docId);
+    
+    // 기존 chunk 삭제
+    const chunksSnap = await getDocs(collection(db, 'contracts', docId, 'chunks'));
+    for (const d of chunksSnap.docs) {
+      await deleteDoc(doc(db, 'contracts', docId, 'chunks', d.id));
+    }
+    
+    // base64를 chunk로 분할 저장
+    const totalChunks = Math.ceil(fileBase64.length / CHUNK_SIZE);
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = fileBase64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      await setDoc(doc(db, 'contracts', docId, 'chunks', String(i)), { data: chunk });
+    }
+    
+    // 메타 문서 저장 (base64 없이)
     await setDoc(contractRef, {
-      branchName,
-      year,
-      fileName,
-      fileBase64,
-      fileType,
-      fileSize,
+      branchName, year, fileName, fileType, fileSize, totalChunks,
       uploadedAt: serverTimestamp()
     });
-    console.log(`[Contract] ${docId}: 계약서 저장 완료 (${fileName}, ${(fileSize / 1024).toFixed(1)}KB)`);
+    console.log(`[Contract] ${docId}: 계약서 저장 완료 (${fileName}, ${(fileSize / 1024).toFixed(1)}KB, ${totalChunks} chunks)`);
     return { success: true };
   } catch (error) {
     console.error('[Contract] 저장 에러:', error);
@@ -413,10 +421,7 @@ export const saveContractFile = async (branchName, year, fileName, fileBase64, f
 };
 
 /**
- * 특정 지점의 특정 연도 계약서 파일 로드
- * @param {string} branchName - 지점명
- * @param {string} year - 연도
- * @returns {{ fileName, fileBase64, fileType, fileSize, uploadedAt } | null}
+ * 특정 지점의 특정 연도 계약서 파일 로드 (메타만)
  */
 export const loadContractFile = async (branchName, year) => {
   try {
@@ -425,7 +430,10 @@ export const loadContractFile = async (branchName, year) => {
     const contractRef = doc(db, 'contracts', docId);
     const contractDoc = await getDoc(contractRef);
     if (contractDoc.exists()) {
-      return contractDoc.data();
+      const data = contractDoc.data();
+      // 하위 호환: 기존 단일 문서에 fileBase64가 있으면 그대로 반환
+      if (data.fileBase64) return data;
+      return { ...data, _chunked: true };
     }
     return null;
   } catch (error) {
@@ -435,14 +443,44 @@ export const loadContractFile = async (branchName, year) => {
 };
 
 /**
+ * 계약서 파일 base64 데이터 로드 (chunk 재조립)
+ */
+export const loadContractFileData = async (branchName, year) => {
+  try {
+    await ensureAuthenticated();
+    const docId = `${branchName}_${year}`;
+    const meta = await loadContractFile(branchName, year);
+    if (!meta) return null;
+    
+    // 하위 호환: 기존 단일 문서
+    if (meta.fileBase64) return meta;
+    
+    // chunk 재조립
+    const chunksSnap = await getDocs(collection(db, 'contracts', docId, 'chunks'));
+    const chunks = chunksSnap.docs
+      .sort((a, b) => parseInt(a.id) - parseInt(b.id))
+      .map(d => d.data().data);
+    const fileBase64 = chunks.join('');
+    return { ...meta, fileBase64 };
+  } catch (error) {
+    console.error('[Contract] 데이터 로드 에러:', error);
+    return null;
+  }
+};
+
+/**
  * 특정 지점의 특정 연도 계약서 파일 삭제
- * @param {string} branchName - 지점명
- * @param {string} year - 연도
  */
 export const deleteContractFile = async (branchName, year) => {
   try {
     await ensureAuthenticated();
     const docId = `${branchName}_${year}`;
+    // chunk 삭제
+    const chunksSnap = await getDocs(collection(db, 'contracts', docId, 'chunks'));
+    for (const d of chunksSnap.docs) {
+      await deleteDoc(doc(db, 'contracts', docId, 'chunks', d.id));
+    }
+    // 메타 문서 삭제
     await deleteDoc(doc(db, 'contracts', docId));
     console.log(`[Contract] ${docId}: 계약서 삭제 완료`);
     return { success: true };
@@ -517,32 +555,31 @@ export const loadSettingsFromFirestore = async () => {
 };
 
 // ============================================================
-// Monthly Attachments 관련 함수 (지점+월별 첨부파일)
+// Monthly Attachments 관련 함수 (지점+월별 첨부파일 - chunk 분할 저장)
 // ============================================================
 
 /**
- * 첨부파일을 Firestore에 저장
- * 컬렉션: attachments, 문서 ID: 자동생성
- * @param {string} branchName - 지점명
- * @param {string} yearMonth - '2026-01' 형태
- * @param {string} fileName - 파일명
- * @param {string} fileBase64 - base64 인코딩된 파일 데이터
- * @param {string} fileType - MIME type
- * @param {number} fileSize - 파일 크기 (bytes)
+ * 첨부파일을 Firestore에 저장 (chunk 분할)
+ * 메타: attachments/{autoId}, 청크: attachments/{autoId}/chunks/0,1,...
  */
 export const saveAttachment = async (branchName, yearMonth, fileName, fileBase64, fileType, fileSize) => {
   try {
     await ensureAuthenticated();
+    
+    // 메타 문서 먼저 생성 (base64 없이)
+    const totalChunks = Math.ceil(fileBase64.length / CHUNK_SIZE);
     const docRef = await addDoc(collection(db, 'attachments'), {
-      branchName,
-      yearMonth,
-      fileName,
-      fileBase64,
-      fileType,
-      fileSize,
+      branchName, yearMonth, fileName, fileType, fileSize, totalChunks,
       uploadedAt: serverTimestamp()
     });
-    console.log(`[Attachment] ${branchName}/${yearMonth}: ${fileName} 저장 완료 (${(fileSize / 1024).toFixed(1)}KB)`);
+    
+    // chunk 분할 저장
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = fileBase64.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      await setDoc(doc(db, 'attachments', docRef.id, 'chunks', String(i)), { data: chunk });
+    }
+    
+    console.log(`[Attachment] ${branchName}/${yearMonth}: ${fileName} 저장 완료 (${(fileSize / 1024).toFixed(1)}KB, ${totalChunks} chunks)`);
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('[Attachment] 저장 에러:', error);
@@ -552,9 +589,6 @@ export const saveAttachment = async (branchName, yearMonth, fileName, fileBase64
 
 /**
  * 특정 지점+월의 모든 첨부파일 메타 로드 (base64 제외, 목록용)
- * @param {string} branchName
- * @param {string} yearMonth
- * @returns {Array<{id, fileName, fileType, fileSize, uploadedAt}>}
  */
 export const loadAttachments = async (branchName, yearMonth) => {
   try {
@@ -582,18 +616,26 @@ export const loadAttachments = async (branchName, yearMonth) => {
 };
 
 /**
- * 특정 첨부파일의 전체 데이터 로드 (base64 포함, 미리보기용)
- * @param {string} docId - Firestore 문서 ID
+ * 특정 첨부파일의 전체 데이터 로드 (chunk 재조립, 미리보기용)
  */
 export const loadAttachmentData = async (docId) => {
   try {
     await ensureAuthenticated();
     const docRef = doc(db, 'attachments', docId);
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data();
-    }
-    return null;
+    if (!docSnap.exists()) return null;
+    const meta = docSnap.data();
+    
+    // 하위 호환: 기존 단일 문서에 fileBase64가 있으면 그대로 반환
+    if (meta.fileBase64) return meta;
+    
+    // chunk 재조립
+    const chunksSnap = await getDocs(collection(db, 'attachments', docId, 'chunks'));
+    const chunks = chunksSnap.docs
+      .sort((a, b) => parseInt(a.id) - parseInt(b.id))
+      .map(d => d.data().data);
+    const fileBase64 = chunks.join('');
+    return { ...meta, fileBase64 };
   } catch (error) {
     console.error('[Attachment] 데이터 로드 에러:', error);
     return null;
@@ -601,12 +643,17 @@ export const loadAttachmentData = async (docId) => {
 };
 
 /**
- * 특정 첨부파일 삭제
- * @param {string} docId - Firestore 문서 ID
+ * 특정 첨부파일 삭제 (chunk 포함)
  */
 export const deleteAttachment = async (docId) => {
   try {
     await ensureAuthenticated();
+    // chunk 삭제
+    const chunksSnap = await getDocs(collection(db, 'attachments', docId, 'chunks'));
+    for (const d of chunksSnap.docs) {
+      await deleteDoc(doc(db, 'attachments', docId, 'chunks', d.id));
+    }
+    // 메타 문서 삭제
     await deleteDoc(doc(db, 'attachments', docId));
     console.log(`[Attachment] ${docId} 삭제 완료`);
     return { success: true };
