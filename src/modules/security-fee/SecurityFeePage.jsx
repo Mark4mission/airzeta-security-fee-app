@@ -42,6 +42,12 @@ const COLORS = {
     light: '#5F6B7A'
   },
   border: '#1E3A5F',
+  // Light-theme input colors for cost item fields
+  input: {
+    bg: '#EDF2F7',
+    text: '#1a1a1a',
+    border: '#CBD5E0',
+  },
 };
 
 // 통화 기호 매핑
@@ -780,7 +786,7 @@ function SecurityFeePage() {
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Cost Item</label>
                       <select value={item.item} onChange={(e) => handleItemChange(index, e.target.value)} required
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.surface, color: COLORS.text.primary }}>
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         <option value="">Select Item</option>
                         {settings.costItems.map(ci => <option key={ci.name} value={ci.name}>{ci.name}</option>)}
                         {item.item && !settings.costItems.some(ci => ci.name === item.item) && <option value={item.item}>{item.item} (custom)</option>}
@@ -789,7 +795,7 @@ function SecurityFeePage() {
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Currency</label>
                       <select value={itemCurrency} onChange={(e) => handleCurrencyChange(index, e.target.value)}
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.surface, color: COLORS.text.primary }}>
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         {settings.currencies.map(c => <option key={c} value={c}>{c} ({CURRENCY_SYMBOLS[c] || ''})</option>)}
                       </select>
                     </div>
@@ -800,7 +806,7 @@ function SecurityFeePage() {
                         onFocus={() => { const n = [...costItems]; n[index]._unitPriceFocused = true; setCostItems(n); }}
                         onBlur={() => { const n = [...costItems]; n[index]._unitPriceFocused = false; setCostItems(n); }}
                         disabled={!canEditEstimatedCost()} placeholder="0"
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? 'rgba(0,0,0,0.1)' : COLORS.surface, color: COLORS.text.primary }} />
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? '#E2E8F0' : COLORS.input.bg, color: COLORS.input.text }} />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Qty</label>
@@ -809,17 +815,17 @@ function SecurityFeePage() {
                         onFocus={() => { const n = [...costItems]; n[index]._qtyFocused = true; setCostItems(n); }}
                         onBlur={() => { const n = [...costItems]; n[index]._qtyFocused = false; setCostItems(n); }}
                         disabled={!canEditEstimatedCost()} placeholder="0"
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? 'rgba(0,0,0,0.1)' : COLORS.surface, color: COLORS.text.primary }} />
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? '#E2E8F0' : COLORS.input.bg, color: COLORS.input.text }} />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Unit</label>
                       <input type="text" value={item.qtyUnit || ''} onChange={(e) => handleInputChange(index, 'qtyUnit', e.target.value)} placeholder="kg, hr..."
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.7rem', background: COLORS.surface, color: COLORS.text.primary, textAlign: 'center' }} />
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.7rem', background: COLORS.input.bg, color: COLORS.input.text, textAlign: 'center' }} />
                     </div>
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Payment</label>
                       <select value={item.paymentMethod} onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.surface, color: COLORS.text.primary }}>
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         <option value="">Select</option>
                         {settings.paymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
                         {item.paymentMethod && !settings.paymentMethods.includes(item.paymentMethod) && <option value={item.paymentMethod}>{item.paymentMethod} (custom)</option>}
@@ -849,7 +855,7 @@ function SecurityFeePage() {
                         onFocus={() => { const n = [...costItems]; n[index]._actualCostFocused = true; setCostItems(n); }}
                         onBlur={() => { const n = [...costItems]; n[index]._actualCostFocused = false; setCostItems(n); }}
                         disabled={!canEditActualCost()} placeholder={canEditActualCost() ? "Enter amount" : "After 28th"}
-                        style={{ width: '100%', padding: '0.4rem', border: `2px solid ${actCost > 0 ? 'rgba(233,69,96,0.4)' : COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.9rem', fontWeight: actCost > 0 ? '800' : '400', textAlign: 'right', color: actCost > 0 ? COLORS.secondary : COLORS.text.primary, background: !canEditActualCost() ? 'rgba(0,0,0,0.1)' : actCost > 0 ? 'rgba(233,69,96,0.05)' : COLORS.surface }} />
+                        style={{ width: '100%', padding: '0.4rem', border: `2px solid ${actCost > 0 ? 'rgba(233,69,96,0.4)' : COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.9rem', fontWeight: actCost > 0 ? '800' : '400', textAlign: 'right', color: actCost > 0 ? '#b91c1c' : COLORS.input.text, background: !canEditActualCost() ? '#E2E8F0' : actCost > 0 ? '#FFF5F5' : COLORS.input.bg }} />
                       {actCost > 0 && hasMonthlyRate && convertToKRW(actCost, itemCurrency) !== null && (
                         <div style={{ fontSize: '0.58rem', color: COLORS.text.secondary, textAlign: 'right', marginTop: '0.08rem' }}>
                           {`\u2248 \u20A9${formatNumberInt(convertToKRW(actCost, itemCurrency))}`}
@@ -859,7 +865,7 @@ function SecurityFeePage() {
                     <div>
                       <label style={{ fontSize: '0.6rem', fontWeight: '600', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Notes</label>
                       <input type="text" value={item.notes} onChange={(e) => handleInputChange(index, 'notes', e.target.value)} placeholder="Optional notes"
-                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.surface, color: COLORS.text.primary }} />
+                        style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }} />
                     </div>
                   </div>
                 </div>

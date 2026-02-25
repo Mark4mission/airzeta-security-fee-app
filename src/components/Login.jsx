@@ -436,7 +436,8 @@ function Login() {
                   placeholder="Your name"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>
@@ -579,7 +580,8 @@ function Login() {
                 placeholder="you@example.com"
                 style={{
                   width: '100%', padding: '0.75rem',
-                  border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                  border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                  background: 'white', color: '#1a1a1a'
                 }}
               />
               <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem' }}>
