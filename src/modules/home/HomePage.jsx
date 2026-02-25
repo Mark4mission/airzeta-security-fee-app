@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock, FileText } from 'lucide-react';
+import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 
@@ -125,6 +126,9 @@ function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Global Security News Section */}
+      <GlobalSecurityNews />
 
       {/* Module Cards */}
       <div style={{
