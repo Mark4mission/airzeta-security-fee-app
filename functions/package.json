@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Firebase Cloud Functions for Airzeta Security System - News scraper, AI filtering, email alerts",
   "main": "index.js",
-  "type": "module",
   "engines": {
     "node": "20"
   },

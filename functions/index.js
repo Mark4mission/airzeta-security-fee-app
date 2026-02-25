@@ -5,17 +5,17 @@
  * 2. onCriticalNewsCreated: Firestore trigger for critical news email alerts
  * 3. manualScrapeNews: HTTPS callable for manual trigger (admin)
  * 
- * Uses: Gemini 2.5 Flash-Lite (Stable) via Firebase AI Logic
+ * Uses: Gemini 2.5 Flash-Lite (Stable) via Google Generative AI SDK
  */
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import Parser from "rss-parser";
-import * as cheerio from "cheerio";
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Parser = require("rss-parser");
+const cheerio = require("cheerio");
 
 initializeApp();
 const db = getFirestore();
@@ -123,7 +123,7 @@ function extractImageFromContent(htmlContent) {
     const $ = cheerio.load(htmlContent);
     const img = $("img").first().attr("src");
     return img || "";
-  } catch {
+  } catch (e) {
     return "";
   }
 }
@@ -283,7 +283,7 @@ async function runScrapePipeline() {
 
   if (!oldDocs.empty) {
     const deleteBatch = db.batch();
-    oldDocs.docs.forEach((doc) => deleteBatch.delete(doc.ref));
+    oldDocs.docs.forEach((d) => deleteBatch.delete(d.ref));
     await deleteBatch.commit();
     console.log(`[Pipeline] Cleaned up ${oldDocs.size} old news items`);
   }
@@ -298,13 +298,14 @@ async function runScrapePipeline() {
 /**
  * Scheduled function: runs daily at 07:00 UTC (16:00 KST)
  */
-export const scrapeSecurityNews = onSchedule(
+exports.scrapeSecurityNews = onSchedule(
   {
     schedule: "0 7 * * *",
     timeZone: "Asia/Seoul",
     region: "asia-northeast3",
     memory: "512MiB",
     timeoutSeconds: 120,
+    secrets: ["GEMINI_API_KEY"],
   },
   async () => {
     const result = await runScrapePipeline();
@@ -315,11 +316,12 @@ export const scrapeSecurityNews = onSchedule(
 /**
  * Manual trigger for admin (HTTPS callable)
  */
-export const manualScrapeNews = onCall(
+exports.manualScrapeNews = onCall(
   {
     region: "asia-northeast3",
     memory: "512MiB",
     timeoutSeconds: 120,
+    secrets: ["GEMINI_API_KEY"],
   },
   async (request) => {
     // Verify admin
@@ -327,8 +329,8 @@ export const manualScrapeNews = onCall(
       throw new HttpsError("unauthenticated", "Must be authenticated");
     }
 
-    const userDoc = await db.collection("users").where("uid", "==", request.auth.uid).get();
-    const userData = userDoc.docs[0]?.data();
+    const userDoc = await db.collection("users").doc(request.auth.uid).get();
+    const userData = userDoc.data();
     if (!userData || userData.role !== "hq_admin") {
       throw new HttpsError("permission-denied", "Admin access required");
     }
@@ -341,7 +343,7 @@ export const manualScrapeNews = onCall(
 /**
  * Firestore trigger: send email alert when critical news is created
  */
-export const onCriticalNewsCreated = onDocumentCreated(
+exports.onCriticalNewsCreated = onDocumentCreated(
   {
     document: "securityNews/{newsId}",
     region: "asia-northeast3",
@@ -353,9 +355,9 @@ export const onCriticalNewsCreated = onDocumentCreated(
     console.log("[Alert] Critical news detected:", data.headlineEn);
 
     // Get all registered user emails
-    const usersSnapshot = await db.collection("users").where("active", "!=", false).get();
+    const usersSnapshot = await db.collection("users").get();
     const emails = usersSnapshot.docs
-      .map((doc) => doc.data().email)
+      .map((d) => d.data().email)
       .filter(Boolean);
 
     if (emails.length === 0) {
