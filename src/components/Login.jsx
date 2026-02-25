@@ -185,7 +185,7 @@ function Login() {
       background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
       padding: '2rem'
     }}>
-      <div style={{
+      <div className="light-inputs" style={{
         background: 'white',
         padding: '3rem',
         borderRadius: '1rem',
@@ -308,7 +308,8 @@ function Login() {
                   placeholder="you@example.com"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>
@@ -325,7 +326,8 @@ function Login() {
                   placeholder="Enter your password"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>
@@ -454,7 +456,8 @@ function Login() {
                   placeholder="you@example.com"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>
@@ -472,7 +475,8 @@ function Login() {
                   placeholder="At least 6 characters"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>
@@ -490,7 +494,8 @@ function Login() {
                   placeholder="Re-enter your password"
                   style={{
                     width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem'
+                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                    background: 'white', color: '#1a1a1a'
                   }}
                 />
               </div>

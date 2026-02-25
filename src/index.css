@@ -16,6 +16,35 @@ option {
   color: #E8EAED;
 }
 
+/* Light-background containers: force dark text on inputs */
+input,
+textarea,
+select {
+  color: inherit;
+}
+
+/* Override: inputs/selects inside white/light-background containers must show dark text */
+.light-inputs input,
+.light-inputs textarea,
+.light-inputs select {
+  color: #1a1a1a !important;
+}
+.light-inputs select option {
+  background: #fff;
+  color: #1a1a1a;
+}
+.light-inputs input::placeholder,
+.light-inputs textarea::placeholder {
+  color: #9ca3af;
+}
+
+/* Ensure inputs with light/white backgrounds always show dark text */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1a1a1a !important;
+}
+
 /* Ensure inputs/selects within dark backgrounds are readable */
 input::placeholder,
 textarea::placeholder {

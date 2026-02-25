@@ -1,5 +1,5 @@
-import React from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import './App.css';
 import { AuthProvider, useAuth } from './core/AuthContext';
 import { isPendingAdmin } from './firebase/auth';
@@ -72,6 +72,16 @@ function PendingAdminScreen() {
 // Route guard
 function ProtectedRoutes() {
   const { currentUser, authLoading, setCurrentUser } = useAuth();
+  const navigate = useNavigate();
+  const prevUserRef = useRef(null);
+
+  // 로그인 직후 항상 Home('/')으로 이동
+  useEffect(() => {
+    if (!authLoading && currentUser && !prevUserRef.current) {
+      navigate('/', { replace: true });
+    }
+    prevUserRef.current = currentUser;
+  }, [currentUser, authLoading, navigate]);
 
   if (authLoading) return <LoadingScreen />;
   if (!currentUser) return <Login />;
