@@ -114,7 +114,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
       background: `linear-gradient(135deg, ${COLORS.primary} 0%, #0f2557 100%)`,
       padding: '2rem'
     }}>
-      <div style={{
+      <div className="light-inputs" style={{
         background: COLORS.surface,
         padding: '2.5rem',
         borderRadius: '1rem',

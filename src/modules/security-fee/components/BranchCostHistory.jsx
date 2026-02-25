@@ -111,7 +111,7 @@ function BranchCostHistory({ branchName, currency }) {
   const totalActual = monthlyData.reduce((s, d) => s + d.actual, 0);
 
   return (
-    <section style={{
+    <section className="light-inputs" style={{
       background: COLORS.surface,
       padding: '1.5rem 2rem',
       borderRadius: '1rem',
@@ -146,7 +146,9 @@ function BranchCostHistory({ branchName, currency }) {
               border: '1px solid #d1d5db',
               borderRadius: '0.375rem',
               fontSize: '0.85rem',
-              fontWeight: '600'
+              fontWeight: '600',
+              color: '#1a1a1a',
+              background: '#fff'
             }}
           >
             {yearOptions.map(y => (
