@@ -83,6 +83,12 @@ textarea::placeholder {
   color: #5F6B7A !important;
 }
 
+/* Pulse animation for loading skeletons */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 /* Print styles */
 @media print {
   .print\\:hidden {

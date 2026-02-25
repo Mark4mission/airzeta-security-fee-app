@@ -1,0 +1,22 @@
+{
+  "name": "airzeta-security-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Airzeta Security System - News scraper, AI filtering, email alerts",
+  "main": "index.js",
+  "type": "module",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.3.0",
+    "@google/generative-ai": "^0.24.0",
+    "rss-parser": "^3.13.0",
+    "cheerio": "^1.0.0",
+    "node-fetch": "^3.3.2"
+  }
+}

@@ -20,7 +20,8 @@ export const COLLECTIONS = {
   BRANCH_CODES: 'branchCodes',
   SECURITY_COSTS: 'securityCosts',
   USERS: 'users',
-  REPORTS: 'reports'
+  REPORTS: 'reports',
+  SECURITY_NEWS: 'securityNews',
 };
 
 /**
