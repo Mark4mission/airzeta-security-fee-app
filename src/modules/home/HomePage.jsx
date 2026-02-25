@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock } from 'lucide-react';
+import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock, FileText } from 'lucide-react';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../../firebase/config';
 
 const COLORS = {
   card: '#132F4C',
@@ -17,8 +19,30 @@ const COLORS = {
 function HomePage() {
   const { currentUser, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [latestBulletins, setLatestBulletins] = useState([]);
+
+  useEffect(() => {
+    const fetchBulletins = async () => {
+      try {
+        const q = query(collection(db, 'bulletinPosts'), orderBy('createdAt', 'desc'), limit(5));
+        const snapshot = await getDocs(q);
+        setLatestBulletins(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (err) {
+        console.error('[HomePage] Failed to fetch bulletins:', err);
+      }
+    };
+    fetchBulletins();
+  }, []);
 
   const modules = [
+    {
+      title: 'Security Bulletin Board',
+      description: 'Share security announcements, notices and important updates across all stations.',
+      icon: Megaphone,
+      path: '/bulletin',
+      color: COLORS.accentOrange,
+      status: 'Active',
+    },
     {
       title: 'Security Fee Management',
       description: 'Submit, review and manage station security costs. Upload exchange rates and track monthly budgets.',
@@ -26,14 +50,6 @@ function HomePage() {
       path: '/security-fee',
       color: COLORS.accentBlue,
       status: 'Active',
-    },
-    {
-      title: 'Security Bulletin Board',
-      description: 'Share security announcements, notices and important updates across all stations.',
-      icon: Megaphone,
-      path: '/bulletin',
-      color: COLORS.accentOrange,
-      status: 'Coming Soon',
     },
     {
       title: 'Aviation Security Level',
@@ -172,6 +188,33 @@ function HomePage() {
               <p style={{ fontSize: '0.78rem', color: COLORS.textSecondary, lineHeight: '1.55', marginBottom: '1rem' }}>
                 {mod.description}
               </p>
+              {/* Latest bulletin items for the bulletin card */}
+              {mod.path === '/bulletin' && latestBulletins.length > 0 && (
+                <div style={{ marginBottom: '0.75rem', borderTop: `1px solid ${COLORS.cardBorder}`, paddingTop: '0.6rem' }}>
+                  {latestBulletins.slice(0, 3).map(post => (
+                    <div
+                      key={post.id}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/bulletin/post/${post.id}`); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        padding: '0.35rem 0.4rem', borderRadius: '0.375rem',
+                        cursor: 'pointer', transition: 'background 0.15s',
+                        marginBottom: '0.2rem',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.08)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <FileText size={13} color={COLORS.accentOrange} style={{ flexShrink: 0 }} />
+                      <span style={{ fontSize: '0.72rem', color: COLORS.text, fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {post.title}
+                      </span>
+                      <span style={{ fontSize: '0.6rem', color: COLORS.textSecondary, flexShrink: 0 }}>
+                        {post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {isActive && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: mod.color, fontSize: '0.78rem', fontWeight: '600' }}>
                   Open module <ArrowRight size={14} />

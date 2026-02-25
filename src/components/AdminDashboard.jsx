@@ -190,14 +190,14 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
       {/* Filters */}
       <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <Filter size={16} color={COLORS.text.secondary} />
-        <select value={filterYear} onChange={e => { setFilterYear(e.target.value); if (onYearChange) onYearChange(e.target.value); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
+        <select value={filterYear} onChange={e => { setFilterYear(e.target.value); if (onYearChange) onYearChange(e.target.value); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
+        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
           <option value="">All Months</option>
           {months.map((m, i) => <option key={m} value={m}>{monthLabels[i]}</option>)}
         </select>
-        <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem' }}>
+        <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
           <option value="">All Stations</option>
           {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
         </select>

@@ -247,15 +247,15 @@ export default function PostDetail() {
                 <div key={comment.id} style={{ display: 'flex', flexDirection: 'column', alignItems: comment.authorRole === 'hq_admin' ? 'flex-end' : 'flex-start' }}>
                   <div style={{
                     maxWidth: '80%', borderRadius: '0.75rem', padding: '0.7rem 1rem',
-                    background: comment.authorRole === 'hq_admin' ? COLORS.accent : COLORS.surfaceLight,
-                    color: comment.authorRole === 'hq_admin' ? 'white' : COLORS.text.primary,
+                    background: comment.authorRole === 'hq_admin' ? '#E0F2FE' : COLORS.surfaceLight,
+                    color: comment.authorRole === 'hq_admin' ? '#1a1a1a' : COLORS.text.primary,
                     borderTopRightRadius: comment.authorRole === 'hq_admin' ? '0.15rem' : '0.75rem',
                     borderTopLeftRadius: comment.authorRole !== 'hq_admin' ? '0.15rem' : '0.75rem',
                   }}>
                     <div style={{
                       display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.75rem',
                       marginBottom: '0.3rem', paddingBottom: '0.3rem',
-                      borderBottom: `1px solid ${comment.authorRole === 'hq_admin' ? 'rgba(255,255,255,0.2)' : COLORS.border}`,
+                      borderBottom: `1px solid ${comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.1)' : COLORS.border}`,
                     }}>
                       <span style={{ fontWeight: '700', fontSize: '0.75rem' }}>
                         {comment.authorBranch} {comment.authorRole === 'hq_admin' ? '(HQ Admin)' : ''}
