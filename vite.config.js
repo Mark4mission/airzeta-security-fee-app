@@ -4,8 +4,8 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // Vercel 배포: base는 '/' (루트)
-  base: '/',
+  // GitHub Pages 배포: base는 '/airzeta-security-fee-app/'
+  base: '/airzeta-security-fee-app/',
   server: {
     host: '0.0.0.0', // Allow external connections
     port: 5173,
