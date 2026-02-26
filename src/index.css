@@ -89,6 +89,12 @@ textarea::placeholder {
   50% { opacity: 0.5; }
 }
 
+/* Spin animation for loading indicators */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Print styles */
 @media print {
   .print\\:hidden {
