@@ -51,7 +51,9 @@ textarea::placeholder {
   color: #5F6B7A;
 }
 
-/* Quill editor overrides for dark theme */
+/* ============================================
+   Quill Editor - Dark Theme Overrides
+   ============================================ */
 .ql-toolbar.ql-snow {
   border-color: #1E3A5F !important;
   background: #132F4C !important;
@@ -83,41 +85,82 @@ textarea::placeholder {
   color: #5F6B7A !important;
 }
 
-/* Custom toolbar buttons for HR and Table */
-.ql-toolbar .ql-hr-btn::before {
-  content: '―';
-  font-size: 16px;
-  font-weight: 700;
-  color: #8B99A8;
+/* Quill toolbar hover states */
+.ql-toolbar.ql-snow button:hover .ql-stroke,
+.ql-toolbar.ql-snow .ql-active .ql-stroke {
+  stroke: #60A5FA !important;
 }
-.ql-toolbar .ql-hr-btn:hover::before {
-  color: #E8EAED;
+.ql-toolbar.ql-snow button:hover .ql-fill,
+.ql-toolbar.ql-snow .ql-active .ql-fill {
+  fill: #60A5FA !important;
 }
-.ql-toolbar .ql-table-btn::before {
-  content: '⊞';
-  font-size: 15px;
-  font-weight: 700;
-  color: #8B99A8;
-}
-.ql-toolbar .ql-table-btn:hover::before {
-  color: #E8EAED;
+.ql-toolbar.ql-snow button:hover,
+.ql-toolbar.ql-snow .ql-active {
+  color: #60A5FA !important;
 }
 
-/* Bulletin content: preserve line breaks and format tables/hr */
+/* Quill color picker dark theme */
+.ql-toolbar.ql-snow .ql-color-picker .ql-picker-label,
+.ql-toolbar.ql-snow .ql-background .ql-picker-label {
+  border-color: #1E3A5F !important;
+}
+.ql-toolbar.ql-snow .ql-color-picker .ql-picker-options,
+.ql-toolbar.ql-snow .ql-background .ql-picker-options {
+  padding: 4px !important;
+  border-radius: 6px !important;
+}
+
+/* Quill editor: line break preservation */
+.ql-editor p {
+  margin-bottom: 0.5em;
+}
+.ql-editor hr {
+  border: none;
+  border-top: 1px solid #2A5080;
+  margin: 0.75em 0;
+}
+
+/* ============================================
+   Bulletin Content - Display Styles
+   ============================================ */
+
+/* Paragraph spacing and line-break preservation */
 .bulletin-content p {
   margin-bottom: 0.6em;
   white-space: pre-wrap;
+  word-wrap: break-word;
 }
 .bulletin-content br {
   display: block;
   content: '';
   margin-top: 0.15em;
 }
+
+/* Headings */
+.bulletin-content h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 1em 0 0.5em;
+}
+.bulletin-content h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.8em 0 0.4em;
+}
+.bulletin-content h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+
+/* Horizontal rule */
 .bulletin-content hr {
   border: none;
   border-top: 1px solid #2A5080;
   margin: 1em 0;
 }
+
+/* Tables */
 .bulletin-content table {
   border-collapse: collapse;
   width: 100%;
@@ -142,15 +185,96 @@ textarea::placeholder {
   background: rgba(59,130,246,0.04);
 }
 
-/* Quill editor: line break preservation */
-.ql-editor p {
+/* Blockquote */
+.bulletin-content blockquote {
+  border-left: 3px solid #3B82F6;
+  padding-left: 1rem;
+  margin: 0.75em 0;
+  color: #8B99A8;
+  font-style: italic;
+}
+
+/* Code blocks */
+.bulletin-content pre,
+.bulletin-content code {
+  background: #0F2030;
+  border-radius: 0.25rem;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85em;
+}
+.bulletin-content pre {
+  padding: 0.75rem 1rem;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  border: 1px solid #1E3A5F;
+}
+.bulletin-content code {
+  padding: 0.15rem 0.35rem;
+}
+
+/* Lists */
+.bulletin-content ul,
+.bulletin-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+.bulletin-content li {
+  margin-bottom: 0.25em;
+}
+
+/* Links */
+.bulletin-content a {
+  color: #60A5FA;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bulletin-content a:hover {
+  color: #93C5FD;
+}
+
+/* Images */
+.bulletin-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  margin: 0.5em 0;
+}
+
+/* ============================================
+   Markdown Preview Specific Styles
+   ============================================ */
+.markdown-preview h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  border-bottom: 1px solid #1E3A5F;
+  padding-bottom: 0.3em;
   margin-bottom: 0.5em;
 }
-.ql-editor hr {
-  border: none;
-  border-top: 1px solid #2A5080;
-  margin: 0.75em 0;
+.markdown-preview h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  border-bottom: 1px solid #1E3A5F;
+  padding-bottom: 0.2em;
 }
+.markdown-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+.markdown-preview table th,
+.markdown-preview table td {
+  border: 1px solid #2A5080;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+.markdown-preview table th {
+  background: rgba(59,130,246,0.08);
+  font-weight: 700;
+}
+
+/* ============================================
+   Animations
+   ============================================ */
 
 /* Pulse animation for loading skeletons */
 @keyframes pulse {
@@ -164,15 +288,43 @@ textarea::placeholder {
   to { transform: rotate(360deg); }
 }
 
-/* Print styles */
+/* Fade-in animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
 @media print {
-  .print\\:hidden {
+  body {
+    background: #fff !important;
+    color: #1a1a1a !important;
+  }
+  .print\:hidden {
     display: none !important;
   }
-  .print\\:shadow-none {
+  .print\:shadow-none {
     box-shadow: none !important;
   }
-  .print\\:border-none {
+  .print\:border-none {
     border: none !important;
+  }
+  /* Make bulletin content print-friendly */
+  .bulletin-content table th,
+  .bulletin-content table td {
+    border-color: #999 !important;
+    color: #1a1a1a !important;
+  }
+  .bulletin-content table th {
+    background: #f0f0f0 !important;
+  }
+  .bulletin-content hr {
+    border-color: #ccc !important;
+  }
+  .bulletin-content blockquote {
+    border-color: #999 !important;
+    color: #555 !important;
   }
 }
