@@ -5,7 +5,7 @@ import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { useReactToPrint } from 'react-to-print';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -17,18 +17,18 @@ const COLORS = {
 };
 
 const LANGUAGE_OPTIONS = [
-  { code: 'ko', label: '한국어', flag: '🇰🇷' },
-  { code: 'en', label: 'English', flag: '🇺🇸' },
-  { code: 'ja', label: '日本語', flag: '🇯🇵' },
-  { code: 'zh', label: '中文', flag: '🇨🇳' },
-  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'fr', label: 'Français', flag: '🇫🇷' },
-  { code: 'es', label: 'Español', flag: '🇪🇸' },
-  { code: 'ar', label: 'العربية', flag: '🇸🇦' },
-  { code: 'th', label: 'ไทย', flag: '🇹🇭' },
+  { code: 'ko', label: '\uD55C\uAD6D\uC5B4', flag: '\uD83C\uDDF0\uD83C\uDDF7' },
+  { code: 'en', label: 'English', flag: '\uD83C\uDDFA\uD83C\uDDF8' },
+  { code: 'ja', label: '\u65E5\u672C\u8A9E', flag: '\uD83C\uDDEF\uD83C\uDDF5' },
+  { code: 'zh', label: '\u4E2D\u6587', flag: '\uD83C\uDDE8\uD83C\uDDF3' },
+  { code: 'de', label: 'Deutsch', flag: '\uD83C\uDDE9\uD83C\uDDEA' },
+  { code: 'fr', label: 'Fran\u00E7ais', flag: '\uD83C\uDDEB\uD83C\uDDF7' },
+  { code: 'es', label: 'Espa\u00F1ol', flag: '\uD83C\uDDEA\uD83C\uDDF8' },
+  { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629', flag: '\uD83C\uDDF8\uD83C\uDDE6' },
+  { code: 'th', label: '\u0E44\u0E17\u0E22', flag: '\uD83C\uDDF9\uD83C\uDDED' },
 ];
 
-// Detect primary language of text (simple heuristic)
+// Detect primary language of text (heuristic)
 function detectLanguage(text) {
   if (!text) return 'en';
   const clean = text.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
@@ -39,10 +39,10 @@ function detectLanguage(text) {
   if (koreanChars / total > 0.2) return 'ko';
   if (jpChars / total > 0.1) return 'ja';
   if (cjkChars / total > 0.2) return 'zh';
-  return 'en'; // default
+  return 'en';
 }
 
-// Suggest target language based on source
+// Suggest target language based on source + user locale
 function suggestTargetLang(sourceLang) {
   if (sourceLang === 'ko' || sourceLang === 'en') {
     try {
@@ -57,7 +57,7 @@ function suggestTargetLang(sourceLang) {
     } catch {}
     return sourceLang === 'ko' ? 'en' : 'ko';
   }
-  return 'ko';
+  return 'ko'; // Non-Korean/English posts default to Korean
 }
 
 export default function PostDetail() {
@@ -71,11 +71,12 @@ export default function PostDetail() {
   const [allBranches, setAllBranches] = useState([]);
   // Translation state
   const [translatedContent, setTranslatedContent] = useState('');
+  const [translatedTitle, setTranslatedTitle] = useState('');
   const [translating, setTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [targetLang, setTargetLang] = useState('ko');
   const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const [detectedLang, setDetectedLang] = useState('en');
+  const [translationLayout, setTranslationLayout] = useState('sideBySide'); // 'sideBySide' | 'inline'
 
   const printRef = useRef(null);
 
@@ -90,7 +91,6 @@ export default function PostDetail() {
         setPost(data);
         // Auto-suggest target language based on content
         const detected = detectLanguage(data.content);
-        setDetectedLang(detected);
         setTargetLang(suggestTargetLang(detected));
       } else navigate('/bulletin');
       setLoading(false);
@@ -131,18 +131,22 @@ export default function PostDetail() {
 
       const targetLabel = LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label || 'English';
 
+      // Translate both title and content in one call
       const prompt = `You are a professional translator specializing in aviation, cargo logistics, and security domains.
 
-TASK: Translate the following text to ${targetLabel}.
+TASK: Translate the following TITLE and CONTENT to ${targetLabel}.
 
 RULES:
 - Maintain the original paragraph structure and line breaks exactly.
 - Keep proper nouns, acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
 - Use domain-accurate terminology for aviation cargo security.
 - If the source text is already in ${targetLabel}, polish the grammar and improve clarity instead.
-- Return ONLY the translated text. No explanations, no labels.
+- Return the result in this exact JSON format (no markdown wrapping):
+{"title": "translated title here", "content": "translated content here"}
 
-SOURCE TEXT:
+TITLE: ${post.title}
+
+CONTENT:
 ${plainText}`;
 
       const response = await ai.models.generateContent({
@@ -150,13 +154,29 @@ ${plainText}`;
         contents: prompt,
       });
 
-      const translated = response.text.trim();
-      const htmlTranslated = translated
-        .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-      setTranslatedContent(htmlTranslated);
+      const responseText = response.text.trim();
+      // Try to parse JSON response
+      try {
+        const cleanJson = responseText.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
+        const parsed = JSON.parse(cleanJson);
+        setTranslatedTitle(parsed.title || '');
+        const translatedBody = (parsed.content || responseText)
+          .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+        setTranslatedContent(translatedBody);
+      } catch {
+        // Fallback: treat entire response as translated content
+        const htmlTranslated = responseText
+          .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+        setTranslatedContent(htmlTranslated);
+        setTranslatedTitle('');
+      }
     } catch (err) {
       console.error('[Translation]', err);
-      setTranslatedContent('<p style="color:#F87171;">Translation failed. Check Gemini API key configuration.</p>');
+      if (err.message?.includes('403') || err.message?.includes('blocked')) {
+        setTranslatedContent('<p style="color:#F87171;">Translation failed: API key lacks permission. Create a Gemini key at aistudio.google.com/apikey</p>');
+      } else {
+        setTranslatedContent(`<p style="color:#F87171;">Translation failed: ${err.message || 'Unknown error'}</p>`);
+      }
     } finally {
       setTranslating(false);
     }
@@ -196,9 +216,6 @@ ${plainText}`;
   const isAcknowledged = post.acknowledgedBy?.includes(branchName);
   const isBranchUser = userRole === 'branch_user';
   const isAuthorOrAdmin = isAdmin || currentUser?.uid === post.authorId;
-
-  // Detected language label
-  const detectedLangLabel = LANGUAGE_OPTIONS.find(l => l.code === detectedLang);
 
   const renderAdminAckStatus = () => {
     if (!isAdmin || allBranches.length === 0) return null;
@@ -243,13 +260,15 @@ ${plainText}`;
     );
   };
 
+  const isSideBySide = translationLayout === 'sideBySide' && showTranslation && translatedContent;
+
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '3rem' }}>
       {/* Action bar */}
       <div className="print:hidden" style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: COLORS.surface, padding: '0.75rem 1rem', borderRadius: '0.75rem',
-        border: `1px solid ${COLORS.border}`,
+        border: `1px solid ${COLORS.border}`, flexWrap: 'wrap', gap: '0.5rem',
       }}>
         <button onClick={() => navigate('/bulletin')} style={{
           display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none',
@@ -305,7 +324,22 @@ ${plainText}`;
       <div ref={printRef} style={{ background: COLORS.surface, borderRadius: '0.75rem', border: `1px solid ${COLORS.border}`, overflow: 'hidden' }}>
         {/* Title area */}
         <div style={{ borderBottom: `1px solid ${COLORS.border}`, padding: '1.5rem', background: COLORS.surfaceLight }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.75rem' }}>{post.title}</h1>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.3rem', lineHeight: '1.3' }}>
+                {post.title}
+              </h1>
+              {/* Show translated title if available */}
+              {showTranslation && translatedTitle && (
+                <p style={{
+                  fontSize: '1rem', fontWeight: '500', color: '#34D399', margin: '0 0 0.5rem',
+                  opacity: 0.9, lineHeight: '1.4',
+                }}>
+                  {LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.flag} {translatedTitle}
+                </p>
+              )}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.secondary }}>
               From: {post.authorName}
@@ -313,18 +347,23 @@ ${plainText}`;
             <span style={{ background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.secondary }}>
               Date: {post.createdAt?.toDate().toLocaleDateString()}
             </span>
-            {/* Detected language badge */}
-            {detectedLangLabel && (
-              <span style={{
-                padding: '0.2rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.68rem',
-                background: 'rgba(59,130,246,0.08)', border: `1px solid rgba(59,130,246,0.15)`,
-                color: COLORS.text.secondary,
-              }}>
-                {detectedLangLabel.flag} Detected: {detectedLangLabel.label}
-              </span>
-            )}
             {/* Translation controls */}
             <div className="print:hidden" style={{ marginLeft: 'auto', display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+              {/* Layout toggle (side-by-side vs inline) - only when translation is shown */}
+              {showTranslation && translatedContent && (
+                <button
+                  onClick={() => setTranslationLayout(prev => prev === 'sideBySide' ? 'inline' : 'sideBySide')}
+                  title={translationLayout === 'sideBySide' ? 'Switch to inline view' : 'Switch to side-by-side view'}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.2rem',
+                    padding: '0.25rem 0.45rem', background: COLORS.surface,
+                    border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
+                    color: COLORS.text.secondary, fontSize: '0.68rem', cursor: 'pointer',
+                  }}>
+                  {translationLayout === 'sideBySide' ? <AlignJustify size={11} /> : <Columns size={11} />}
+                </button>
+              )}
+              {/* Language selector */}
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setShowLangDropdown(!showLangDropdown)} style={{
                   display: 'flex', alignItems: 'center', gap: '0.2rem',
@@ -361,6 +400,7 @@ ${plainText}`;
                   </div>
                 )}
               </div>
+              {/* Translate button */}
               <button onClick={handleTranslate} disabled={translating}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.25rem',
@@ -376,15 +416,15 @@ ${plainText}`;
           </div>
         </div>
 
-        {/* Body - original + translation side by side */}
+        {/* Body - original + translation */}
         <div style={{
           padding: '1.5rem', minHeight: '250px',
-          display: showTranslation && translatedContent ? 'flex' : 'block',
+          display: isSideBySide ? 'flex' : 'block',
           gap: '1rem',
         }}>
           {/* Original content */}
           <div style={{
-            flex: showTranslation && translatedContent ? '1 1 50%' : '1 1 100%',
+            flex: isSideBySide ? '1 1 50%' : '1 1 100%',
             minWidth: 0,
           }}>
             {showTranslation && translatedContent && (
@@ -393,9 +433,7 @@ ${plainText}`;
                 marginBottom: '0.5rem', padding: '0.2rem 0.5rem',
                 background: 'rgba(59,130,246,0.08)', borderRadius: '0.25rem',
                 display: 'inline-block',
-              }}>
-                {detectedLangLabel?.flag} Original ({detectedLangLabel?.label})
-              </div>
+              }}>Original</div>
             )}
             <div
               className="ql-editor bulletin-content"
@@ -407,8 +445,13 @@ ${plainText}`;
           {/* Translation panel */}
           {showTranslation && translatedContent && (
             <div style={{
-              flex: '1 1 50%', minWidth: 0,
-              borderLeft: `1px solid ${COLORS.border}`, paddingLeft: '1rem',
+              flex: isSideBySide ? '1 1 50%' : '1 1 100%',
+              minWidth: 0,
+              borderLeft: isSideBySide ? `1px solid ${COLORS.border}` : 'none',
+              paddingLeft: isSideBySide ? '1rem' : 0,
+              borderTop: !isSideBySide ? `1px solid ${COLORS.border}` : 'none',
+              paddingTop: !isSideBySide ? '1rem' : 0,
+              marginTop: !isSideBySide ? '1rem' : 0,
             }}>
               <div style={{
                 fontSize: '0.65rem', fontWeight: '600', color: '#34D399',
@@ -421,13 +464,17 @@ ${plainText}`;
                   {LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.flag}{' '}
                   AI Translation ({LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label})
                 </span>
-                <button onClick={() => { setShowTranslation(false); setTranslatedContent(''); }}
+                <button onClick={() => { setShowTranslation(false); setTranslatedContent(''); setTranslatedTitle(''); }}
                   className="print:hidden"
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.text.light, padding: '0.1rem', display: 'flex' }}>
                   <X size={13} />
                 </button>
               </div>
-              <div className="ql-editor bulletin-content" style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }} dangerouslySetInnerHTML={{ __html: translatedContent }} />
+              <div
+                className="ql-editor bulletin-content"
+                style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }}
+                dangerouslySetInnerHTML={{ __html: translatedContent }}
+              />
             </div>
           )}
         </div>
