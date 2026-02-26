@@ -26,6 +26,7 @@ const LANGUAGE_OPTIONS = [
   { code: 'es', label: 'Espa\u00F1ol', flag: '\uD83C\uDDEA\uD83C\uDDF8' },
   { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629', flag: '\uD83C\uDDF8\uD83C\uDDE6' },
   { code: 'th', label: '\u0E44\u0E17\u0E22', flag: '\uD83C\uDDF9\uD83C\uDDED' },
+  { code: 'vi', label: 'Ti\u1EBFng Vi\u1EC7t', flag: '\uD83C\uDDFB\uD83C\uDDF3' },
 ];
 
 // Detect primary language of text (heuristic)
@@ -53,6 +54,7 @@ function suggestTargetLang(sourceLang) {
       if (tz.includes('Europe/Paris')) return 'fr';
       if (tz.includes('Europe/Madrid')) return 'es';
       if (tz.includes('Asia/Bangkok')) return 'th';
+      if (tz.includes('Asia/Ho_Chi_Minh') || tz.includes('Asia/Saigon')) return 'vi';
       if (tz.includes('Asia/Riyadh') || tz.includes('Asia/Dubai')) return 'ar';
     } catch {}
     return sourceLang === 'ko' ? 'en' : 'ko';
@@ -106,53 +108,71 @@ export default function PostDetail() {
     return () => unsubscribe();
   }, [id, navigate, isAdmin]);
 
-  // ---- Utility: convert plain text with line breaks into clean HTML paragraphs ----
+  // ---- Utility: convert plain text to clean HTML paragraphs ----
+  // Handles real newlines, literal \n strings, and mixed content
   const textToHTML = (text) => {
     if (!text) return '';
-    return text
-      .split(/\n\n+/)  // Split on double newlines (paragraph breaks)
-      .filter(p => p.trim())
+    // First, normalize: replace literal escaped '\n' strings with real newlines
+    let normalized = text.replace(/\\n/g, '\n');
+    // Also handle escaped underscores from AI: \\_  → _
+    normalized = normalized.replace(/\\_/g, '_');
+    // Split into paragraphs on double-newline boundaries
+    const paragraphs = normalized.split(/\n\s*\n/).filter(p => p.trim());
+    return paragraphs
       .map(p => {
-        const inner = p.trim().replace(/\n/g, '<br>');  // Single newlines become <br>
+        const inner = p.trim().replace(/\n/g, '<br>');
         return `<p>${inner}</p>`;
       })
       .join('');
   };
 
-  // ---- Utility: extract translated text from AI response (handles JSON, markdown fences, etc.) ----
+  // ---- Utility: robustly extract translated text from AI response ----
+  // Handles: raw JSON, code-fenced JSON, code-fenced text, plain text,
+  //          and deeply nested/malformed responses
   const parseTranslationResponse = (responseText) => {
-    let title = '';
-    let content = '';
+    if (!responseText) return { title: '', contentHTML: '' };
+    let raw = responseText.trim();
 
-    // 1. Strip markdown code fences if present
-    let cleaned = responseText.trim();
-    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
+    // 1. Strip ALL markdown code fences (```json ... ``` or ``` ... ```)
+    //    Use a greedy regex that handles multiline fences
+    raw = raw.replace(/^```[\w]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
 
-    // 2. Try JSON parse
-    try {
-      const parsed = JSON.parse(cleaned);
-      if (parsed && typeof parsed === 'object') {
-        title = parsed.title || '';
-        content = parsed.content || '';
-        return { title, contentHTML: textToHTML(content) };
-      }
-    } catch {
-      // Not valid JSON - continue with raw text approach
-    }
-
-    // 3. Try to extract JSON from anywhere in the response
-    const jsonMatch = cleaned.match(/\{[\s\S]*"title"[\s\S]*"content"[\s\S]*\}/);
-    if (jsonMatch) {
+    // 2. Try to extract JSON with title+content
+    const tryParseJSON = (str) => {
       try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        title = parsed.title || '';
-        content = parsed.content || '';
-        return { title, contentHTML: textToHTML(content) };
+        const parsed = JSON.parse(str);
+        if (parsed && typeof parsed === 'object') {
+          const title = parsed.title || parsed.Title || '';
+          const content = parsed.content || parsed.Content || parsed.translation || '';
+          if (content) return { title, content };
+        }
       } catch {}
+      return null;
+    };
+
+    // 2a. Direct JSON parse
+    let jsonResult = tryParseJSON(raw);
+    if (jsonResult) {
+      return { title: jsonResult.title, contentHTML: textToHTML(jsonResult.content) };
     }
 
-    // 4. Fallback: treat the entire cleaned response as plain translated text
-    return { title: '', contentHTML: textToHTML(cleaned) };
+    // 2b. Find JSON object anywhere in the text
+    const jsonPattern = /\{[\s\S]*?"(?:title|content|translation)"[\s\S]*?\}/g;
+    const jsonMatches = raw.match(jsonPattern);
+    if (jsonMatches) {
+      for (const match of jsonMatches) {
+        jsonResult = tryParseJSON(match);
+        if (jsonResult) {
+          return { title: jsonResult.title, contentHTML: textToHTML(jsonResult.content) };
+        }
+      }
+    }
+
+    // 3. Not JSON — treat as plain translated text
+    //    Remove any leading labels the AI might add like "Translation:" or "번역:"
+    raw = raw.replace(/^(?:Translation|Translated text|번역|翻訳)\s*:\s*/i, '').trim();
+
+    return { title: '', contentHTML: textToHTML(raw) };
   };
 
   // ---- AI Translation for view mode ----
@@ -182,17 +202,19 @@ export default function PostDetail() {
 
       const prompt = `You are a professional translator specializing in aviation, cargo logistics, and security domains.
 
-TASK: Translate the TITLE and CONTENT below into ${targetLabel}.
+TASK: Translate both the TITLE and the CONTENT below into ${targetLabel}.
 
 RULES:
-- Preserve the original paragraph structure and line breaks.
+- Preserve the original paragraph structure exactly. Keep blank lines between paragraphs.
 - Keep acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
 - Use aviation cargo security domain terminology.
 - If already in ${targetLabel}, polish grammar instead.
 
-OUTPUT FORMAT: Return ONLY a JSON object like this (no markdown fences, no extra text):
-{"title": "...", "content": "..."}
-Use \\n for line breaks within the content field.
+OUTPUT FORMAT:
+- First line: the translated title only
+- Second line: exactly "---"
+- Remaining lines: the translated content, preserving all paragraph breaks as blank lines
+- Do NOT wrap in JSON, code fences, or any markup.
 
 TITLE: ${post.title}
 
@@ -205,7 +227,25 @@ ${plainText}`;
       });
 
       const responseText = response.text;
-      const { title, contentHTML } = parseTranslationResponse(responseText);
+
+      // First try the structured "title\n---\ncontent" format
+      let title = '';
+      let contentHTML = '';
+      const separatorIdx = responseText.indexOf('\n---\n');
+      if (separatorIdx !== -1) {
+        title = responseText.substring(0, separatorIdx).trim();
+        const bodyText = responseText.substring(separatorIdx + 5).trim();
+        contentHTML = textToHTML(bodyText);
+      } else {
+        // Fallback to the robust parser (handles JSON, fences, etc.)
+        const parsed = parseTranslationResponse(responseText);
+        title = parsed.title;
+        contentHTML = parsed.contentHTML;
+      }
+
+      // Clean up title: strip any remaining fences or JSON artifacts
+      title = title.replace(/^```[\w]*\s*/g, '').replace(/```\s*$/g, '').replace(/^["']|["']$/g, '').trim();
+
       setTranslatedTitle(title);
       setTranslatedContent(contentHTML || '<p>Translation completed but no content was returned.</p>');
     } catch (err) {

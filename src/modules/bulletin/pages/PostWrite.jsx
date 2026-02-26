@@ -28,6 +28,7 @@ const LANGUAGE_OPTIONS = [
   { code: 'es', label: 'Espa\u00F1ol', flag: '\uD83C\uDDEA\uD83C\uDDF8' },
   { code: 'ar', label: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629', flag: '\uD83C\uDDF8\uD83C\uDDE6' },
   { code: 'th', label: '\u0E44\u0E17\u0E22', flag: '\uD83C\uDDF9\uD83C\uDDED' },
+  { code: 'vi', label: 'Ti\u1EBFng Vi\u1EC7t', flag: '\uD83C\uDDFB\uD83C\uDDF3' },
 ];
 
 // Detect primary language of text
@@ -252,11 +253,12 @@ export default function PostWrite() {
 TASK: Translate the following text to ${targetLabel}.
 
 RULES:
-- Maintain the original paragraph structure and line breaks exactly.
+- Maintain the original paragraph structure exactly. Keep blank lines between paragraphs.
 - Keep proper nouns, acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
 - Use domain-accurate terminology for aviation cargo security.
 - If the source text is already in ${targetLabel}, polish the grammar and improve clarity instead.
-- Return ONLY the translated text. No explanations, no labels.
+- Return ONLY the translated text, preserving all paragraph breaks as blank lines.
+- Do NOT wrap the output in JSON, code fences, or any markup.
 
 SOURCE TEXT:
 ${plainText}`;
@@ -267,18 +269,40 @@ ${plainText}`;
       });
 
       let translated = response.text.trim();
-      // Strip any markdown code fences the AI might wrap around the response
-      translated = translated.replace(/^```(?:\w*)\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
-      // Try to extract from JSON if the AI returned JSON anyway
+
+      // ---- Robust parsing: handle any AI response format ----
+      // 1. Strip ALL markdown code fences (```json, ```, etc.)
+      translated = translated.replace(/^```[\w]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
+
+      // 2. Try to extract from JSON if AI returned JSON despite instructions
       try {
         const parsed = JSON.parse(translated);
-        if (parsed && typeof parsed === 'object' && parsed.content) {
-          translated = parsed.content;
+        if (parsed && typeof parsed === 'object') {
+          translated = parsed.content || parsed.translation || parsed.text || JSON.stringify(parsed);
         }
       } catch {}
-      // Convert plain text with \n to HTML paragraphs
+
+      // 3. Also try to find JSON embedded in the response
+      if (translated.includes('"content"')) {
+        const jsonMatch = translated.match(/\{[\s\S]*?"content"\s*:\s*"([\s\S]*?)"[\s\S]*?\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed.content) translated = parsed.content;
+          } catch {}
+        }
+      }
+
+      // 4. Normalize: replace literal escaped \n strings with real newlines
+      translated = translated.replace(/\\n/g, '\n');
+      // Fix escaped underscores
+      translated = translated.replace(/\\_/g, '_');
+      // Remove leading labels like "Translation:" or "번역:"
+      translated = translated.replace(/^(?:Translation|Translated text|번역|翻訳)\s*:\s*/i, '').trim();
+
+      // 5. Convert plain text with newlines to HTML paragraphs
       const htmlTranslated = translated
-        .split(/\n\n+/)
+        .split(/\n\s*\n/)
         .filter(p => p.trim())
         .map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`)
         .join('');
