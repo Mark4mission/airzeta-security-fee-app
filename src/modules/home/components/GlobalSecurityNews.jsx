@@ -91,10 +91,25 @@ async function fetchAllRSSFeeds() {
 // ============================================================
 async function filterWithGemini(articles) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const firebaseKey = import.meta.env.VITE_FIREBASE_API_KEY;
+
+  // Diagnostics: log API key status (masked for security)
   if (!apiKey) {
-    console.warn('[Gemini] No API key, using keyword fallback');
+    console.warn('[Gemini] ❌ VITE_GEMINI_API_KEY is not set. Using keyword fallback.');
+    console.warn('[Gemini] 💡 Set a valid Gemini API key in Vercel env vars (https://aistudio.google.com/apikey)');
     return { items: keywordFallbackFilter(articles), method: 'keyword' };
   }
+
+  if (apiKey === firebaseKey) {
+    console.warn('[Gemini] ⚠️ VITE_GEMINI_API_KEY is the same as VITE_FIREBASE_API_KEY.');
+    console.warn('[Gemini] ⚠️ Firebase API keys do NOT have Generative Language API enabled by default.');
+    console.warn('[Gemini] 💡 Either:');
+    console.warn('  1. Create a separate Gemini API key at https://aistudio.google.com/apikey');
+    console.warn('  2. Or enable "Gemini Developer API" in Firebase Console → AI Logic → Settings');
+  }
+
+  const maskedKey = apiKey.substring(0, 8) + '...' + apiKey.substring(apiKey.length - 4);
+  console.log(`[Gemini] 🔑 Using API key: ${maskedKey} (${articles.length} articles to filter)`);
 
   try {
     const { GoogleGenAI } = await import('@google/genai');
@@ -127,19 +142,22 @@ For each selected article:
 
 Return ONLY a JSON array of 5 objects. No markdown, no code fences.`;
 
+    console.log('[Gemini] 📡 Calling gemini-2.5-flash-lite...');
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
       contents: prompt,
     });
 
     let text = response.text.trim();
+    console.log('[Gemini] ✅ Response received, length:', text.length);
+
     if (text.startsWith('```')) {
       text = text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
     }
 
     const parsed = JSON.parse(text);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      throw new Error('Gemini returned invalid response');
+      throw new Error('Gemini returned invalid JSON structure');
     }
 
     const items = parsed.slice(0, 5).map(item => {
@@ -154,9 +172,23 @@ Return ONLY a JSON array of 5 objects. No markdown, no code fences.`;
       };
     });
 
+    console.log('[Gemini] ✅ AI curation successful:', items.map(i => i.headlineEn?.substring(0, 40)));
     return { items, method: 'gemini' };
   } catch (err) {
-    console.warn('[Gemini] AI filtering failed, using keyword fallback:', err.message);
+    // Detailed error diagnosis
+    const msg = err.message || String(err);
+    console.error('[Gemini] ❌ AI filtering failed:', msg);
+
+    if (msg.includes('403') || msg.includes('PERMISSION_DENIED') || msg.includes('blocked')) {
+      console.error('[Gemini] 🔒 API key does NOT have Generative Language API permission.');
+      console.error('[Gemini] 💡 FIX: Go to https://aistudio.google.com/apikey and create a new API key,');
+      console.error('         then set it as VITE_GEMINI_API_KEY in Vercel environment variables.');
+    } else if (msg.includes('400') || msg.includes('INVALID')) {
+      console.error('[Gemini] ❓ Invalid request. The API key or model may be incorrect.');
+    } else if (msg.includes('429') || msg.includes('RATE')) {
+      console.error('[Gemini] ⏳ Rate limit exceeded. Try again later.');
+    }
+
     return { items: keywordFallbackFilter(articles), method: 'keyword' };
   }
 }
