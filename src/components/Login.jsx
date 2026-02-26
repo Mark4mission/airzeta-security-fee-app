@@ -306,6 +306,7 @@ function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   placeholder="you@example.com"
+                  autoComplete="email"
                   style={{
                     width: '100%', padding: '0.75rem',
                     border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
@@ -324,6 +325,7 @@ function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="Enter your password"
+                  autoComplete="current-password"
                   style={{
                     width: '100%', padding: '0.75rem',
                     border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
@@ -473,6 +475,7 @@ function Login() {
                   required
                   minLength={6}
                   placeholder="At least 6 characters"
+                  autoComplete="new-password"
                   style={{
                     width: '100%', padding: '0.75rem',
                     border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
@@ -492,6 +495,7 @@ function Login() {
                   required
                   minLength={6}
                   placeholder="Re-enter your password"
+                  autoComplete="new-password"
                   style={{
                     width: '100%', padding: '0.75rem',
                     border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',

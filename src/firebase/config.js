@@ -13,15 +13,8 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Debug: Firebase config 확인 (개발 환경에서만)
-if (import.meta.env.DEV) {
-  console.log('[Firebase] Config loaded:', {
-    authDomain: firebaseConfig.authDomain,
-    projectId: firebaseConfig.projectId,
-    hasApiKey: !!firebaseConfig.apiKey,
-    currentOrigin: window.location.origin
-  });
-}
+// Note: Firebase config values are public-facing by design.
+// Firestore Security Rules enforce authorization server-side.
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
