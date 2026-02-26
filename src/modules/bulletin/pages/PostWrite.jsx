@@ -266,9 +266,22 @@ ${plainText}`;
         contents: prompt,
       });
 
-      const translated = response.text.trim();
+      let translated = response.text.trim();
+      // Strip any markdown code fences the AI might wrap around the response
+      translated = translated.replace(/^```(?:\w*)\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
+      // Try to extract from JSON if the AI returned JSON anyway
+      try {
+        const parsed = JSON.parse(translated);
+        if (parsed && typeof parsed === 'object' && parsed.content) {
+          translated = parsed.content;
+        }
+      } catch {}
+      // Convert plain text with \n to HTML paragraphs
       const htmlTranslated = translated
-        .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+        .split(/\n\n+/)
+        .filter(p => p.trim())
+        .map(p => `<p>${p.trim().replace(/\n/g, '<br>')}</p>`)
+        .join('');
       setTranslatedContent(htmlTranslated);
     } catch (err) {
       console.error('[Translation]', err);
@@ -600,11 +613,14 @@ ${plainText}`;
             <div style={{
               display: 'flex', gap: '0.75rem',
               flexDirection: showTranslation && translatedContent ? 'row' : 'column',
+              alignItems: showTranslation && translatedContent ? 'stretch' : undefined,
+              minHeight: showTranslation && translatedContent ? '400px' : undefined,
             }}>
               {/* Original editor */}
               <div style={{
                 flex: showTranslation && translatedContent ? '1 1 50%' : '1 1 100%',
                 borderRadius: '0.5rem', overflow: 'hidden', minWidth: 0,
+                display: 'flex', flexDirection: 'column',
               }}>
                 {showTranslation && translatedContent && (
                   <div style={{
@@ -658,7 +674,7 @@ ${plainText}`;
                     onChange={setContent}
                     modules={quillModules}
                     formats={quillFormats}
-                    style={{ height: '280px', marginBottom: '3rem' }}
+                    style={{ flex: 1, minHeight: '280px', marginBottom: showTranslation && translatedContent ? 0 : '3rem', display: 'flex', flexDirection: 'column' }}
                     placeholder="Write your directive content here..."
                   />
                 )}
@@ -689,7 +705,7 @@ ${plainText}`;
                   <div className="ql-editor bulletin-content"
                     style={{
                       padding: '0.75rem', color: COLORS.text.primary, fontSize: '0.85rem',
-                      lineHeight: '1.7', overflowY: 'auto', flex: 1, maxHeight: '340px',
+                      lineHeight: '1.7', overflowY: 'auto', flex: 1,
                     }}
                     dangerouslySetInnerHTML={{ __html: translatedContent }}
                   />

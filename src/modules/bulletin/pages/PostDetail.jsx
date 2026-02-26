@@ -106,6 +106,55 @@ export default function PostDetail() {
     return () => unsubscribe();
   }, [id, navigate, isAdmin]);
 
+  // ---- Utility: convert plain text with line breaks into clean HTML paragraphs ----
+  const textToHTML = (text) => {
+    if (!text) return '';
+    return text
+      .split(/\n\n+/)  // Split on double newlines (paragraph breaks)
+      .filter(p => p.trim())
+      .map(p => {
+        const inner = p.trim().replace(/\n/g, '<br>');  // Single newlines become <br>
+        return `<p>${inner}</p>`;
+      })
+      .join('');
+  };
+
+  // ---- Utility: extract translated text from AI response (handles JSON, markdown fences, etc.) ----
+  const parseTranslationResponse = (responseText) => {
+    let title = '';
+    let content = '';
+
+    // 1. Strip markdown code fences if present
+    let cleaned = responseText.trim();
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?\s*```$/i, '').trim();
+
+    // 2. Try JSON parse
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (parsed && typeof parsed === 'object') {
+        title = parsed.title || '';
+        content = parsed.content || '';
+        return { title, contentHTML: textToHTML(content) };
+      }
+    } catch {
+      // Not valid JSON - continue with raw text approach
+    }
+
+    // 3. Try to extract JSON from anywhere in the response
+    const jsonMatch = cleaned.match(/\{[\s\S]*"title"[\s\S]*"content"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        title = parsed.title || '';
+        content = parsed.content || '';
+        return { title, contentHTML: textToHTML(content) };
+      } catch {}
+    }
+
+    // 4. Fallback: treat the entire cleaned response as plain translated text
+    return { title: '', contentHTML: textToHTML(cleaned) };
+  };
+
   // ---- AI Translation for view mode ----
   const handleTranslate = async () => {
     if (!post?.content) return;
@@ -131,18 +180,19 @@ export default function PostDetail() {
 
       const targetLabel = LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label || 'English';
 
-      // Translate both title and content in one call
       const prompt = `You are a professional translator specializing in aviation, cargo logistics, and security domains.
 
-TASK: Translate the following TITLE and CONTENT to ${targetLabel}.
+TASK: Translate the TITLE and CONTENT below into ${targetLabel}.
 
 RULES:
-- Maintain the original paragraph structure and line breaks exactly.
-- Keep proper nouns, acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
-- Use domain-accurate terminology for aviation cargo security.
-- If the source text is already in ${targetLabel}, polish the grammar and improve clarity instead.
-- Return the result in this exact JSON format (no markdown wrapping):
-{"title": "translated title here", "content": "translated content here"}
+- Preserve the original paragraph structure and line breaks.
+- Keep acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
+- Use aviation cargo security domain terminology.
+- If already in ${targetLabel}, polish grammar instead.
+
+OUTPUT FORMAT: Return ONLY a JSON object like this (no markdown fences, no extra text):
+{"title": "...", "content": "..."}
+Use \\n for line breaks within the content field.
 
 TITLE: ${post.title}
 
@@ -154,22 +204,10 @@ ${plainText}`;
         contents: prompt,
       });
 
-      const responseText = response.text.trim();
-      // Try to parse JSON response
-      try {
-        const cleanJson = responseText.replace(/^```json?\s*/, '').replace(/\s*```$/, '');
-        const parsed = JSON.parse(cleanJson);
-        setTranslatedTitle(parsed.title || '');
-        const translatedBody = (parsed.content || responseText)
-          .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-        setTranslatedContent(translatedBody);
-      } catch {
-        // Fallback: treat entire response as translated content
-        const htmlTranslated = responseText
-          .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-        setTranslatedContent(htmlTranslated);
-        setTranslatedTitle('');
-      }
+      const responseText = response.text;
+      const { title, contentHTML } = parseTranslationResponse(responseText);
+      setTranslatedTitle(title);
+      setTranslatedContent(contentHTML || '<p>Translation completed but no content was returned.</p>');
     } catch (err) {
       console.error('[Translation]', err);
       if (err.message?.includes('403') || err.message?.includes('blocked')) {
