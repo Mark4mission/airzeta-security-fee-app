@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, query, orderBy, limit, getDocs, doc, setDoc, getDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { collection, query, orderBy, limit, getDocs, doc, setDoc, getDoc, writeBatch, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { ShieldCheck, PlaneTakeoff, ExternalLink, AlertTriangle, Globe, RefreshCw, Loader } from 'lucide-react';
@@ -29,84 +29,61 @@ const REGION_COLORS = {
 
 const FALLBACK_ICONS = [ShieldCheck, PlaneTakeoff];
 
-// RSS feed URLs (via public CORS proxy)
-const RSS_FEEDS = [
-  { name: 'Air Cargo News', url: 'https://www.aircargonews.net/feed/' },
-  { name: 'Passenger Terminal Today', url: 'https://www.passengerterminaltoday.com/feed/' },
-  { name: 'AeroTime Hub', url: 'https://www.aerotime.aero/feed' },
-];
-
-// CORS proxy for RSS fetching
-const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
-
-// ============================================================
-// RSS PARSER (lightweight client-side)
-// ============================================================
-function parseRSSXml(xmlText, sourceName) {
-  try {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-    const items = xmlDoc.querySelectorAll('item');
-    const articles = [];
-
-    items.forEach((item, idx) => {
-      if (idx >= 15) return; // max 15 per source
-      const title = item.querySelector('title')?.textContent?.trim() || '';
-      const link = item.querySelector('link')?.textContent?.trim() || '';
-      const description = (item.querySelector('description')?.textContent?.trim() || '').substring(0, 500);
-      const pubDate = item.querySelector('pubDate')?.textContent?.trim() || '';
-      
-      // Try to extract image from enclosure or media:content
-      let imageUrl = '';
-      const enclosure = item.querySelector('enclosure');
-      if (enclosure && enclosure.getAttribute('type')?.startsWith('image')) {
-        imageUrl = enclosure.getAttribute('url') || '';
-      }
-      if (!imageUrl) {
-        const mediaContent = item.getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'content');
-        if (mediaContent.length > 0) {
-          imageUrl = mediaContent[0].getAttribute('url') || '';
-        }
-      }
-      // Fallback: extract first img from description
-      if (!imageUrl && description.includes('<img')) {
-        const match = description.match(/src=["']([^"']+)["']/);
-        if (match) imageUrl = match[1];
-      }
-
-      if (title && link) {
-        articles.push({ title, link, description: description.replace(/<[^>]+>/g, ''), pubDate, source: sourceName, imageUrl });
-      }
-    });
-
-    return articles;
-  } catch (err) {
-    console.error(`[RSS] Parse error for ${sourceName}:`, err);
-    return [];
-  }
+// Sanitize text to prevent XSS from RSS content
+function sanitizeText(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
+// RSS feeds via rss2json.com (free, returns JSON, supports CORS)
+const RSS_FEEDS = [
+  { name: 'Air Cargo News', rssUrl: 'https://www.aircargonews.net/feed/' },
+  { name: 'Passenger Terminal Today', rssUrl: 'https://www.passengerterminaltoday.com/feed/' },
+  { name: 'AeroTime Hub', rssUrl: 'https://www.aerotime.aero/feed' },
+  { name: 'Simple Flying', rssUrl: 'https://simpleflying.com/feed/' },
+];
+
+const RSS2JSON_API = 'https://api.rss2json.com/v1/api.json';
+
 // ============================================================
-// FETCH ALL RSS FEEDS
+// RSS FETCHER (via rss2json.com – returns JSON, no CORS issues)
 // ============================================================
 async function fetchAllRSSFeeds() {
   const allArticles = [];
-
-  for (const feed of RSS_FEEDS) {
+  const fetchPromises = RSS_FEEDS.map(async (feed) => {
     try {
-      const res = await fetch(`${CORS_PROXY}${encodeURIComponent(feed.url)}`, {
-        signal: AbortSignal.timeout(12000),
-      });
+      const url = `${RSS2JSON_API}?rss_url=${encodeURIComponent(feed.rssUrl)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const articles = parseRSSXml(text, feed.name);
-      allArticles.push(...articles);
-      console.log(`[News] ${feed.name}: ${articles.length} articles`);
+      const data = await res.json();
+      if (data.status !== 'ok' || !data.items) {
+        console.warn(`[News] ${feed.name}: API returned status ${data.status}`);
+        return [];
+      }
+      return data.items.slice(0, 15).map(item => ({
+        title: sanitizeText(item.title || ''),
+        link: item.link || '',
+        description: sanitizeText((item.description || '').replace(/<[^>]+>/g, '').substring(0, 500)),
+        pubDate: item.pubDate || '',
+        source: feed.name,
+        imageUrl: item.thumbnail || item.enclosure?.link || '',
+        categories: Array.isArray(item.categories) ? item.categories : [],
+      }));
     } catch (err) {
       console.warn(`[News] Failed to fetch ${feed.name}:`, err.message);
+      return [];
+    }
+  });
+
+  const results = await Promise.allSettled(fetchPromises);
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value.length > 0) {
+      allArticles.push(...result.value);
     }
   }
-
+  console.log(`[News] Total articles fetched: ${allArticles.length}`);
   return allArticles;
 }
 
@@ -132,10 +109,12 @@ async function filterWithGemini(articles) {
 
 TASK: Select exactly 5 articles most relevant to aviation cargo security. Prioritize:
 - Security screening: ETD (Explosive Trace Detection), K9, CSD (Cargo Screening Device), X-ray
-- Cargo security incidents, threats, dangerous goods
-- ICAO/TSA/regulatory policy changes
-- Airport security operations
-- Cargo theft, tampering, smuggling
+- Cargo security incidents, threats, dangerous goods (DG), lithium battery
+- ICAO/TSA/IATA regulatory policy changes, compliance
+- Airport security operations, customs inspection
+- Cargo theft, tampering, smuggling, contraband
+- Risk assessment, security fee, security cost
+- Air cargo logistics and freight operations
 
 ARTICLES:
 ${summaries}
@@ -147,7 +126,7 @@ For each selected article:
 4. "headlineKr": Korean summary (max 80 chars)
 5. "priority": "critical" if imminent threat/emergency directive, else "normal"
 
-Return ONLY a JSON array of 5 objects. No markdown.`;
+Return ONLY a JSON array of 5 objects. No markdown, no code fences.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
@@ -155,13 +134,19 @@ Return ONLY a JSON array of 5 objects. No markdown.`;
     });
 
     let text = response.text.trim();
+    // Strip markdown code fences if present
     if (text.startsWith('```')) {
       text = text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
     }
 
     const parsed = JSON.parse(text);
-    return parsed.map(item => {
-      const orig = articles[item.index] || articles[0];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error('Gemini returned invalid response');
+    }
+
+    return parsed.slice(0, 5).map(item => {
+      const idx = typeof item.index === 'number' ? item.index : 0;
+      const orig = articles[idx] || articles[0];
       return {
         ...orig,
         region: item.region || 'Global',
@@ -181,15 +166,17 @@ Return ONLY a JSON array of 5 objects. No markdown.`;
 // ============================================================
 function keywordFallbackFilter(articles) {
   const keywords = [
-    'security', 'cargo', 'screening', 'etd', 'k9', 'csd', 'x-ray',
-    'threat', 'explosive', 'dangerous goods', 'icao', 'tsa',
+    'security', 'cargo', 'screening', 'etd', 'k9', 'csd', 'x-ray', 'xray',
+    'threat', 'explosive', 'dangerous goods', 'icao', 'tsa', 'iata',
     'smuggling', 'theft', 'terror', 'bomb', 'inspection',
     'aviation security', 'air cargo', 'freight', 'customs',
     'checkpoint', 'regulation', 'compliance', 'dg goods',
+    'lithium', 'contraband', 'tamper', 'hijack', 'drone',
+    'known consignor', 'regulated agent', 'acc3',
   ];
 
   const scored = articles.map(a => {
-    const text = `${a.title} ${a.description}`.toLowerCase();
+    const text = `${a.title} ${a.description} ${(a.categories || []).join(' ')}`.toLowerCase();
     let score = 0;
     keywords.forEach(kw => {
       if (text.includes(kw)) score += (kw.length > 5 ? 2 : 1);
@@ -199,9 +186,10 @@ function keywordFallbackFilter(articles) {
 
   scored.sort((a, b) => b._score - a._score);
 
-  return scored.slice(0, 5).map(a => ({
+  const regions = ['Global', 'Asia', 'Americas', 'Europe/CIS', 'Middle East/Africa'];
+  return scored.slice(0, 5).map((a, i) => ({
     ...a,
-    region: 'Global',
+    region: regions[i % regions.length],
     headlineEn: a.title,
     headlineKr: '',
     priority: a._score > 5 ? 'critical' : 'normal',
@@ -212,13 +200,16 @@ function keywordFallbackFilter(articles) {
 // FIRESTORE CACHE LOGIC
 // ============================================================
 const CACHE_DOC_ID = 'latestNewsMeta';
+const CACHE_HOURS = 20; // refresh once per day (~20h gap)
 
 async function getCachedNews() {
   try {
     const newsRef = collection(db, 'securityNews');
     const q = query(newsRef, orderBy('createdAt', 'desc'), limit(5));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    return snapshot.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(d => d.id !== CACHE_DOC_ID); // exclude meta doc
   } catch (err) {
     console.warn('[Cache] Failed to read cached news:', err.message);
     return [];
@@ -235,9 +226,29 @@ async function isCacheStale() {
     const lastUpdate = data.lastUpdated?.toDate?.() || new Date(data.lastUpdated);
     const now = new Date();
     const hoursSince = (now - lastUpdate) / (1000 * 60 * 60);
-    return hoursSince >= 20; // refresh if >20 hours old (once per day)
+    return hoursSince >= CACHE_HOURS;
   } catch {
     return true;
+  }
+}
+
+async function cleanOldNews() {
+  try {
+    const newsRef = collection(db, 'securityNews');
+    const q = query(newsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs.filter(d => d.id !== CACHE_DOC_ID);
+
+    // Keep only latest 10 items, delete the rest
+    if (docs.length > 10) {
+      const toDelete = docs.slice(10);
+      for (const d of toDelete) {
+        await deleteDoc(doc(db, 'securityNews', d.id));
+      }
+      console.log(`[Cache] Cleaned ${toDelete.length} old news items`);
+    }
+  } catch (err) {
+    console.warn('[Cache] Cleanup error:', err.message);
   }
 }
 
@@ -266,7 +277,10 @@ async function saveNewsToFirestore(newsItems) {
     batch.set(metaRef, { lastUpdated: serverTimestamp(), count: newsItems.length });
 
     await batch.commit();
-    console.log(`[Cache] Saved ${newsItems.length} news items`);
+    console.log(`[Cache] Saved ${newsItems.length} news items to Firestore`);
+
+    // Clean old items in background
+    cleanOldNews().catch(() => {});
   } catch (err) {
     console.error('[Cache] Save error:', err);
   }
@@ -279,15 +293,17 @@ async function runNewsPipeline() {
   console.log('[News Pipeline] Starting...');
   const articles = await fetchAllRSSFeeds();
   if (articles.length === 0) {
-    console.warn('[News Pipeline] No articles fetched');
+    console.warn('[News Pipeline] No articles fetched from any source');
     return [];
   }
   console.log(`[News Pipeline] Total articles: ${articles.length}`);
 
   const filtered = await filterWithGemini(articles);
-  console.log(`[News Pipeline] Filtered: ${filtered.length}`);
+  console.log(`[News Pipeline] Filtered: ${filtered.length} articles`);
 
-  await saveNewsToFirestore(filtered);
+  if (filtered.length > 0) {
+    await saveNewsToFirestore(filtered);
+  }
   return filtered;
 }
 
@@ -301,6 +317,12 @@ function GlobalSecurityNews() {
   const [error, setError] = useState(null);
   const [imageErrors, setImageErrors] = useState({});
   const { isAdmin } = useAuth();
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Load cached news first, then check if refresh needed
   const loadNews = useCallback(async (forceRefresh = false) => {
@@ -310,32 +332,38 @@ function GlobalSecurityNews() {
       // 1. Try loading from Firestore cache first (fast)
       if (!forceRefresh) {
         const cached = await getCachedNews();
-        if (cached.length > 0) {
+        if (cached.length > 0 && mountedRef.current) {
           setNewsItems(cached);
           setLoading(false);
 
           // Check if stale in background
           const stale = await isCacheStale();
-          if (!stale) return; // cache is fresh, done
-          console.log('[News] Cache stale, refreshing in background...');
+          if (!stale) return; // cache is fresh
+          console.log('[News] Cache is stale, refreshing in background...');
         }
       }
 
       // 2. Run pipeline (RSS → Gemini → Firestore)
-      if (forceRefresh) setRefreshing(true);
+      if (forceRefresh && mountedRef.current) setRefreshing(true);
       const freshNews = await runNewsPipeline();
-      
-      if (freshNews.length > 0) {
+
+      if (freshNews.length > 0 && mountedRef.current) {
         // Re-read from Firestore to get proper IDs and timestamps
         const newCached = await getCachedNews();
         setNewsItems(newCached.length > 0 ? newCached : freshNews.map((n, i) => ({ ...n, id: `temp_${i}` })));
+      } else if (mountedRef.current) {
+        // Pipeline returned nothing but we have no cached data either
+        const cached = await getCachedNews();
+        if (cached.length > 0) setNewsItems(cached);
       }
     } catch (err) {
       console.error('[GlobalSecurityNews] Error:', err);
-      setError('Unable to load security news');
+      if (mountedRef.current) setError('Unable to load security news. Will retry automatically.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -425,6 +453,9 @@ function GlobalSecurityNews() {
           <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem' }}>
             {isAdmin ? 'Click "Fetch News" to load the latest articles.' : 'News updates are published daily.'}
           </p>
+          {error && (
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.7rem', color: '#FCA5A5' }}>{error}</p>
+          )}
         </div>
       </div>
     );
@@ -580,18 +611,19 @@ function GlobalSecurityNews() {
                 </div>
               </div>
 
-              {/* Right: Image (30%) */}
+              {/* Right: Image (30%) with aspect-video and object-cover */}
               <div style={{ flex: '0 0 28%', maxWidth: '28%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {hasImage ? (
-                  <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '0.5rem', overflow: 'hidden', background: COLORS.cardBorder }}>
+                  <div className="aspect-video" style={{ width: '100%', borderRadius: '0.5rem', overflow: 'hidden', background: COLORS.cardBorder }}>
                     <img src={news.imageUrl} alt="" loading="lazy"
                       onError={() => handleImageError(news.id)}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      className="object-cover"
+                      style={{ width: '100%', height: '100%', display: 'block' }}
                     />
                   </div>
                 ) : (
-                  <div style={{
-                    width: '100%', aspectRatio: '16/9', borderRadius: '0.5rem',
+                  <div className="aspect-video" style={{
+                    width: '100%', borderRadius: '0.5rem',
                     background: `linear-gradient(135deg, ${COLORS.surface} 0%, ${COLORS.card} 100%)`,
                     border: `1px solid ${COLORS.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>

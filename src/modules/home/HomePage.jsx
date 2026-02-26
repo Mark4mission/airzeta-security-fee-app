@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock, FileText } from 'lucide-react';
+import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock, FileText, Globe2 } from 'lucide-react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -17,6 +17,59 @@ const COLORS = {
   accentOrange: '#F59E0B',
 };
 
+// ============================================================
+// TIME ZONE DISPLAY COMPONENT
+// ============================================================
+function TimeZoneInfo() {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000); // update every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  const utcStr = now.toLocaleString('en-US', {
+    timeZone: 'UTC',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const kstStr = now.toLocaleString('en-US', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const localStr = now.toLocaleString('en-US', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+
+  // Detect user's timezone abbreviation
+  const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+  const shortTz = localTz.split('/').pop().replace(/_/g, ' ');
+
+  return (
+    <div style={{
+      display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap', alignItems: 'center',
+    }}>
+      <Globe2 size={13} color={COLORS.textSecondary} style={{ flexShrink: 0 }} />
+      {[
+        { label: 'UTC', time: utcStr },
+        { label: 'KST', time: kstStr },
+        { label: shortTz, time: localStr },
+      ].map((tz, i) => (
+        <span key={i} style={{
+          fontSize: '0.65rem', color: COLORS.textSecondary,
+          background: 'rgba(59, 130, 246, 0.06)', padding: '0.2rem 0.45rem',
+          borderRadius: '4px', border: '1px solid rgba(59, 130, 246, 0.1)',
+          fontFamily: 'monospace', letterSpacing: '0.02em',
+        }}>
+          <span style={{ color: '#60A5FA', fontWeight: '600' }}>{tz.label}</span> {tz.time}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// HOME PAGE
+// ============================================================
 function HomePage() {
   const { currentUser, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -35,7 +88,7 @@ function HomePage() {
     fetchBulletins();
   }, []);
 
-  const modules = [
+  const modules = useMemo(() => [
     {
       title: 'Security Bulletin Board',
       description: 'Share security announcements, notices and important updates across all stations.',
@@ -60,7 +113,7 @@ function HomePage() {
       color: COLORS.accentGreen,
       status: 'Planned',
     },
-  ];
+  ], []);
 
   return (
     <div>
@@ -124,17 +177,17 @@ function HomePage() {
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
           </div>
+          {/* Time Zone Info */}
+          <TimeZoneInfo />
         </div>
       </div>
 
-      {/* Global Security News Section */}
-      <GlobalSecurityNews />
-
-      {/* Module Cards */}
+      {/* Module Cards (load independently, no blocking by news) */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: '1rem',
+        marginBottom: '1.5rem',
       }}>
         {modules.map(mod => {
           const Icon = mod.icon;
@@ -228,6 +281,9 @@ function HomePage() {
           );
         })}
       </div>
+
+      {/* Global Security News Section (loads independently, after module cards) */}
+      <GlobalSecurityNews />
     </div>
   );
 }
