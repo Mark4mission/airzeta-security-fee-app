@@ -83,6 +83,75 @@ textarea::placeholder {
   color: #5F6B7A !important;
 }
 
+/* Custom toolbar buttons for HR and Table */
+.ql-toolbar .ql-hr-btn::before {
+  content: '―';
+  font-size: 16px;
+  font-weight: 700;
+  color: #8B99A8;
+}
+.ql-toolbar .ql-hr-btn:hover::before {
+  color: #E8EAED;
+}
+.ql-toolbar .ql-table-btn::before {
+  content: '⊞';
+  font-size: 15px;
+  font-weight: 700;
+  color: #8B99A8;
+}
+.ql-toolbar .ql-table-btn:hover::before {
+  color: #E8EAED;
+}
+
+/* Bulletin content: preserve line breaks and format tables/hr */
+.bulletin-content p {
+  margin-bottom: 0.6em;
+  white-space: pre-wrap;
+}
+.bulletin-content br {
+  display: block;
+  content: '';
+  margin-top: 0.15em;
+}
+.bulletin-content hr {
+  border: none;
+  border-top: 1px solid #2A5080;
+  margin: 1em 0;
+}
+.bulletin-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  font-size: 0.85rem;
+}
+.bulletin-content table th,
+.bulletin-content table td {
+  border: 1px solid #2A5080;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+.bulletin-content table th {
+  background: rgba(59,130,246,0.08);
+  font-weight: 700;
+  color: #E8EAED;
+}
+.bulletin-content table td {
+  color: #C8CCD0;
+}
+.bulletin-content table tr:hover td {
+  background: rgba(59,130,246,0.04);
+}
+
+/* Quill editor: line break preservation */
+.ql-editor p {
+  margin-bottom: 0.5em;
+}
+.ql-editor hr {
+  border: none;
+  border-top: 1px solid #2A5080;
+  margin: 0.75em 0;
+}
+
 /* Pulse animation for loading skeletons */
 @keyframes pulse {
   0%, 100% { opacity: 1; }

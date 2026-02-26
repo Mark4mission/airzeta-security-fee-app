@@ -5,7 +5,7 @@ import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { useReactToPrint } from 'react-to-print';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -16,6 +16,50 @@ const COLORS = {
   blue: '#3B82F6',
 };
 
+const LANGUAGE_OPTIONS = [
+  { code: 'ko', label: '한국어', flag: '🇰🇷' },
+  { code: 'en', label: 'English', flag: '🇺🇸' },
+  { code: 'ja', label: '日本語', flag: '🇯🇵' },
+  { code: 'zh', label: '中文', flag: '🇨🇳' },
+  { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'es', label: 'Español', flag: '🇪🇸' },
+  { code: 'ar', label: 'العربية', flag: '🇸🇦' },
+  { code: 'th', label: 'ไทย', flag: '🇹🇭' },
+];
+
+// Detect primary language of text (simple heuristic)
+function detectLanguage(text) {
+  if (!text) return 'en';
+  const clean = text.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+  const koreanChars = (clean.match(/[\uAC00-\uD7A3]/g) || []).length;
+  const cjkChars = (clean.match(/[\u4E00-\u9FFF]/g) || []).length;
+  const jpChars = (clean.match(/[\u3040-\u309F\u30A0-\u30FF]/g) || []).length;
+  const total = clean.length || 1;
+  if (koreanChars / total > 0.2) return 'ko';
+  if (jpChars / total > 0.1) return 'ja';
+  if (cjkChars / total > 0.2) return 'zh';
+  return 'en'; // default
+}
+
+// Suggest target language based on source
+function suggestTargetLang(sourceLang) {
+  if (sourceLang === 'ko' || sourceLang === 'en') {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      if (tz.includes('Asia/Seoul') || tz.includes('Asia/Tokyo')) return sourceLang === 'ko' ? 'en' : 'ko';
+      if (tz.includes('Asia/Shanghai') || tz.includes('Asia/Hong_Kong')) return 'zh';
+      if (tz.includes('Europe/Berlin') || tz.includes('Europe/Vienna')) return 'de';
+      if (tz.includes('Europe/Paris')) return 'fr';
+      if (tz.includes('Europe/Madrid')) return 'es';
+      if (tz.includes('Asia/Bangkok')) return 'th';
+      if (tz.includes('Asia/Riyadh') || tz.includes('Asia/Dubai')) return 'ar';
+    } catch {}
+    return sourceLang === 'ko' ? 'en' : 'ko';
+  }
+  return 'ko';
+}
+
 export default function PostDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -25,6 +69,13 @@ export default function PostDetail() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [allBranches, setAllBranches] = useState([]);
+  // Translation state
+  const [translatedContent, setTranslatedContent] = useState('');
+  const [translating, setTranslating] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [targetLang, setTargetLang] = useState('ko');
+  const [showLangDropdown, setShowLangDropdown] = useState(false);
+  const [detectedLang, setDetectedLang] = useState('en');
 
   const printRef = useRef(null);
 
@@ -34,8 +85,14 @@ export default function PostDetail() {
   useEffect(() => {
     const fetchPost = async () => {
       const docSnap = await getDoc(doc(db, 'bulletinPosts', id));
-      if (docSnap.exists()) setPost({ id: docSnap.id, ...docSnap.data() });
-      else navigate('/bulletin');
+      if (docSnap.exists()) {
+        const data = { id: docSnap.id, ...docSnap.data() };
+        setPost(data);
+        // Auto-suggest target language based on content
+        const detected = detectLanguage(data.content);
+        setDetectedLang(detected);
+        setTargetLang(suggestTargetLang(detected));
+      } else navigate('/bulletin');
       setLoading(false);
     };
     fetchPost();
@@ -48,6 +105,62 @@ export default function PostDetail() {
     }
     return () => unsubscribe();
   }, [id, navigate, isAdmin]);
+
+  // ---- AI Translation for view mode ----
+  const handleTranslate = async () => {
+    if (!post?.content) return;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) return;
+
+    setTranslating(true);
+    setShowTranslation(true);
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+
+      const plainText = post.content
+        .replace(/<\/p><p>/g, '\n\n')
+        .replace(/<br\s*\/?>/g, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+
+      const targetLabel = LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label || 'English';
+
+      const prompt = `You are a professional translator specializing in aviation, cargo logistics, and security domains.
+
+TASK: Translate the following text to ${targetLabel}.
+
+RULES:
+- Maintain the original paragraph structure and line breaks exactly.
+- Keep proper nouns, acronyms (ICAO, TSA, IATA, ETD, K9, CSD, DG, ACC3) unchanged.
+- Use domain-accurate terminology for aviation cargo security.
+- If the source text is already in ${targetLabel}, polish the grammar and improve clarity instead.
+- Return ONLY the translated text. No explanations, no labels.
+
+SOURCE TEXT:
+${plainText}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-lite',
+        contents: prompt,
+      });
+
+      const translated = response.text.trim();
+      const htmlTranslated = translated
+        .split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+      setTranslatedContent(htmlTranslated);
+    } catch (err) {
+      console.error('[Translation]', err);
+      setTranslatedContent('<p style="color:#F87171;">Translation failed. Check Gemini API key configuration.</p>');
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   const handleAcknowledge = async () => {
     if (!branchName || post.acknowledgedBy?.includes(branchName)) return;
@@ -83,6 +196,9 @@ export default function PostDetail() {
   const isAcknowledged = post.acknowledgedBy?.includes(branchName);
   const isBranchUser = userRole === 'branch_user';
   const isAuthorOrAdmin = isAdmin || currentUser?.uid === post.authorId;
+
+  // Detected language label
+  const detectedLangLabel = LANGUAGE_OPTIONS.find(l => l.code === detectedLang);
 
   const renderAdminAckStatus = () => {
     if (!isAdmin || allBranches.length === 0) return null;
@@ -190,19 +306,130 @@ export default function PostDetail() {
         {/* Title area */}
         <div style={{ borderBottom: `1px solid ${COLORS.border}`, padding: '1.5rem', background: COLORS.surfaceLight }}>
           <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.75rem' }}>{post.title}</h1>
-          <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.secondary }}>
               From: {post.authorName}
             </span>
             <span style={{ background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.secondary }}>
               Date: {post.createdAt?.toDate().toLocaleDateString()}
             </span>
+            {/* Detected language badge */}
+            {detectedLangLabel && (
+              <span style={{
+                padding: '0.2rem 0.5rem', borderRadius: '0.375rem', fontSize: '0.68rem',
+                background: 'rgba(59,130,246,0.08)', border: `1px solid rgba(59,130,246,0.15)`,
+                color: COLORS.text.secondary,
+              }}>
+                {detectedLangLabel.flag} Detected: {detectedLangLabel.label}
+              </span>
+            )}
+            {/* Translation controls */}
+            <div className="print:hidden" style={{ marginLeft: 'auto', display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setShowLangDropdown(!showLangDropdown)} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.2rem',
+                  padding: '0.25rem 0.5rem', background: COLORS.surface,
+                  border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
+                  color: COLORS.text.secondary, fontSize: '0.68rem', cursor: 'pointer',
+                }}>
+                  {LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.flag}{' '}
+                  {LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label}
+                  <ChevronDown size={10} />
+                </button>
+                {showLangDropdown && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: '0.25rem', zIndex: 50,
+                    background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                    borderRadius: '0.4rem', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', minWidth: '140px',
+                    maxHeight: '200px', overflowY: 'auto',
+                  }}>
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <div key={lang.code}
+                        onClick={() => { setTargetLang(lang.code); setShowLangDropdown(false); }}
+                        style={{
+                          padding: '0.4rem 0.65rem', cursor: 'pointer', fontSize: '0.72rem',
+                          color: targetLang === lang.code ? COLORS.blue : COLORS.text.primary,
+                          background: targetLang === lang.code ? 'rgba(59,130,246,0.1)' : 'transparent',
+                          display: 'flex', alignItems: 'center', gap: '0.4rem',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.08)'}
+                        onMouseLeave={e => e.currentTarget.style.background = targetLang === lang.code ? 'rgba(59,130,246,0.1)' : 'transparent'}
+                      >
+                        {lang.flag} {lang.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button onClick={handleTranslate} disabled={translating}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.25rem',
+                  padding: '0.25rem 0.55rem', background: translating ? COLORS.surface : 'rgba(59,130,246,0.12)',
+                  border: `1px solid ${translating ? COLORS.border : 'rgba(59,130,246,0.3)'}`,
+                  borderRadius: '0.35rem', color: translating ? COLORS.text.light : COLORS.blue,
+                  fontSize: '0.7rem', fontWeight: '600', cursor: translating ? 'not-allowed' : 'pointer',
+                }}>
+                {translating ? <Loader size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Languages size={11} />}
+                {translating ? 'Translating...' : 'Translate'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: '1.5rem', minHeight: '250px' }}>
-          <div className="ql-editor" style={{ color: COLORS.text.primary, lineHeight: '1.7' }} dangerouslySetInnerHTML={{ __html: post.content }} />
+        {/* Body - original + translation side by side */}
+        <div style={{
+          padding: '1.5rem', minHeight: '250px',
+          display: showTranslation && translatedContent ? 'flex' : 'block',
+          gap: '1rem',
+        }}>
+          {/* Original content */}
+          <div style={{
+            flex: showTranslation && translatedContent ? '1 1 50%' : '1 1 100%',
+            minWidth: 0,
+          }}>
+            {showTranslation && translatedContent && (
+              <div style={{
+                fontSize: '0.65rem', fontWeight: '600', color: COLORS.blue,
+                marginBottom: '0.5rem', padding: '0.2rem 0.5rem',
+                background: 'rgba(59,130,246,0.08)', borderRadius: '0.25rem',
+                display: 'inline-block',
+              }}>
+                {detectedLangLabel?.flag} Original ({detectedLangLabel?.label})
+              </div>
+            )}
+            <div
+              className="ql-editor bulletin-content"
+              style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }}
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            />
+          </div>
+
+          {/* Translation panel */}
+          {showTranslation && translatedContent && (
+            <div style={{
+              flex: '1 1 50%', minWidth: 0,
+              borderLeft: `1px solid ${COLORS.border}`, paddingLeft: '1rem',
+            }}>
+              <div style={{
+                fontSize: '0.65rem', fontWeight: '600', color: '#34D399',
+                marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span style={{
+                  padding: '0.2rem 0.5rem', background: 'rgba(16,185,129,0.08)',
+                  borderRadius: '0.25rem', display: 'inline-block',
+                }}>
+                  {LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.flag}{' '}
+                  AI Translation ({LANGUAGE_OPTIONS.find(l => l.code === targetLang)?.label})
+                </span>
+                <button onClick={() => { setShowTranslation(false); setTranslatedContent(''); }}
+                  className="print:hidden"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.text.light, padding: '0.1rem', display: 'flex' }}>
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="ql-editor bulletin-content" style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }} dangerouslySetInnerHTML={{ __html: translatedContent }} />
+            </div>
+          )}
         </div>
 
         {/* Attachments */}
