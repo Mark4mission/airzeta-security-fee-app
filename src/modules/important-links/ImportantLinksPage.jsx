@@ -332,11 +332,14 @@ export default function ImportantLinksPage() {
               {!isCollapsed && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.6rem', marginBottom: '0.5rem' }}>
                   {group.links.map(link => (
-                    <div key={link.id} style={{
-                      background: COLORS.surface, borderRadius: '0.5rem',
-                      border: `1px solid ${COLORS.border}`, overflow: 'hidden',
-                      transition: 'border-color 0.2s, transform 0.2s',
-                    }}
+                    <div key={link.id}
+                      onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                      style={{
+                        background: COLORS.surface, borderRadius: '0.5rem',
+                        border: `1px solid ${COLORS.border}`, overflow: 'hidden',
+                        transition: 'border-color 0.2s, transform 0.2s',
+                        cursor: 'pointer',
+                      }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = group.color; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.transform = 'none'; }}
                     >
@@ -348,22 +351,19 @@ export default function ImportantLinksPage() {
                               onError={e => e.target.style.display = 'none'} />
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <a href={link.url} target="_blank" rel="noopener noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              style={{
-                                fontSize: '0.85rem', fontWeight: '700', color: COLORS.text.primary,
-                                textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem',
-                                lineHeight: '1.3',
-                              }}>
+                            <div style={{
+                              fontSize: '0.85rem', fontWeight: '700', color: COLORS.text.primary,
+                              display: 'flex', alignItems: 'center', gap: '0.3rem', lineHeight: '1.3',
+                            }}>
                               {link.title} <ExternalLink size={11} color={COLORS.text.light} style={{ flexShrink: 0 }} />
-                            </a>
+                            </div>
                             {link.descriptionEn && (
-                              <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, lineHeight: '1.45', margin: '0.3rem 0 0' }}>
+                              <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, lineHeight: '1.5', margin: '0.3rem 0 0' }}>
                                 {link.descriptionEn}
                               </p>
                             )}
                             {link.descriptionKo && (
-                              <p style={{ fontSize: '0.68rem', color: COLORS.text.light, lineHeight: '1.45', margin: '0.15rem 0 0' }}>
+                              <p style={{ fontSize: '0.7rem', color: '#9CA3AF', lineHeight: '1.5', margin: '0.2rem 0 0' }}>
                                 {link.descriptionKo}
                               </p>
                             )}
