@@ -279,6 +279,16 @@ ${plainText}`;
     setNewComment('');
   };
 
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('Delete this comment?')) return;
+    try {
+      await deleteDoc(doc(db, `bulletinPosts/${id}/comments`, commentId));
+    } catch (err) {
+      console.error('[PostDetail] Delete comment error:', err);
+      alert('Failed to delete comment: ' + err.message);
+    }
+  };
+
   const handleDelete = async () => {
     if (window.confirm("Are you sure you want to delete this directive?")) {
       await deleteDoc(doc(db, 'bulletinPosts', id));
@@ -595,7 +605,9 @@ ${plainText}`;
         <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {comments.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              {comments.map((comment) => (
+              {comments.map((comment) => {
+                const canDeleteComment = isAdmin || currentUser?.uid === comment.authorId;
+                return (
                 <div key={comment.id} style={{ display: 'flex', flexDirection: 'column', alignItems: comment.authorRole === 'hq_admin' ? 'flex-end' : 'flex-start' }}>
                   <div style={{
                     maxWidth: '80%', borderRadius: '0.75rem', padding: '0.7rem 1rem',
@@ -603,11 +615,30 @@ ${plainText}`;
                     color: comment.authorRole === 'hq_admin' ? '#1a1a1a' : COLORS.text.primary,
                     borderTopRightRadius: comment.authorRole === 'hq_admin' ? '0.15rem' : '0.75rem',
                     borderTopLeftRadius: comment.authorRole !== 'hq_admin' ? '0.15rem' : '0.75rem',
+                    position: 'relative',
                   }}>
+                    {canDeleteComment && (
+                      <button
+                        onClick={() => handleDeleteComment(comment.id)}
+                        title="Delete comment"
+                        style={{
+                          position: 'absolute', top: '0.35rem', right: '0.35rem',
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.25)',
+                          padding: '0.1rem', display: 'flex', borderRadius: '50%',
+                          transition: 'color 0.15s',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = '#F87171'}
+                        onMouseLeave={e => e.currentTarget.style.color = comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.25)'}
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
                     <div style={{
                       display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.75rem',
                       marginBottom: '0.3rem', paddingBottom: '0.3rem',
                       borderBottom: `1px solid ${comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.1)' : COLORS.border}`,
+                      paddingRight: canDeleteComment ? '1.2rem' : 0,
                     }}>
                       <span style={{ fontWeight: '700', fontSize: '0.75rem' }}>
                         {comment.authorBranch} {comment.authorRole === 'hq_admin' ? '(HQ Admin)' : ''}
@@ -619,7 +650,7 @@ ${plainText}`;
                     <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem', lineHeight: '1.5', margin: 0 }}>{comment.text}</p>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '2rem', color: COLORS.text.light }}>

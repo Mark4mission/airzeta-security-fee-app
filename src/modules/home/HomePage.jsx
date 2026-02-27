@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, Package, Shield, ArrowRight, Clock, FileText, Globe2 } from 'lucide-react';
+import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X } from 'lucide-react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -106,12 +106,12 @@ function HomePage() {
       status: 'Active',
     },
     {
-      title: 'Aviation Security Level',
-      description: 'Manage aviation security threat levels and compliance status for each station.',
-      icon: Package,
+      title: 'Security Level',
+      description: 'Manage aviation security threat levels. View global risk status on an interactive world map.',
+      icon: ShieldAlert,
       path: '/security-level',
       color: COLORS.accentGreen,
-      status: 'Planned',
+      status: 'Active',
     },
   ], []);
 
@@ -284,7 +284,133 @@ function HomePage() {
 
       {/* Global Security News Section (loads independently, after module cards) */}
       <GlobalSecurityNews />
+
+      {/* Security Pledge Agreement Card */}
+      <SecurityPledgeCard />
     </div>
+  );
+}
+
+// ============================================================
+// SECURITY PLEDGE AGREEMENT CARD
+// ============================================================
+function SecurityPledgeCard() {
+  const [showModal, setShowModal] = useState(false);
+  const pledgeUrl = 'https://mark4mission.github.io/airzeta-security-agreement/';
+
+  return (
+    <>
+      <div style={{
+        background: `linear-gradient(135deg, ${COLORS.card} 0%, #1A3A5C 100%)`,
+        borderRadius: '1rem', border: `1px solid ${COLORS.cardBorder}`,
+        padding: '1.5rem', marginTop: '0.5rem',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+          {/* QR Code area */}
+          <div
+            onClick={() => setShowModal(true)}
+            style={{
+              width: '100px', height: '100px', background: '#ffffff',
+              borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+            }}
+          >
+            {/* Simple QR-like visual */}
+            <div style={{ width: '80px', height: '80px', display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gridTemplateRows: 'repeat(7,1fr)', gap: '1px' }}>
+              {Array.from({ length: 49 }).map((_, i) => {
+                const row = Math.floor(i / 7);
+                const col = i % 7;
+                // Create QR corner patterns
+                const isCorner = (row < 3 && col < 3) || (row < 3 && col > 3) || (row > 3 && col < 3);
+                const isCenter = row === 3 && col === 3;
+                const isDark = isCorner || isCenter || Math.random() > 0.55;
+                return <div key={i} style={{ background: isDark ? '#1a1a1a' : '#ffffff', borderRadius: '1px' }} />;
+              })}
+            </div>
+            <div style={{ position: 'absolute', bottom: '2px', fontSize: '0.4rem', color: '#666', textAlign: 'center', width: '100%' }}>SCAN TO SIGN</div>
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1, minWidth: '250px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <Shield size={18} color={COLORS.accent} />
+              <h3 style={{ fontSize: '1rem', fontWeight: '700', color: COLORS.text, margin: 0 }}>
+                Security Pledge Agreement
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: COLORS.textSecondary, lineHeight: '1.6', margin: '0 0 0.75rem' }}>
+              To access Security Sensitive Information (SSI), all personnel must sign the Security Pledge Agreement.
+              Scan the QR code or click the button below to open the digital pledge form.
+            </p>
+            <p style={{ fontSize: '0.72rem', color: '#F87171', fontStyle: 'italic', margin: '0 0 0.75rem' }}>
+              SSI access is restricted to authorized signatories only.
+            </p>
+            <button
+              onClick={() => setShowModal(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.5rem 1rem', borderRadius: '0.5rem',
+                background: 'rgba(233,69,96,0.12)', border: '1px solid rgba(233,69,96,0.3)',
+                color: COLORS.accent, fontSize: '0.78rem', fontWeight: '700',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <QrCode size={15} /> Open Security Pledge Form
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, padding: '1rem',
+        }} onClick={() => setShowModal(false)}>
+          <div style={{
+            background: COLORS.card, borderRadius: '1rem',
+            border: `1px solid ${COLORS.cardBorder}`,
+            width: '95%', maxWidth: '800px', height: '85vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          }} onClick={e => e.stopPropagation()}>
+            {/* Modal header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0.75rem 1rem', borderBottom: `1px solid ${COLORS.cardBorder}`,
+              background: '#0B1929',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Shield size={16} color={COLORS.accent} />
+                <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#E8EAED' }}>
+                  Security Pledge Agreement
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <a href={pledgeUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#60A5FA', fontSize: '0.7rem', textDecoration: 'none' }}>
+                  <ExternalLink size={12} /> Open in new tab
+                </a>
+                <button onClick={() => setShowModal(false)} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: '#8B99A8', padding: '0.2rem',
+                }}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            {/* Iframe */}
+            <iframe
+              src={pledgeUrl}
+              title="Security Pledge Agreement"
+              style={{ flex: 1, border: 'none', width: '100%', background: '#fff' }}
+              allow="camera;microphone"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

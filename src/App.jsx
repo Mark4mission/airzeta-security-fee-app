@@ -10,6 +10,8 @@ import HomePage from './modules/home/HomePage';
 import SecurityFeePage from './modules/security-fee/SecurityFeePage';
 import BulletinPage from './modules/bulletin/BulletinPage';
 import SecurityLevelPage from './modules/security-level/SecurityLevelPage';
+import SecurityPolicyPage from './modules/security-policy/SecurityPolicyPage';
+import ImportantLinksPage from './modules/important-links/ImportantLinksPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import { Shield } from 'lucide-react';
 
@@ -104,9 +106,11 @@ function ProtectedRoutes() {
     <PortalLayout>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/security-policy" element={<SecurityPolicyPage />} />
         <Route path="/security-fee" element={<SecurityFeePage />} />
         <Route path="/bulletin/*" element={<BulletinPage />} />
         <Route path="/security-level" element={<SecurityLevelPage />} />
+        <Route path="/important-links" element={<ImportantLinksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
