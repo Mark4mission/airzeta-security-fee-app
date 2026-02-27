@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BarChart3, Filter, RefreshCw, Upload, Eye, X } from 'lucide-react';
+import { BarChart3, Filter, RefreshCw, Upload, Eye, X, ChevronDown, Check } from 'lucide-react';
 import { getAllSecurityCosts } from '../../../firebase/collections';
 
 const COLORS = {
@@ -27,11 +27,15 @@ const fmtKRW = (n) => {
 function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, onExchangeRateUpload, onYearChange }) {
   const [allCosts, setAllCosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filterBranch, setFilterBranch] = useState('');
+  const [filterBranch, setFilterBranch] = useState([]);       // array for multi-select
   const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
-  const [filterMonth, setFilterMonth] = useState('');
-  const [viewingRateMonth, setViewingRateMonth] = useState(null); // which month's rate table is being viewed
+  const [filterMonth, setFilterMonth] = useState([]);          // array for multi-select
+  const [viewingRateMonth, setViewingRateMonth] = useState(null);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const fileInputRefs = useRef({});
+  const monthDropdownRef = useRef(null);
+  const branchDropdownRef = useRef(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -46,6 +50,16 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(e.target)) setShowMonthDropdown(false);
+      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target)) setShowBranchDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const now = new Date();
   const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
@@ -86,8 +100,8 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
       const y = c.targetMonth.slice(0, 4);
       const m = c.targetMonth.slice(5, 7);
       if (filterYear && y !== filterYear) return false;
-      if (filterMonth && m !== filterMonth) return false;
-      if (filterBranch && c.branchName !== filterBranch) return false;
+      if (filterMonth.length > 0 && !filterMonth.includes(m)) return false;
+      if (filterBranch.length > 0 && !filterBranch.includes(c.branchName)) return false;
       return true;
     });
 
@@ -100,8 +114,8 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
       }
     });
 
-    const activeMonths = filterMonth
-      ? [filterMonth]
+    const activeMonths = filterMonth.length > 0
+      ? filterMonth.sort()
       : months.filter(m => {
           if (filterYear === now.getFullYear().toString()) {
             return parseInt(m) <= now.getMonth() + 1;
@@ -109,12 +123,17 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
           return true;
         });
 
-    const displayBranches = filterBranch
-      ? branchNames.filter(b => b === filterBranch)
+    const displayBranches = filterBranch.length > 0
+      ? branchNames.filter(b => filterBranch.includes(b))
       : branchNames;
 
     return { map, activeMonths, displayBranches };
   }, [allCosts, branches, filterYear, filterMonth, filterBranch]);
+
+  // Helper: toggle value in multi-select array
+  const toggleMulti = (arr, setArr, value) => {
+    setArr(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
+  };
 
   // Monthly KRW totals (using per-month exchange rates)
   const monthlyKRWTotals = useMemo(() => {
@@ -193,14 +212,170 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
         <select value={filterYear} onChange={e => { setFilterYear(e.target.value); if (onYearChange) onYearChange(e.target.value); }} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
-          <option value="">All Months</option>
-          {months.map((m, i) => <option key={m} value={m}>{monthLabels[i]}</option>)}
-        </select>
-        <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} style={{ padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8rem', background: 'white', color: '#1a1a1a' }}>
-          <option value="">All Stations</option>
-          {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
-        </select>
+
+        {/* Multi-select Month dropdown */}
+        <div ref={monthDropdownRef} style={{ position: 'relative' }}>
+          <button onClick={() => { setShowMonthDropdown(!showMonthDropdown); setShowBranchDropdown(false); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.3rem',
+              padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem',
+              fontSize: '0.8rem', background: 'white', color: '#1a1a1a', cursor: 'pointer',
+              minWidth: '110px', justifyContent: 'space-between',
+            }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {filterMonth.length === 0 ? 'All Months' : filterMonth.length === 1
+                ? monthLabels[parseInt(filterMonth[0]) - 1]
+                : `${filterMonth.length} months`}
+            </span>
+            <ChevronDown size={12} />
+          </button>
+          {showMonthDropdown && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', zIndex: 50,
+              background: 'white', border: '1px solid #d1d5db', borderRadius: '0.5rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '150px', maxHeight: '260px', overflowY: 'auto',
+            }}>
+              <div
+                onClick={() => setFilterMonth([])}
+                style={{
+                  padding: '0.4rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem',
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  background: filterMonth.length === 0 ? '#eef2ff' : 'transparent',
+                  color: filterMonth.length === 0 ? COLORS.primary : '#1a1a1a',
+                  fontWeight: filterMonth.length === 0 ? '600' : '400',
+                  borderBottom: '1px solid #f3f4f6',
+                }}
+              >
+                {filterMonth.length === 0 && <Check size={12} />} All Months
+              </div>
+              {months.map((m, i) => (
+                <div key={m}
+                  onClick={() => toggleMulti(filterMonth, setFilterMonth, m)}
+                  style={{
+                    padding: '0.35rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem',
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    background: filterMonth.includes(m) ? '#eef2ff' : 'transparent',
+                    color: filterMonth.includes(m) ? COLORS.primary : '#1a1a1a',
+                    fontWeight: filterMonth.includes(m) ? '600' : '400',
+                  }}
+                  onMouseEnter={e => { if (!filterMonth.includes(m)) e.currentTarget.style.background = '#f8fafc'; }}
+                  onMouseLeave={e => { if (!filterMonth.includes(m)) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{
+                    width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0,
+                    border: filterMonth.includes(m) ? `2px solid ${COLORS.primary}` : '2px solid #d1d5db',
+                    background: filterMonth.includes(m) ? COLORS.primary : 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {filterMonth.includes(m) && <Check size={10} color="white" />}
+                  </span>
+                  {monthLabels[i]}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Multi-select Station dropdown */}
+        <div ref={branchDropdownRef} style={{ position: 'relative' }}>
+          <button onClick={() => { setShowBranchDropdown(!showBranchDropdown); setShowMonthDropdown(false); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.3rem',
+              padding: '0.35rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem',
+              fontSize: '0.8rem', background: 'white', color: '#1a1a1a', cursor: 'pointer',
+              minWidth: '120px', justifyContent: 'space-between',
+            }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {filterBranch.length === 0 ? 'All Stations' : filterBranch.length === 1
+                ? filterBranch[0]
+                : `${filterBranch.length} stations`}
+            </span>
+            <ChevronDown size={12} />
+          </button>
+          {showBranchDropdown && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', zIndex: 50,
+              background: 'white', border: '1px solid #d1d5db', borderRadius: '0.5rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)', minWidth: '160px', maxHeight: '260px', overflowY: 'auto',
+            }}>
+              <div
+                onClick={() => setFilterBranch([])}
+                style={{
+                  padding: '0.4rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem',
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  background: filterBranch.length === 0 ? '#eef2ff' : 'transparent',
+                  color: filterBranch.length === 0 ? COLORS.primary : '#1a1a1a',
+                  fontWeight: filterBranch.length === 0 ? '600' : '400',
+                  borderBottom: '1px solid #f3f4f6',
+                }}
+              >
+                {filterBranch.length === 0 && <Check size={12} />} All Stations
+              </div>
+              {(branches || []).filter(b => b.name !== 'HQ' && b.name !== 'hq').map(b => (
+                <div key={b.name}
+                  onClick={() => toggleMulti(filterBranch, setFilterBranch, b.name)}
+                  style={{
+                    padding: '0.35rem 0.6rem', cursor: 'pointer', fontSize: '0.75rem',
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    background: filterBranch.includes(b.name) ? '#eef2ff' : 'transparent',
+                    color: filterBranch.includes(b.name) ? COLORS.primary : '#1a1a1a',
+                    fontWeight: filterBranch.includes(b.name) ? '600' : '400',
+                  }}
+                  onMouseEnter={e => { if (!filterBranch.includes(b.name)) e.currentTarget.style.background = '#f8fafc'; }}
+                  onMouseLeave={e => { if (!filterBranch.includes(b.name)) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{
+                    width: '14px', height: '14px', borderRadius: '3px', flexShrink: 0,
+                    border: filterBranch.includes(b.name) ? `2px solid ${COLORS.primary}` : '2px solid #d1d5db',
+                    background: filterBranch.includes(b.name) ? COLORS.primary : 'white',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {filterBranch.includes(b.name) && <Check size={10} color="white" />}
+                  </span>
+                  {b.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Selection summary chips */}
+        {(filterMonth.length > 0 || filterBranch.length > 0) && (
+          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {filterMonth.map(m => (
+              <span key={m} onClick={() => toggleMulti(filterMonth, setFilterMonth, m)}
+                style={{
+                  padding: '0.15rem 0.4rem', borderRadius: '9999px', fontSize: '0.6rem',
+                  background: '#eef2ff', color: COLORS.primary, fontWeight: '600',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
+                  border: '1px solid #c7d2fe',
+                }}>
+                {monthLabels[parseInt(m) - 1]} <X size={9} />
+              </span>
+            ))}
+            {filterBranch.map(b => (
+              <span key={b} onClick={() => toggleMulti(filterBranch, setFilterBranch, b)}
+                style={{
+                  padding: '0.15rem 0.4rem', borderRadius: '9999px', fontSize: '0.6rem',
+                  background: '#fef3c7', color: '#92400e', fontWeight: '600',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
+                  border: '1px solid #fde68a',
+                }}>
+                {b} <X size={9} />
+              </span>
+            ))}
+            {(filterMonth.length > 0 || filterBranch.length > 0) && (
+              <button onClick={() => { setFilterMonth([]); setFilterBranch([]); }}
+                style={{
+                  padding: '0.15rem 0.4rem', borderRadius: '9999px', fontSize: '0.55rem',
+                  background: '#fee2e2', color: '#dc2626', fontWeight: '600', cursor: 'pointer',
+                  border: '1px solid #fecaca',
+                }}>
+                Clear all
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Exchange Rate Table Viewer (when viewing a specific month) */}

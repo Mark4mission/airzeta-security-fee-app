@@ -6,7 +6,7 @@ import { db, storage } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Paperclip, X, UploadCloud, AlertCircle, Languages, Loader, ChevronDown, Minus, Table, Code, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Paperclip, X, UploadCloud, AlertCircle, Languages, Loader, ChevronDown, Minus, Table, Code, Eye, EyeOff, FileUp } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -62,6 +62,8 @@ export default function PostWrite() {
   const [showTableDialog, setShowTableDialog] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
+  // .md file upload
+  const mdFileInputRef = useRef(null);
 
   const { currentUser, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -176,7 +178,15 @@ export default function PostWrite() {
         breaks: true,
         gfm: true,
       });
-      return marked.parse(md);
+      // Pre-process: ensure --- is treated as hr (not escaped)
+      // Normalize markdown symbols that get escaped during copy-paste
+      let processed = md;
+      // Fix escaped markdown symbols: \# → #, \*\* → **, \- → -
+      processed = processed.replace(/\\#/g, '#');
+      processed = processed.replace(/\\\*/g, '*');
+      processed = processed.replace(/\\-/g, '-');
+      processed = processed.replace(/\\_/g, '_');
+      return marked.parse(processed);
     } catch {
       return md.replace(/\n/g, '<br>');
     }
@@ -216,6 +226,41 @@ export default function PostWrite() {
     setMarkdownMode(!markdownMode);
     setShowMarkdownPreview(false);
   }, [markdownMode, content, markdownText, convertHTMLToMarkdown, convertMarkdownToHTML]);
+
+  // ---- .md file upload handler ----
+  const handleMdFileUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Accept .md and .txt files
+    if (!file.name.match(/\.(md|markdown|txt)$/i)) {
+      setError('Only .md, .markdown, or .txt files are supported.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Markdown file must be under 5MB.');
+      return;
+    }
+    try {
+      const text = await file.text();
+      // Extract title from first heading if available
+      const titleMatch = text.match(/^#\s+(.+)$/m);
+      if (titleMatch && !title.trim()) {
+        setTitle(titleMatch[1].trim());
+      }
+      if (markdownMode) {
+        setMarkdownText(text);
+      } else {
+        // Convert to HTML and load into rich editor
+        const html = await convertMarkdownToHTML(text);
+        setContent(html);
+      }
+      setError('');
+    } catch (err) {
+      setError('Failed to read markdown file: ' + err.message);
+    }
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+  }, [markdownMode, title, convertMarkdownToHTML]);
 
   // ---- AI Translation ----
   const handleTranslate = async () => {
@@ -547,6 +592,20 @@ ${plainText}`;
 
               {/* Right side: Markdown toggle + Translation controls */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {/* Upload .md file */}
+                <button type="button" title="Upload .md file"
+                  onClick={() => mdFileInputRef.current?.click()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.25rem',
+                    padding: '0.3rem 0.55rem', background: COLORS.surfaceLight,
+                    border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
+                    color: COLORS.text.secondary, fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
+                  }}>
+                  <FileUp size={12} /> .md
+                </button>
+                <input ref={mdFileInputRef} type="file" accept=".md,.markdown,.txt"
+                  style={{ display: 'none' }} onChange={handleMdFileUpload} />
+
                 {/* Markdown toggle */}
                 <button type="button" onClick={handleToggleMarkdown}
                   title={markdownMode ? 'Switch to Rich Text' : 'Switch to Markdown'}

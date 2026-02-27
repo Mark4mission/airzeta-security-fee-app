@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { 
-  Shield, Home, Megaphone, DollarSign, Package, Settings as SettingsIcon, 
-  LogOut, ChevronLeft, ChevronRight, Menu, X, Users
+  Shield, Home, Megaphone, DollarSign, ShieldAlert, Settings as SettingsIcon, 
+  LogOut, ChevronLeft, ChevronRight, Menu, X, Users, FileText, Link2
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
@@ -27,9 +27,11 @@ const COLORS = {
 
 const NAV_ITEMS = [
   { path: '/', label: 'Home', icon: Home, roles: ['hq_admin', 'branch_user'] },
+  { path: '/security-policy', label: 'Security Policy', icon: FileText, roles: ['hq_admin', 'branch_user'] },
   { path: '/bulletin', label: 'Security Bulletin', icon: Megaphone, roles: ['hq_admin', 'branch_user'] },
   { path: '/security-fee', label: 'Security Fee', icon: DollarSign, roles: ['hq_admin', 'branch_user'] },
-  { path: '/security-level', label: 'Aviation Security', icon: Package, roles: ['hq_admin', 'branch_user'] },
+  { path: '/security-level', label: 'Security Level', icon: ShieldAlert, roles: ['hq_admin', 'branch_user'] },
+  { path: '/important-links', label: 'Important Links', icon: Link2, roles: ['hq_admin', 'branch_user'] },
   { path: '/settings', label: 'Settings & Users', icon: SettingsIcon, roles: ['hq_admin'] },
 ];
 

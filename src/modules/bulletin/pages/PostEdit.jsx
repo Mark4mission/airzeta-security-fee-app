@@ -6,7 +6,7 @@ import { db, storage } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye } from 'lucide-react';
+import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye, FileUp } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -89,6 +89,7 @@ export default function PostEdit() {
   const [markdownMode, setMarkdownMode] = useState(false);
   const [markdownSource, setMarkdownSource] = useState('');
   const [markdownPreview, setMarkdownPreview] = useState('');
+  const mdFileInputRef = useRef(null);
 
   // Register custom blots
   if (!quillRegistered.current && typeof window !== 'undefined') {
@@ -141,6 +142,16 @@ export default function PostEdit() {
     });
   }, [id, navigate]);
 
+  // Pre-process markdown: fix escaped symbols from copy-paste
+  const preprocessMarkdown = useCallback((md) => {
+    let processed = md;
+    processed = processed.replace(/\\#/g, '#');
+    processed = processed.replace(/\\\*/g, '*');
+    processed = processed.replace(/\\-/g, '-');
+    processed = processed.replace(/\\_/g, '_');
+    return processed;
+  }, []);
+
   // Markdown toggle
   const handleToggleMarkdown = useCallback(async () => {
     if (!markdownMode) {
@@ -159,7 +170,7 @@ export default function PostEdit() {
       try {
         const { marked } = await import('marked');
         marked.setOptions({ breaks: true, gfm: true });
-        const html = marked(markdownSource);
+        const html = marked(preprocessMarkdown(markdownSource));
         setContent(html);
         setMarkdownPreview('');
       } catch {
@@ -167,18 +178,56 @@ export default function PostEdit() {
       }
       setMarkdownMode(false);
     }
-  }, [markdownMode, content, markdownSource]);
+  }, [markdownMode, content, markdownSource, preprocessMarkdown]);
 
   const handleMarkdownChange = useCallback(async (value) => {
     setMarkdownSource(value);
     try {
       const { marked } = await import('marked');
       marked.setOptions({ breaks: true, gfm: true });
-      setMarkdownPreview(marked(value));
+      setMarkdownPreview(marked(preprocessMarkdown(value)));
     } catch {
       setMarkdownPreview(value.replace(/\n/g, '<br>'));
     }
-  }, []);
+  }, [preprocessMarkdown]);
+
+  // .md file upload handler
+  const handleMdFileUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.match(/\.(md|markdown|txt)$/i)) {
+      setError('Only .md, .markdown, or .txt files are supported.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Markdown file must be under 5MB.');
+      return;
+    }
+    try {
+      const text = await file.text();
+      const titleMatch = text.match(/^#\s+(.+)$/m);
+      if (titleMatch && !title.trim()) {
+        setTitle(titleMatch[1].trim());
+      }
+      if (markdownMode) {
+        setMarkdownSource(text);
+        handleMarkdownChange(text);
+      } else {
+        try {
+          const { marked } = await import('marked');
+          marked.setOptions({ breaks: true, gfm: true });
+          const html = marked(preprocessMarkdown(text));
+          setContent(html);
+        } catch {
+          setContent(text.replace(/\n/g, '<br>'));
+        }
+      }
+      setError('');
+    } catch (err) {
+      setError('Failed to read file: ' + err.message);
+    }
+    e.target.value = '';
+  }, [markdownMode, title, handleMarkdownChange, preprocessMarkdown]);
 
   // ---- AI Translation ----
   const handleTranslate = async () => {
@@ -365,6 +414,20 @@ ${plainText}`;
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.3rem' }}>
               <label style={{ fontSize: '0.8rem', fontWeight: '600', color: COLORS.text.secondary }}>Content</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                {/* Upload .md file */}
+                <button type="button" title="Upload .md file"
+                  onClick={() => mdFileInputRef.current?.click()}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.25rem',
+                    padding: '0.3rem 0.55rem', background: COLORS.surfaceLight,
+                    border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
+                    color: COLORS.text.secondary, fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
+                  }}>
+                  <FileUp size={11} /> .md
+                </button>
+                <input ref={mdFileInputRef} type="file" accept=".md,.markdown,.txt"
+                  style={{ display: 'none' }} onChange={handleMdFileUpload} />
+
                 {/* Markdown toggle */}
                 <button type="button" onClick={handleToggleMarkdown}
                   title={markdownMode ? 'Switch to Rich Editor' : 'Switch to Markdown'}
