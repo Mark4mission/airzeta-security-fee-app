@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -310,25 +311,22 @@ function SecurityPledgeCard() {
           <div
             onClick={() => setShowModal(true)}
             style={{
-              width: '100px', height: '100px', background: '#ffffff',
+              width: '110px', height: '110px', background: '#ffffff',
               borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.3)', padding: '8px',
+              flexDirection: 'column',
             }}
           >
-            {/* Simple QR-like visual */}
-            <div style={{ width: '80px', height: '80px', display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gridTemplateRows: 'repeat(7,1fr)', gap: '1px' }}>
-              {Array.from({ length: 49 }).map((_, i) => {
-                const row = Math.floor(i / 7);
-                const col = i % 7;
-                // Create QR corner patterns
-                const isCorner = (row < 3 && col < 3) || (row < 3 && col > 3) || (row > 3 && col < 3);
-                const isCenter = row === 3 && col === 3;
-                const isDark = isCorner || isCenter || Math.random() > 0.55;
-                return <div key={i} style={{ background: isDark ? '#1a1a1a' : '#ffffff', borderRadius: '1px' }} />;
-              })}
-            </div>
-            <div style={{ position: 'absolute', bottom: '2px', fontSize: '0.4rem', color: '#666', textAlign: 'center', width: '100%' }}>SCAN TO SIGN</div>
+            <QRCodeSVG
+              value={pledgeUrl}
+              size={88}
+              level="M"
+              includeMargin={false}
+              bgColor="#ffffff"
+              fgColor="#1a1a1a"
+            />
+            <div style={{ fontSize: '0.4rem', color: '#666', textAlign: 'center', marginTop: '2px' }}>SCAN TO SIGN</div>
           </div>
 
           {/* Info */}

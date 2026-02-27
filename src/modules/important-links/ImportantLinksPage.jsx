@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../core/AuthContext';
-import { Link2, Plus, Trash2, Edit, ExternalLink, Globe2, X, Save, Loader } from 'lucide-react';
+import { Link2, Plus, Trash2, Edit, ExternalLink, Globe2, X, Save, Loader, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C', surfaceLight: '#1A3A5C',
@@ -11,21 +11,36 @@ const COLORS = {
   input: { bg: '#1A3A5C', border: '#2A5080', text: '#E8EAED' },
 };
 
-// Generate AI description using Gemini
-async function generateLinkDescription(url, title) {
+const CATEGORIES = [
+  { value: 'regulatory', label: 'Regulatory & Compliance', color: '#ef4444', icon: '📋' },
+  { value: 'training', label: 'Training & Education', color: '#f59e0b', icon: '🎓' },
+  { value: 'industry', label: 'Industry & News', color: '#3b82f6', icon: '🌐' },
+  { value: 'tools', label: 'Tools & Resources', color: '#10b981', icon: '🔧' },
+  { value: 'general', label: 'General', color: '#8b5cf6', icon: '📌' },
+];
+
+// Enhanced AI: generates title, category, and descriptions from URL alone
+async function generateLinkMetadata(url, existingTitle) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!apiKey) return { en: 'Visit this resource for more information.', ko: '자세한 정보는 이 리소스를 방문하세요.' };
+  if (!apiKey) return null;
 
   try {
     const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = `You are a helpful assistant. Given this URL and title, write a brief 2-line description in English AND Korean. The site is likely related to aviation security, logistics, or regulatory compliance.
+    const categoryList = CATEGORIES.map(c => c.value).join(', ');
+    const prompt = `You are an expert in aviation security and cargo logistics. Analyze the following URL and generate metadata for it.
 
 URL: ${url}
-Title: ${title || url}
+${existingTitle ? `Current Title: ${existingTitle}` : ''}
 
-Return ONLY a JSON object (no code fences):
-{"en": "English description (2 lines max)", "ko": "Korean description (2 lines max)"}`;
+Based on the URL structure, domain name, and your knowledge, generate:
+1. A concise title (max 60 chars) if no title is provided
+2. The best category from: ${categoryList}
+3. A brief 2-sentence English description
+4. A brief 2-sentence Korean description
+
+Return ONLY a JSON object (no code fences, no extra text):
+{"title": "Short descriptive title", "category": "one_of_categories", "en": "English description", "ko": "Korean description"}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
@@ -35,17 +50,21 @@ Return ONLY a JSON object (no code fences):
     let text = response.text.trim().replace(/^```[\w]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
     try {
       const parsed = JSON.parse(text);
-      return { en: parsed.en || '', ko: parsed.ko || '' };
+      return {
+        title: parsed.title || '',
+        category: CATEGORIES.some(c => c.value === parsed.category) ? parsed.category : 'general',
+        en: parsed.en || '',
+        ko: parsed.ko || '',
+      };
     } catch {
-      return { en: text.substring(0, 150), ko: '' };
+      return null;
     }
   } catch (err) {
     console.error('[Links] AI error:', err);
-    return { en: 'Visit this resource for more information.', ko: '자세한 정보는 이 리소스를 방문하세요.' };
+    return null;
   }
 }
 
-// Get favicon from Google's service
 function getFaviconUrl(url) {
   try {
     const domain = new URL(url).hostname;
@@ -68,14 +87,7 @@ export default function ImportantLinksPage() {
   const [formCategory, setFormCategory] = useState('general');
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const categories = [
-    { value: 'regulatory', label: 'Regulatory', color: '#ef4444' },
-    { value: 'training', label: 'Training', color: '#f59e0b' },
-    { value: 'industry', label: 'Industry', color: '#3b82f6' },
-    { value: 'tools', label: 'Tools', color: '#10b981' },
-    { value: 'general', label: 'General', color: '#8b5cf6' },
-  ];
+  const [collapsedCategories, setCollapsedCategories] = useState({});
 
   const loadLinks = async () => {
     try {
@@ -90,13 +102,37 @@ export default function ImportantLinksPage() {
 
   useEffect(() => { loadLinks(); }, []);
 
+  // Group links by category
+  const groupedLinks = useMemo(() => {
+    const groups = {};
+    CATEGORIES.forEach(cat => { groups[cat.value] = []; });
+    links.forEach(link => {
+      const cat = link.category || 'general';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(link);
+    });
+    // Return only non-empty groups, in category order
+    return CATEGORIES.filter(cat => groups[cat.value].length > 0)
+      .map(cat => ({ ...cat, links: groups[cat.value] }));
+  }, [links]);
+
+  // Enhanced AI generation: URL only → title + category + descriptions
   const handleGenerateAI = async () => {
     if (!formUrl) return;
     setGenerating(true);
-    const desc = await generateLinkDescription(formUrl, formTitle);
-    setFormDescEn(desc.en);
-    setFormDescKo(desc.ko);
-    setGenerating(false);
+    try {
+      const result = await generateLinkMetadata(formUrl, formTitle);
+      if (result) {
+        if (!formTitle.trim() && result.title) setFormTitle(result.title);
+        if (result.category) setFormCategory(result.category);
+        if (result.en) setFormDescEn(result.en);
+        if (result.ko) setFormDescKo(result.ko);
+      }
+    } catch (err) {
+      console.error('[Links] AI generate error:', err);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleSave = async () => {
@@ -112,7 +148,6 @@ export default function ImportantLinksPage() {
         favicon: getFaviconUrl(formUrl),
         updatedAt: serverTimestamp(),
       };
-
       if (editingId) {
         await updateDoc(doc(db, 'importantLinks', editingId), data);
       } else {
@@ -151,6 +186,10 @@ export default function ImportantLinksPage() {
     setFormCategory('general');
   };
 
+  const toggleCategory = (catValue) => {
+    setCollapsedCategories(prev => ({ ...prev, [catValue]: !prev[catValue] }));
+  };
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '3rem', color: COLORS.text.secondary }}>Loading links...</div>;
   }
@@ -169,13 +208,15 @@ export default function ImportantLinksPage() {
           </div>
           <div>
             <h1 style={{ fontSize: '1.15rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>Important Links</h1>
-            <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, margin: 0 }}>Curated resources for aviation cargo security professionals</p>
+            <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, margin: 0 }}>
+              Curated resources for aviation cargo security professionals — {links.length} link{links.length !== 1 ? 's' : ''}
+            </p>
           </div>
         </div>
         {isAdmin && (
           <button onClick={() => { resetForm(); setShowAddForm(true); }} style={{
             display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.4rem 0.8rem',
-            background: 'rgba(59,130,246,0.12)', border: `1px solid rgba(59,130,246,0.3)`,
+            background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
             borderRadius: '0.4rem', color: COLORS.blue, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer',
           }}>
             <Plus size={14} /> Add Link
@@ -197,32 +238,52 @@ export default function ImportantLinksPage() {
               <X size={16} />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <input value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="URL (https://...)"
-              style={{ padding: '0.5rem 0.7rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.82rem' }} />
+
+          {/* URL + AI Generate row */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input value={formUrl} onChange={e => setFormUrl(e.target.value)} placeholder="Paste URL here (https://...)"
+              style={{ flex: 1, padding: '0.5rem 0.7rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.82rem' }} />
+            <button onClick={handleGenerateAI} disabled={generating || !formUrl}
+              title="AI will auto-fill title, category, and descriptions from the URL"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.5rem 0.8rem',
+                background: generating ? COLORS.surfaceLight : 'rgba(16,185,129,0.12)',
+                border: `1px solid ${generating ? COLORS.border : 'rgba(16,185,129,0.3)'}`,
+                borderRadius: '0.4rem', color: generating ? COLORS.text.light : '#34D399',
+                fontSize: '0.75rem', fontWeight: '700', cursor: generating ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}>
+              {generating ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={13} />}
+              {generating ? 'Analyzing...' : 'AI Auto-Fill'}
+            </button>
+          </div>
+          <div style={{ fontSize: '0.6rem', color: COLORS.text.light, marginTop: '-0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <Sparkles size={9} /> Paste a URL and click "AI Auto-Fill" — title, category, and descriptions are generated automatically
+          </div>
+
+          {/* Title + Category */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.5rem' }}>
             <input value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Link Title"
               style={{ padding: '0.5rem 0.7rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.82rem' }} />
+            <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
+              style={{ padding: '0.4rem 0.6rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.78rem' }}>
+              {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+            </select>
           </div>
-          <select value={formCategory} onChange={e => setFormCategory(e.target.value)}
-            style={{ padding: '0.4rem 0.6rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.78rem', width: 'fit-content' }}>
-            {categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
+
+          {/* Descriptions */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <textarea value={formDescEn} onChange={e => setFormDescEn(e.target.value)} placeholder="English description (2-3 lines)" rows={2}
+            <textarea value={formDescEn} onChange={e => setFormDescEn(e.target.value)} placeholder="English description (2-3 sentences)" rows={2}
               style={{ padding: '0.5rem 0.7rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.78rem', resize: 'vertical' }} />
-            <textarea value={formDescKo} onChange={e => setFormDescKo(e.target.value)} placeholder="Korean description (2-3 lines)" rows={2}
+            <textarea value={formDescKo} onChange={e => setFormDescKo(e.target.value)} placeholder="Korean description (2-3 sentences)" rows={2}
               style={{ padding: '0.5rem 0.7rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.4rem', color: COLORS.input.text, fontSize: '0.78rem', resize: 'vertical' }} />
           </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-            <button onClick={handleGenerateAI} disabled={generating || !formUrl} style={{
-              display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.7rem',
-              background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)',
-              borderRadius: '0.35rem', color: '#34D399', fontSize: '0.72rem', fontWeight: '600',
-              cursor: generating ? 'not-allowed' : 'pointer',
-            }}>
-              {generating ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Globe2 size={12} />}
-              {generating ? 'Generating...' : 'AI Generate'}
-            </button>
+            <button onClick={resetForm} style={{
+              padding: '0.35rem 0.7rem', background: 'transparent', border: `1px solid ${COLORS.border}`,
+              borderRadius: '0.35rem', color: COLORS.text.secondary, fontSize: '0.72rem', cursor: 'pointer',
+            }}>Cancel</button>
             <button onClick={handleSave} disabled={saving || !formUrl || !formTitle} style={{
               display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.35rem 0.7rem',
               background: COLORS.accent, border: 'none', borderRadius: '0.35rem',
@@ -234,79 +295,100 @@ export default function ImportantLinksPage() {
         </div>
       )}
 
-      {/* Links Grid */}
+      {/* Links grouped by category */}
       {links.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem', color: COLORS.text.light }}>
           <Link2 size={40} style={{ margin: '0 auto 0.5rem', opacity: 0.2 }} />
           <p style={{ fontSize: '0.85rem' }}>No links added yet.</p>
+          {isAdmin && <p style={{ fontSize: '0.72rem', color: COLORS.text.light }}>Click "Add Link" to get started.</p>}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.75rem' }}>
-          {links.map(link => {
-            const cat = categories.find(c => c.value === link.category) || categories[4];
-            return (
-              <div key={link.id} style={{
-                background: COLORS.surface, borderRadius: '0.75rem',
-                border: `1px solid ${COLORS.border}`, overflow: 'hidden',
-                transition: 'border-color 0.2s, transform 0.2s',
-                cursor: 'pointer',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = cat.color; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.transform = 'none'; }}
+        groupedLinks.map(group => {
+          const isCollapsed = collapsedCategories[group.value];
+          return (
+            <div key={group.value}>
+              {/* Category header */}
+              <button
+                onClick={() => toggleCategory(group.value)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%',
+                  padding: '0.6rem 0.75rem', marginBottom: isCollapsed ? 0 : '0.6rem',
+                  background: `${group.color}10`, border: `1px solid ${group.color}30`,
+                  borderRadius: isCollapsed ? '0.5rem' : '0.5rem 0.5rem 0 0',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
               >
-                {/* Category bar */}
-                <div style={{ height: '3px', background: cat.color }} />
-                <div style={{ padding: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem' }}>
-                    {link.favicon && (
-                      <img src={link.favicon} alt="" style={{ width: '32px', height: '32px', borderRadius: '6px', background: '#fff', flexShrink: 0 }}
-                        onError={e => e.target.style.display = 'none'} />
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <a href={link.url} target="_blank" rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{
-                            fontSize: '0.9rem', fontWeight: '700', color: COLORS.text.primary,
-                            textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem',
-                          }}>
-                          {link.title} <ExternalLink size={12} color={COLORS.text.light} />
-                        </a>
-                        <span style={{
-                          padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.55rem',
-                          fontWeight: '700', background: `${cat.color}18`, color: cat.color,
-                          border: `1px solid ${cat.color}35`, flexShrink: 0,
-                        }}>{cat.label}</span>
+                {isCollapsed ? <ChevronRight size={14} color={group.color} /> : <ChevronDown size={14} color={group.color} />}
+                <span style={{ fontSize: '0.72rem', marginRight: '0.15rem' }}>{group.icon}</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: group.color }}>{group.label}</span>
+                <span style={{
+                  padding: '0.1rem 0.4rem', borderRadius: '9999px', fontSize: '0.6rem',
+                  fontWeight: '700', background: `${group.color}20`, color: group.color,
+                  marginLeft: '0.25rem',
+                }}>{group.links.length}</span>
+              </button>
+
+              {/* Link cards in this category */}
+              {!isCollapsed && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '0.6rem', marginBottom: '0.5rem' }}>
+                  {group.links.map(link => (
+                    <div key={link.id} style={{
+                      background: COLORS.surface, borderRadius: '0.5rem',
+                      border: `1px solid ${COLORS.border}`, overflow: 'hidden',
+                      transition: 'border-color 0.2s, transform 0.2s',
+                    }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = group.color; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.transform = 'none'; }}
+                    >
+                      <div style={{ height: '2px', background: group.color }} />
+                      <div style={{ padding: '0.85rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                          {link.favicon && (
+                            <img src={link.favicon} alt="" style={{ width: '28px', height: '28px', borderRadius: '5px', background: '#fff', flexShrink: 0, marginTop: '1px' }}
+                              onError={e => e.target.style.display = 'none'} />
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <a href={link.url} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{
+                                fontSize: '0.85rem', fontWeight: '700', color: COLORS.text.primary,
+                                textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                lineHeight: '1.3',
+                              }}>
+                              {link.title} <ExternalLink size={11} color={COLORS.text.light} style={{ flexShrink: 0 }} />
+                            </a>
+                            {link.descriptionEn && (
+                              <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, lineHeight: '1.45', margin: '0.3rem 0 0' }}>
+                                {link.descriptionEn}
+                              </p>
+                            )}
+                            {link.descriptionKo && (
+                              <p style={{ fontSize: '0.68rem', color: COLORS.text.light, lineHeight: '1.45', margin: '0.15rem 0 0' }}>
+                                {link.descriptionKo}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '0.4rem', borderTop: `1px solid ${COLORS.border}`, paddingTop: '0.35rem' }}>
+                            <button onClick={(e) => { e.stopPropagation(); handleEdit(link); }} style={{
+                              display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'none', border: 'none',
+                              color: COLORS.blue, fontSize: '0.62rem', cursor: 'pointer', padding: '0.1rem 0.25rem',
+                            }}><Edit size={10} /> Edit</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDelete(link.id); }} style={{
+                              display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'none', border: 'none',
+                              color: '#F87171', fontSize: '0.62rem', cursor: 'pointer', padding: '0.1rem 0.25rem',
+                            }}><Trash2 size={10} /> Delete</button>
+                          </div>
+                        )}
                       </div>
-                      {link.descriptionEn && (
-                        <p style={{ fontSize: '0.75rem', color: COLORS.text.secondary, lineHeight: '1.5', margin: '0.35rem 0 0' }}>
-                          {link.descriptionEn}
-                        </p>
-                      )}
-                      {link.descriptionKo && (
-                        <p style={{ fontSize: '0.72rem', color: COLORS.text.light, lineHeight: '1.5', margin: '0.15rem 0 0' }}>
-                          {link.descriptionKo}
-                        </p>
-                      )}
                     </div>
-                  </div>
-                  {isAdmin && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.4rem', marginTop: '0.5rem', borderTop: `1px solid ${COLORS.border}`, paddingTop: '0.4rem' }}>
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit(link); }} style={{
-                        display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'none', border: 'none',
-                        color: COLORS.blue, fontSize: '0.65rem', cursor: 'pointer', padding: '0.15rem 0.3rem',
-                      }}><Edit size={11} /> Edit</button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(link.id); }} style={{
-                        display: 'flex', alignItems: 'center', gap: '0.2rem', background: 'none', border: 'none',
-                        color: '#F87171', fontSize: '0.65rem', cursor: 'pointer', padding: '0.15rem 0.3rem',
-                      }}><Trash2 size={11} /> Delete</button>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );
