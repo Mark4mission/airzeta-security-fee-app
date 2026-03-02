@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.1
+> **Document Version**: 1.2
 > **Last Updated**: 2026-03-02
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -143,6 +143,14 @@ webapp/
       important-links/
         ImportantLinksPage.jsx    # Grouped important links with QR codes
       
+      document-library/
+        DocumentLibraryPage.jsx   # Router for document library sub-pages
+        pages/
+          DocumentDashboard.jsx   # List of all documents with search, filter, category badges
+          DocumentUpload.jsx      # Upload new document with IATA code, category, permissions
+          DocumentDetail.jsx      # View document, download files, admin download tracking
+          DocumentEdit.jsx        # Edit document metadata and attachments
+      
       settings/
         SettingsPage.jsx          # App settings and user management
 ```
@@ -161,6 +169,7 @@ webapp/
 | `securityFees` | Fee data | (branch-specific fee records) |
 | `securityPolicies` | Policy documents | (policy content) |
 | `importantLinks` | Important links | url, title, category, order |
+| `documentLibrary` | Document Library (SSOP) | title, description, category, iataCode, downloadPermission, pinned, attachments[], uploaderId, uploaderEmail, uploaderBranch, uploaderRole, downloadCount, downloadLog[], createdAt, updatedAt |
 
 ---
 
@@ -173,7 +182,25 @@ webapp/
 - **History**: Level changes are recorded ONLY when "Save Configuration" is clicked (not on UI selection)
 - **History Date**: Uses the "Effective Since" date field, not today's date
 
-### 6.2 Bulletin Editor (PostWrite / PostEdit)
+### 6.2 Document Library Module (NEW - v1.2)
+- **Purpose**: Station Security Operation Manuals (SSOP) & reference documents
+- **Firestore Collection**: `documentLibrary`
+- **File Storage**: Firebase Storage under `document_library/` path
+- **Upload Limit**: 100 MB per file
+- **Title Format**: `[IATA Code] (Category) Document Title` - e.g. `[ICN] (Regulation) SSOP Manual v3`
+- **Categories**: Regulation, Guideline, Material, General, Other (color-coded badges)
+- **Download Permission**: Radio buttons - "Admin Only" or "All Branches"
+  - Uploader's branch ALWAYS has access automatically
+  - Admin users ALWAYS have access
+- **Pin to Top**: Admin-only checkbox; pinned documents sort above all others
+- **Download Tracking**: Every download records `{userId, userEmail, branchName, fileName, downloadedAt}` in `downloadLog[]` array
+  - Admin view: expandable section showing downloads grouped by branch
+  - `downloadCount` field incremented on each download
+- **IATA Code Selector**: Admin gets a dropdown from all registered branches; branch users see their 3-letter code auto-filled
+- **Pages**: DocumentDashboard (list with search, filter by category), DocumentUpload, DocumentDetail (view + download + tracking), DocumentEdit
+- **Route**: `/document-library/*` in App.jsx, navigation icon: FolderOpen
+
+### 6.3 Bulletin Editor (PostWrite / PostEdit)
 - **Rich Text**: react-quill-new (v3.8.3) wrapping Quill 2.0.3 with snow theme
 - **Markdown Mode**: Toggle between rich text and markdown (marked + turndown)
 - **Table Insertion**: Uses Quill 2's **native table module** (`quill.getModule('table').insertTable(rows, cols)`). The `table: true` must be in quillModules, and format names `table`, `table-row`, `table-body`, `table-container` must be in quillFormats.
@@ -184,11 +211,11 @@ webapp/
 - **File Upload**: Firebase Storage with resumable uploads, progress bar
 - **View Count**: Firestore `increment(1)` on post open
 
-### 6.3 Comment Translation
+### 6.4 Comment Translation
 - **Quick Buttons**: KOR, ENG, + auto-detected local language (based on timezone)
 - **Per-Comment**: Each comment has its own translate buttons beside the author ID
 
-### 6.4 Routing
+### 6.5 Routing
 - Uses `HashRouter` (URLs like `/#/bulletin`, `/#/security-level`)
 - This is required for GitHub Pages compatibility
 
@@ -227,9 +254,26 @@ const quillFormats = ['list', ...];
 **Problem**: Underline button was accidentally removed when cleaning up broken table/divider features.
 **Fix**: Must include `'underline'` in BOTH the toolbar container array AND the quillFormats array.
 
-### 7.5 Horizontal Rule Insertion
-**Problem**: Previously used a custom Quill Blot (DividerBlot) which was fragile and got removed during cleanup.
-**Fix**: Simple approach - insert `<hr>` directly into content state via a custom button outside the Quill toolbar.
+### 7.5 Horizontal Rule Insertion (CRITICAL - Updated v1.2)
+**Problem (v1.1)**: Inserting `<hr>` directly into content state via `setContent(prev => prev + '<hr>')` did NOT work because Quill strips unregistered HTML tags from its Delta format. HR tags appeared in edit mode but disappeared after save.
+**Root Cause**: Quill's Delta converter strips HTML tags that don't have registered Blots. `<hr>` has no built-in Quill Blot.
+**Fix (v1.2)**: Register a custom `DividerBlot` extending `BlockEmbed` with `tagName = 'hr'` and `blotName = 'divider'`:
+```js
+import ReactQuill, { Quill } from 'react-quill-new';
+const BlockEmbed = Quill.import('blots/block/embed');
+class DividerBlot extends BlockEmbed {
+  static blotName = 'divider';
+  static tagName = 'hr';
+}
+Quill.register(DividerBlot, true);
+```
+Then insert via Quill API:
+```js
+editor.insertEmbed(range.index + 1, 'divider', true);
+```
+And add `'divider'` to `quillFormats` array.
+**Previous failed approach (DO NOT USE)**: `setContent(prev => prev + '<hr>')` - Quill strips the hr tag.
+**LESSON LEARNED**: Any HTML element that needs to survive Quill's Delta round-trip MUST have a registered Blot.
 
 ### 7.6 Deploy Method
 **Production Deploy**: `npm run deploy` (runs `gh-pages -d dist`)
@@ -293,6 +337,24 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-02 (Session 4)
+- **Fixed**: HR rendering completely - registered custom `DividerBlot` (BlockEmbed) so `<hr>` persists in Quill Delta after save
+- **Fixed**: HR now uses Quill API `insertEmbed('divider', true)` instead of broken `setContent(prev + '<hr>')`
+- **Improved**: Table border visibility in editor - changed color from `#2A5080` to `#4A7AB5` for better contrast
+- **Added**: `'divider'` format registered in quillFormats for both PostWrite and PostEdit
+- **Created**: Document Library module (`/document-library`) with:
+  - Dashboard with search, category filter, sorted list (pinned first)
+  - Upload page: IATA code selector, category, title, description, permission, pin, file upload (100MB)
+  - Detail page: file download with tracking, admin-only download log view
+  - Edit page: modify all document metadata and attachments
+  - Permission system: Admin Only / All Branches + auto-grant to uploader's branch
+  - Download tracking: records userId, email, branch, fileName, timestamp per download
+  - Admin-only pin-to-top feature
+- **Added**: Navigation item "Document Library" with FolderOpen icon in PortalLayout
+- **Added**: Route `/document-library/*` in App.jsx
+- **Added**: Firestore collection `documentLibrary` for document storage
+- **Updated**: PROJECT_GUIDE.md to v1.2
 
 ### 2026-03-02 (Session 3 - Part 2)
 - **Fixed**: Table rendering completely - switched to Quill 2 native table module with `insertTable(rows, cols)` API
@@ -371,3 +433,5 @@ Level names containing these keywords auto-detect their color:
 | TopoJSON map not loading | Ensure `countries-110m.json` exists in `/public/` directory |
 | Deploy fails with Vercel token error | Use `npm run deploy` (gh-pages) instead. Vercel auto-deploys from main. |
 | View count not incrementing | The `viewCount` field may not exist on old posts. The `increment(1)` call handles this gracefully. |
+| HR disappears after save | Must register a custom DividerBlot (`blots/block/embed`, tagName='hr', blotName='divider'). Use `insertEmbed()` API, NOT content state injection. |
+| Document Library access denied | Check Firestore rules for `documentLibrary` collection. Ensure `storage.rules` allows `document_library/` path. |

@@ -13,6 +13,7 @@ import SecurityLevelPage from './modules/security-level/SecurityLevelPage';
 import SecurityPolicyPage from './modules/security-policy/SecurityPolicyPage';
 import ImportantLinksPage from './modules/important-links/ImportantLinksPage';
 import SettingsPage from './modules/settings/SettingsPage';
+import DocumentLibraryPage from './modules/document-library/DocumentLibraryPage';
 import { Shield } from 'lucide-react';
 
 // Loading spinner
@@ -109,6 +110,7 @@ function ProtectedRoutes() {
         <Route path="/security-policy" element={<SecurityPolicyPage />} />
         <Route path="/security-fee" element={<SecurityFeePage />} />
         <Route path="/bulletin/*" element={<BulletinPage />} />
+        <Route path="/document-library/*" element={<DocumentLibraryPage />} />
         <Route path="/security-level" element={<SecurityLevelPage />} />
         <Route path="/important-links" element={<ImportantLinksPage />} />
         <Route path="/settings" element={<SettingsPage />} />
