@@ -1,6 +1,6 @@
 # Airzeta Station Security Portal — Branch User Usage Manual v2.2
 
-**Version**: 2.2  
+**Version**: 2.3  
 **Effective Date**: March 2, 2026  
 **Audience**: Branch/Station Users  
 **Classification**: Internal Use Only
@@ -146,6 +146,9 @@ At the bottom of the Home Dashboard, a **Security Pledge Agreement** card allows
 - **"Open Pledge Form" button**: Opens the agreement in a full-screen modal window within the portal.
 - **"New Tab" link**: Opens the pledge form in a separate browser tab.
 - **Badges**: Indicates "SSI Access Required" and "Mobile Friendly" status.
+- **Total Signatories**: A donut chart on the right side displays the total number of unique signatories who have signed the pledge.
+- **Recent Signers**: A list of up to 8 recent signers (within the last 30 days) is displayed with partially masked names for privacy. For example, "홍*동" or "Tae*** h**". This helps demonstrate pledge completion momentum.
+- **Admin View**: Administrators see an additional **"View Responses"** button (green) that opens the full Google Sheets response log for reviewing all signatory details.
 
 This is convenient for sharing the pledge with on-site personnel during training sessions.
 
@@ -272,7 +275,7 @@ Any authenticated user (admin or branch user) can upload documents:
    - When dragging files over the drop zone, the border turns blue and text changes to "Drop files here to add" for visual confirmation
    - Maximum file size: **100 MB per file**
    - Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, images, and more
-   - The same drag-and-drop upload also works in the **Edit Document** page
+   - The same drag-and-drop upload also works in the **Edit Document** page. Simply drag files onto the dashed upload area to add new attachments.
 5. Click **"Upload Document"** to submit.
 
 A **title preview** is shown below the input fields so you can see how the document will appear in the list: `[IATA] (Category) Title`.
@@ -561,5 +564,5 @@ A: Open your phone's camera app and point it at the QR code on the Home page. A 
 
 *This manual is maintained by the Airzeta HQ Security Operations team. For questions, feedback, or feature requests, contact your HQ administrator or post in the Security Bulletin Board.*
 
-*Document ID: AZSP-USER-MANUAL-v2.2*  
+*Document ID: AZSP-USER-MANUAL-v2.3*  
 *Last Updated: 2026-03-02*

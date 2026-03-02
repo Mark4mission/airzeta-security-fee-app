@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.4
+> **Document Version**: 1.5
 > **Last Updated**: 2026-03-02
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -184,7 +184,7 @@ webapp/
 - **History**: Level changes are recorded ONLY when "Save Configuration" is clicked (not on UI selection)
 - **History Date**: Uses the "Effective Since" date field, not today's date
 
-### 6.2 Document Library Module (NEW - v1.2, Updated v1.3)
+### 6.2 Document Library Module (NEW - v1.2, Updated v1.5)
 - **Purpose**: Station Security Operation Manuals (SSOP) & reference documents
 - **Firestore Collection**: `documentLibrary`
 - **File Storage**: Firebase Storage under `document_library/` path
@@ -198,6 +198,7 @@ webapp/
   - Admin users ALWAYS have access
   - Users without download access see file names (grayed out with lock icon) but cannot download
 - **Drag-and-Drop Download (v1.3)**: File items use `<a>` tags with `draggable="true"` and `DownloadURL` data transfer. Users can click to download or drag a file to their desktop/file manager to save it.
+- **Drag-and-Drop Upload in Edit Mode (v1.5)**: Fixed by removing form-level drag event handlers. See Section 7.11 for details.
 - **Pin to Top**: Admin-only checkbox; pinned documents sort above all others
 - **Download Tracking**: Every download records `{userId, userEmail, branchName, fileName, downloadedAt}` in `downloadLog[]` array
   - Admin view: expandable section showing downloads grouped by branch
@@ -221,7 +222,17 @@ webapp/
 - **Quick Buttons**: KOR, ENG, + auto-detected local language (based on timezone)
 - **Per-Comment**: Each comment has its own translate buttons beside the author ID
 
-### 6.5 Routing
+### 6.5 Security Pledge Card (Enhanced - v1.5)
+- **Google Sheets Integration**: Fetches pledge signatory data from a published Google Sheet via CSV export URL (`/gviz/tq?tqx=out:csv`)
+- **Sheet ID**: `1rAN--sDV6dj9N5fgB71y7NoUyjgfkOHnmyAoBRiuHIw`
+- **Name Masking**: ~1/3 of each name is replaced with asterisks for privacy (Korean 3-char: "홍*동", English: "Tae*** h**")
+- **Total Count**: SVG donut chart showing unique signatory count (deduped by name, test entries excluded)
+- **Recent Signers**: Lists up to 8 signers from the last 30 days with masked names and dates
+- **Admin Link**: Admin users see a "View Responses" button linking to the editable Google Sheet
+- **CSV Parsing**: Custom parser handles quoted fields and commas within field values
+- **Privacy**: No raw personal data is displayed; all names are partially masked
+
+### 6.6 Routing
 - Uses `HashRouter` (URLs like `/#/bulletin`, `/#/security-level`)
 - This is required for GitHub Pages compatibility
 
@@ -311,21 +322,16 @@ And add `'divider'` to `quillFormats` array.
 **Problem**: `npm run build` (vite build) can hang/timeout in memory-constrained sandbox environments.
 **Fix**: Use `NODE_OPTIONS="--max-old-space-size=512"` before build commands in sandboxed environments. The project transforms ~2,542 modules and needs careful memory management.
 
-### 7.11 Drag-and-Drop File Upload in Edit Mode (v1.4)
-**Problem**: In `DocumentEdit.jsx`, dragging files onto the upload drop zone caused the page to "flicker" (momentary reload) without actually adding the files.
-**Root Cause**: Multiple issues:
-  1. The browser's default drag-and-drop behavior navigates to the dropped file, causing a page reload (the "flicker").
-  2. The `<form>` element did not prevent default drag events, so drops outside the exact drop zone area triggered navigation.
-  3. Using `e.currentTarget.style` directly for visual feedback was fragile and caused rendering glitches.
-  4. Missing `onDragEnter` handler and `e.dataTransfer.dropEffect = 'copy'` meant the browser didn't show the correct cursor.
-**Fix (v1.4)**:
-  1. Added `onDragOver`, `onDragEnter`, and `onDrop` handlers to the `<form>` element itself, all calling `e.preventDefault()` to block browser navigation.
-  2. Replaced inline style mutations with React state (`isDragOver`) for reactive visual feedback.
-  3. Added `onDragEnter` with `setIsDragOver(true)` and `e.dataTransfer.dropEffect = 'copy'`.
-  4. Added `e.relatedTarget` check in `onDragLeave` to prevent flickering when hovering over child elements.
-  5. Added null guard: `Array.from(e.dataTransfer?.files || [])`.
-  6. Applied the same form-level drag prevention to `DocumentUpload.jsx` for consistency.
-**LESSON LEARNED**: When implementing drag-and-drop in forms, the `<form>` element must prevent default drag events. Otherwise, drops that miss the target zone cause browser navigation to the file URL.
+### 7.11 Drag-and-Drop File Upload in Edit Mode (v1.4, Corrected v1.5)
+**Problem**: In `DocumentEdit.jsx`, dragging files onto the upload drop zone caused the page to "flicker" and files were never added to the newFiles state.
+**Root Cause (Session 6 v1.4 - WRONG approach)**: Initially the form-level `onDragOver`/`onDragEnter`/`onDrop` handlers with `e.preventDefault()` were ADDED to the `<form>` element. This appeared to fix the browser navigation issue, but actually CAUSED another problem: the form's `onDrop` handler consumed all drop events before they could reach the inner drop zone's handler.
+**Root Cause (Session 7 v1.5 - CORRECT diagnosis)**: The `<form>` element had `onDragOver={(e) => e.preventDefault()}`, `onDragEnter={(e) => e.preventDefault()}`, and `onDrop={(e) => e.preventDefault()}`. These form-level handlers intercepted ALL drag events and called `e.preventDefault()` without forwarding files to the state. Since the form wraps the drop zone, the drop event was consumed at the form level and never reached the inner drop zone's `onDrop` handler that actually adds files to `newFiles`.
+**Fix (v1.5)**: REMOVED all drag event handlers (`onDragOver`, `onDragEnter`, `onDrop`) from the `<form>` element. The inner drop zone `<div>` already has its own proper event handlers with both `e.preventDefault()` and `e.stopPropagation()`, and correctly updates state via `setNewFiles(prev => [...prev, ...validFiles])`.
+**LESSON LEARNED**: 
+  - Drag events bubble up through the DOM. A parent element calling `preventDefault()` on `onDrop` will consume the event before any child handler can process it.
+  - Only attach drag event handlers to the SPECIFIC drop target element, not to wrapper forms or containers.
+  - When drag-and-drop "flickers" but doesn't actually add files, check for parent elements intercepting the events.
+  - The v1.4 fix was a RED HERRING that masked the real issue. Always verify that the actual file state (`newFiles`) updates after drop, not just that the page doesn't reload.
 
 ### 7.12 Home Dashboard Card Visualizations (v1.4)
 **Security Level Mini Map Enhancements**:
@@ -344,12 +350,27 @@ And add `'divider'` to `quillFormats` array.
   - Added "sites" label to branch count displays
   - Centered and improved legend positioning
 
-**Security Pledge Card Enhancements**:
+**Security Pledge Card Enhancements (v1.4)**:
   - Added decorative background elements
   - Added hover animation on QR code card
   - Added "SSI Access Required" and "Mobile Friendly" badges
   - Added separate "New Tab" link button alongside the modal button
   - Shield icon now has its own styled container
+
+### 7.13 Google Sheets CSV Integration for Pledge Data (v1.5)
+**Problem**: Need to display real-time pledge signatory data from a Google Sheet in the portal without API keys.
+**Solution**: Use the public CSV export endpoint:
+  - URL format: `https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv`
+  - Returns raw CSV that can be parsed client-side with a custom parser
+  - Sheet must be shared as "Anyone with the link can view"
+**Name Masking**: Privacy function masks ~1/3 of each name:
+  - Korean 3-char: first + asterisk + last (e.g., "홍*동")
+  - Korean 2-char: first + asterisk (e.g., "김*")
+  - English with space: ~66% of first name + asterisked last (e.g., "Tae*** h**")
+  - Longer names: keep front + back, mask middle
+**Deduplication**: Entries are deduped by lowercase name, keeping the latest entry per person
+**Filtering**: Test entries (containing "테스트" or "test") are excluded
+**LESSON LEARNED**: Google Sheets CSV export via `/gviz/tq?tqx=out:csv` is a reliable zero-auth approach for reading published sheets. The CSV may contain commas within quoted fields, so `line.split(',')` is NOT sufficient — a proper CSV parser is needed.
 
 ---
 
@@ -402,14 +423,27 @@ npm run lint
 
 ## 10. Changelog / Work History
 
+### 2026-03-02 (Session 7)
+- **Fixed (CORRECT)**: DocumentEdit drag-and-drop upload — REMOVED form-level drag event handlers (`onDragOver`, `onDragEnter`, `onDrop`) that were consuming drop events before the inner drop zone could process them. This was the actual root cause (Session 6 fix was incorrect — it ADDED form handlers that caused the same problem)
+- **Enhanced**: Security Pledge Card with Google Sheets integration:
+  - Fetches signatory data from published Google Sheet (ID: `1rAN--sDV6dj9N5fgB71y7NoUyjgfkOHnmyAoBRiuHIw`) via CSV endpoint
+  - Donut chart SVG showing total unique signatories (deduped, test entries excluded)
+  - Lists up to 8 recent signers (last 30 days) with privacy-masked names
+  - Name masking: Korean "홍*동", English "Tae*** h**" (~1/3 asterisked)
+  - Admin-only "View Responses" button linking to the editable Google Sheet
+  - Custom CSV parser handles quoted fields with commas
+- **Updated**: lucide-react imports to include Users, CheckCircle2
+- **Updated**: PROJECT_GUIDE.md to v1.5 with corrected drag-drop analysis and Google Sheets integration docs
+- **Updated**: User manual v2.3 with enhanced pledge card documentation
+- **Build**: 0 errors, 2,542 modules
+
 ### 2026-03-02 (Session 6)
-- **Fixed**: Document Library drag-and-drop file upload in Edit mode — form-level `preventDefault()` on drag events prevents browser file navigation (flicker), React state-driven visual feedback replaces fragile inline style mutations, added `onDragEnter` + `dropEffect='copy'`
 - **Improved**: Security Level mini map on Home Dashboard — SVG path continent outlines, connection lines between nearby stations, animated pulse rings for alert stations, glow filters per risk tier, IATA labels, "Global Status" overlay
 - **Improved**: Security Fee mini chart on Home Dashboard — gradient area fills, enhanced endpoint dots, TrendingUp icons in stat boxes, centered legend
 - **Improved**: Security Pledge Agreement card — decorative backgrounds, QR hover animation, status badges, "New Tab" link
-- **Applied**: Same form-level drag prevention to DocumentUpload.jsx for consistency
+- **Note**: Session 6 drag-and-drop fix was INCORRECT (added form-level handlers that caused the problem). Corrected in Session 7.
 - **Updated**: User manual to v2.2 with enhanced Dashboard card descriptions
-- **Updated**: PROJECT_GUIDE.md to v1.4 with new known issues and lessons learned
+- **Updated**: PROJECT_GUIDE.md to v1.4
 - **Build**: 0 errors, 2,542 modules
 
 ### 2026-03-02 (Session 5)
@@ -519,3 +553,5 @@ Level names containing these keywords auto-detect their color:
 | View count not incrementing | The `viewCount` field may not exist on old posts. The `increment(1)` call handles this gracefully. |
 | HR disappears after save | Must register a custom DividerBlot (`blots/block/embed`, tagName='hr', blotName='divider'). Use `insertEmbed()` API, NOT content state injection. |
 | Document Library access denied | Check Firestore rules for `documentLibrary` collection. Ensure `storage.rules` allows `document_library/` path. |
+| DocumentEdit drag-drop upload not working | Ensure the `<form>` element does NOT have `onDrop`/`onDragOver`/`onDragEnter` handlers — they consume drag events before the inner drop zone. Only the drop zone div should have drag handlers. |
+| Pledge signer data not loading | The Google Sheet must be shared as "Anyone with the link can view". Check browser console for CORS or network errors. |
