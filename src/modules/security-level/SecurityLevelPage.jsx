@@ -234,11 +234,12 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
     if (idx === activeLevel) return;
     const prevLevel = activeLevel;
     setActiveLevel(idx);
-    setActiveSince(new Date().toISOString().split('T')[0]);
+    // Use the Effective Since date (activeSince) for history, not today's date
+    const effectiveDate = activeSince || new Date().toISOString().split('T')[0];
     const newEntry = {
       from: levels[prevLevel]?.name || `Level ${prevLevel + 1}`,
       to: levels[idx]?.name || `Level ${idx + 1}`,
-      date: new Date().toISOString().split('T')[0],
+      date: effectiveDate,
       timestamp: Date.now(),
     };
     setHistory(prev => [newEntry, ...prev].slice(0, 50));

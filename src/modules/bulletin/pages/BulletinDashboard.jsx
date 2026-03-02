@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
-import { FileText, Plus, Clock, Search, Filter } from 'lucide-react';
+import { FileText, Plus, Clock, Search, Filter, Eye } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -117,6 +117,7 @@ export default function BulletinDashboard() {
                   <th style={{ padding: '0.7rem 1.25rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Title</th>
                   <th style={{ padding: '0.7rem 1.25rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Author</th>
                   <th style={{ padding: '0.7rem 1.25rem', textAlign: 'left', fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Date</th>
+                  <th style={{ padding: '0.7rem 0.75rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase', width: '60px' }}>Views</th>
                   <th style={{ padding: '0.7rem 1.25rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.secondary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Status</th>
                 </tr>
               </thead>
@@ -137,6 +138,11 @@ export default function BulletinDashboard() {
                     </td>
                     <td style={{ padding: '0.65rem 1.25rem', fontSize: '0.8rem', color: COLORS.text.light }}>
                       {formatDate(post.createdAt)}
+                    </td>
+                    <td style={{ padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.72rem', color: COLORS.text.light }}>
+                        <Eye size={11} /> {post.viewCount || 0}
+                      </span>
                     </td>
                     <td style={{ padding: '0.65rem 1.25rem', textAlign: 'center' }}>
                       {post.acknowledgedBy?.includes(branchName) ? (

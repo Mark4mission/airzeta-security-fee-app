@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, increment } from 'firebase/firestore';
 import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { useReactToPrint } from 'react-to-print';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify, Eye } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -29,7 +29,12 @@ const LANGUAGE_OPTIONS = [
   { code: 'vi', label: 'Ti\u1EBFng Vi\u1EC7t', flag: '\uD83C\uDDFB\uD83C\uDDF3' },
 ];
 
-// Detect primary language of text (heuristic)
+// Quick translate buttons for comments
+const QUICK_TRANSLATE = [
+  { code: 'ko', label: 'KOR', flag: '\uD83C\uDDF0\uD83C\uDDF7' },
+  { code: 'en', label: 'ENG', flag: '\uD83C\uDDFA\uD83C\uDDF8' },
+];
+
 function detectLanguage(text) {
   if (!text) return 'en';
   const clean = text.replace(/<[^>]+>/g, '').replace(/\s+/g, '');
@@ -43,7 +48,6 @@ function detectLanguage(text) {
   return 'en';
 }
 
-// Suggest target language based on source + user locale
 function suggestTargetLang(sourceLang) {
   if (sourceLang === 'ko' || sourceLang === 'en') {
     try {
@@ -59,7 +63,23 @@ function suggestTargetLang(sourceLang) {
     } catch {}
     return sourceLang === 'ko' ? 'en' : 'ko';
   }
-  return 'ko'; // Non-Korean/English posts default to Korean
+  return 'ko';
+}
+
+// Detect user's local language from timezone
+function getLocalLangOption() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Asia/Tokyo')) return { code: 'ja', label: 'JPN', flag: '\uD83C\uDDEF\uD83C\uDDF5' };
+    if (tz.includes('Asia/Shanghai') || tz.includes('Asia/Hong_Kong')) return { code: 'zh', label: 'CHN', flag: '\uD83C\uDDE8\uD83C\uDDF3' };
+    if (tz.includes('Europe/Berlin') || tz.includes('Europe/Vienna')) return { code: 'de', label: 'DEU', flag: '\uD83C\uDDE9\uD83C\uDDEA' };
+    if (tz.includes('Europe/Paris')) return { code: 'fr', label: 'FRA', flag: '\uD83C\uDDEB\uD83C\uDDF7' };
+    if (tz.includes('Europe/Madrid')) return { code: 'es', label: 'ESP', flag: '\uD83C\uDDEA\uD83C\uDDF8' };
+    if (tz.includes('Asia/Bangkok')) return { code: 'th', label: 'THA', flag: '\uD83C\uDDF9\uD83C\uDDED' };
+    if (tz.includes('Asia/Ho_Chi_Minh') || tz.includes('Asia/Saigon')) return { code: 'vi', label: 'VIE', flag: '\uD83C\uDDFB\uD83C\uDDF3' };
+    if (tz.includes('Asia/Riyadh') || tz.includes('Asia/Dubai')) return { code: 'ar', label: 'ARA', flag: '\uD83C\uDDF8\uD83C\uDDE6' };
+  } catch {}
+  return null;
 }
 
 export default function PostDetail() {
@@ -71,19 +91,29 @@ export default function PostDetail() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [allBranches, setAllBranches] = useState([]);
-  // Translation state
+  // Post translation state
   const [translatedContent, setTranslatedContent] = useState('');
   const [translatedTitle, setTranslatedTitle] = useState('');
   const [translating, setTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [targetLang, setTargetLang] = useState('ko');
   const [showLangDropdown, setShowLangDropdown] = useState(false);
-  const [translationLayout, setTranslationLayout] = useState('sideBySide'); // 'sideBySide' | 'inline'
+  const [translationLayout, setTranslationLayout] = useState('sideBySide');
+  // Comment translation state
+  const [commentTranslations, setCommentTranslations] = useState({});
+  const [commentTranslating, setCommentTranslating] = useState({});
 
   const printRef = useRef(null);
 
   const branchName = currentUser?.branchName || currentUser?.displayName || '';
   const userRole = currentUser?.role || 'branch_user';
+
+  // Build quick translate buttons (KOR, ENG, + local if different)
+  const localLangOpt = getLocalLangOption();
+  const commentTranslateButtons = [...QUICK_TRANSLATE];
+  if (localLangOpt && !commentTranslateButtons.some(b => b.code === localLangOpt.code)) {
+    commentTranslateButtons.push(localLangOpt);
+  }
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -91,9 +121,16 @@ export default function PostDetail() {
       if (docSnap.exists()) {
         const data = { id: docSnap.id, ...docSnap.data() };
         setPost(data);
-        // Auto-suggest target language based on content
         const detected = detectLanguage(data.content);
         setTargetLang(suggestTargetLang(detected));
+
+        // Increment view count
+        try {
+          await updateDoc(doc(db, 'bulletinPosts', id), { viewCount: increment(1) });
+        } catch (e) {
+          // viewCount field may not exist yet, that's ok
+          console.debug('[PostDetail] viewCount increment:', e.message);
+        }
       } else navigate('/bulletin');
       setLoading(false);
     };
@@ -108,15 +145,11 @@ export default function PostDetail() {
     return () => unsubscribe();
   }, [id, navigate, isAdmin]);
 
-  // ---- Utility: convert plain text to clean HTML paragraphs ----
-  // Handles real newlines, literal \n strings, and mixed content
+  // Utility: convert plain text to HTML paragraphs
   const textToHTML = (text) => {
     if (!text) return '';
-    // First, normalize: replace literal escaped '\n' strings with real newlines
     let normalized = text.replace(/\\n/g, '\n');
-    // Also handle escaped underscores from AI: \\_  → _
     normalized = normalized.replace(/\\_/g, '_');
-    // Split into paragraphs on double-newline boundaries
     const paragraphs = normalized.split(/\n\s*\n/).filter(p => p.trim());
     return paragraphs
       .map(p => {
@@ -126,18 +159,12 @@ export default function PostDetail() {
       .join('');
   };
 
-  // ---- Utility: robustly extract translated text from AI response ----
-  // Handles: raw JSON, code-fenced JSON, code-fenced text, plain text,
-  //          and deeply nested/malformed responses
+  // Robust AI response parser
   const parseTranslationResponse = (responseText) => {
     if (!responseText) return { title: '', contentHTML: '' };
     let raw = responseText.trim();
-
-    // 1. Strip ALL markdown code fences (```json ... ``` or ``` ... ```)
-    //    Use a greedy regex that handles multiline fences
     raw = raw.replace(/^```[\w]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
 
-    // 2. Try to extract JSON with title+content
     const tryParseJSON = (str) => {
       try {
         const parsed = JSON.parse(str);
@@ -150,13 +177,11 @@ export default function PostDetail() {
       return null;
     };
 
-    // 2a. Direct JSON parse
     let jsonResult = tryParseJSON(raw);
     if (jsonResult) {
       return { title: jsonResult.title, contentHTML: textToHTML(jsonResult.content) };
     }
 
-    // 2b. Find JSON object anywhere in the text
     const jsonPattern = /\{[\s\S]*?"(?:title|content|translation)"[\s\S]*?\}/g;
     const jsonMatches = raw.match(jsonPattern);
     if (jsonMatches) {
@@ -168,14 +193,11 @@ export default function PostDetail() {
       }
     }
 
-    // 3. Not JSON — treat as plain translated text
-    //    Remove any leading labels the AI might add like "Translation:" or "번역:"
     raw = raw.replace(/^(?:Translation|Translated text|번역|翻訳)\s*:\s*/i, '').trim();
-
     return { title: '', contentHTML: textToHTML(raw) };
   };
 
-  // ---- AI Translation for view mode ----
+  // AI Translation for post
   const handleTranslate = async () => {
     if (!post?.content) return;
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -227,8 +249,6 @@ ${plainText}`;
       });
 
       const responseText = response.text;
-
-      // First try the structured "title\n---\ncontent" format
       let title = '';
       let contentHTML = '';
       const separatorIdx = responseText.indexOf('\n---\n');
@@ -237,13 +257,11 @@ ${plainText}`;
         const bodyText = responseText.substring(separatorIdx + 5).trim();
         contentHTML = textToHTML(bodyText);
       } else {
-        // Fallback to the robust parser (handles JSON, fences, etc.)
         const parsed = parseTranslationResponse(responseText);
         title = parsed.title;
         contentHTML = parsed.contentHTML;
       }
 
-      // Clean up title: strip any remaining fences or JSON artifacts
       title = title.replace(/^```[\w]*\s*/g, '').replace(/```\s*$/g, '').replace(/^["']|["']$/g, '').trim();
 
       setTranslatedTitle(title);
@@ -257,6 +275,48 @@ ${plainText}`;
       }
     } finally {
       setTranslating(false);
+    }
+  };
+
+  // AI Translation for individual comment
+  const handleTranslateComment = async (commentId, commentText, targetCode) => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || !commentText) return;
+
+    const translatingKey = `${commentId}_${targetCode}`;
+    setCommentTranslating(prev => ({ ...prev, [translatingKey]: true }));
+
+    try {
+      const { GoogleGenAI } = await import('@google/genai');
+      const ai = new GoogleGenAI({ apiKey });
+      const targetLabel = LANGUAGE_OPTIONS.find(l => l.code === targetCode)?.label || 'English';
+
+      const prompt = `Translate the following comment to ${targetLabel}. Keep aviation/security acronyms unchanged. Return ONLY the translated text, no markup or labels.
+
+"${commentText}"`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-lite',
+        contents: prompt,
+      });
+
+      let translated = response.text.trim();
+      translated = translated.replace(/^```[\w]*\s*\n?/gm, '').replace(/\n?\s*```\s*$/gm, '').trim();
+      translated = translated.replace(/^["']|["']$/g, '');
+      translated = translated.replace(/^(?:Translation|번역|翻訳)\s*:\s*/i, '').trim();
+
+      setCommentTranslations(prev => ({
+        ...prev,
+        [commentId]: { text: translated, lang: targetCode },
+      }));
+    } catch (err) {
+      console.error('[Comment Translation]', err);
+      setCommentTranslations(prev => ({
+        ...prev,
+        [commentId]: { text: `(Translation failed: ${err.message})`, lang: targetCode, error: true },
+      }));
+    } finally {
+      setCommentTranslating(prev => ({ ...prev, [translatingKey]: false }));
     }
   };
 
@@ -283,6 +343,12 @@ ${plainText}`;
     if (!window.confirm('Delete this comment?')) return;
     try {
       await deleteDoc(doc(db, `bulletinPosts/${id}/comments`, commentId));
+      // Also clear any translation for this comment
+      setCommentTranslations(prev => {
+        const updated = { ...prev };
+        delete updated[commentId];
+        return updated;
+      });
     } catch (err) {
       console.error('[PostDetail] Delete comment error:', err);
       alert('Failed to delete comment: ' + err.message);
@@ -417,7 +483,6 @@ ${plainText}`;
               <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.3rem', lineHeight: '1.3' }}>
                 {post.title}
               </h1>
-              {/* Show translated title if available */}
               {showTranslation && translatedTitle && (
                 <p style={{
                   fontSize: '1rem', fontWeight: '500', color: '#34D399', margin: '0 0 0.5rem',
@@ -435,9 +500,13 @@ ${plainText}`;
             <span style={{ background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.secondary }}>
               Date: {post.createdAt?.toDate().toLocaleDateString()}
             </span>
+            {/* View count */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: COLORS.surface, padding: '0.3rem 0.7rem', borderRadius: '0.375rem', border: `1px solid ${COLORS.border}`, color: COLORS.text.light, fontSize: '0.75rem' }}>
+              <Eye size={12} /> {post.viewCount || 0}
+            </span>
+
             {/* Translation controls */}
             <div className="print:hidden" style={{ marginLeft: 'auto', display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-              {/* Layout toggle (side-by-side vs inline) - only when translation is shown */}
               {showTranslation && translatedContent && (
                 <button
                   onClick={() => setTranslationLayout(prev => prev === 'sideBySide' ? 'inline' : 'sideBySide')}
@@ -451,7 +520,6 @@ ${plainText}`;
                   {translationLayout === 'sideBySide' ? <AlignJustify size={11} /> : <Columns size={11} />}
                 </button>
               )}
-              {/* Language selector */}
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setShowLangDropdown(!showLangDropdown)} style={{
                   display: 'flex', alignItems: 'center', gap: '0.2rem',
@@ -488,7 +556,6 @@ ${plainText}`;
                   </div>
                 )}
               </div>
-              {/* Translate button */}
               <button onClick={handleTranslate} disabled={translating}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '0.25rem',
@@ -504,17 +571,13 @@ ${plainText}`;
           </div>
         </div>
 
-        {/* Body - original + translation */}
+        {/* Body */}
         <div style={{
           padding: '1.5rem', minHeight: '250px',
           display: isSideBySide ? 'flex' : 'block',
           gap: '1rem',
         }}>
-          {/* Original content */}
-          <div style={{
-            flex: isSideBySide ? '1 1 50%' : '1 1 100%',
-            minWidth: 0,
-          }}>
+          <div style={{ flex: isSideBySide ? '1 1 50%' : '1 1 100%', minWidth: 0 }}>
             {showTranslation && translatedContent && (
               <div style={{
                 fontSize: '0.65rem', fontWeight: '600', color: COLORS.blue,
@@ -530,7 +593,6 @@ ${plainText}`;
             />
           </div>
 
-          {/* Translation panel */}
           {showTranslation && translatedContent && (
             <div style={{
               flex: isSideBySide ? '1 1 50%' : '1 1 100%',
@@ -607,10 +669,11 @@ ${plainText}`;
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
               {comments.map((comment) => {
                 const canDeleteComment = isAdmin || currentUser?.uid === comment.authorId;
+                const translation = commentTranslations[comment.id];
                 return (
                 <div key={comment.id} style={{ display: 'flex', flexDirection: 'column', alignItems: comment.authorRole === 'hq_admin' ? 'flex-end' : 'flex-start' }}>
                   <div style={{
-                    maxWidth: '80%', borderRadius: '0.75rem', padding: '0.7rem 1rem',
+                    maxWidth: '85%', borderRadius: '0.75rem', padding: '0.7rem 1rem',
                     background: comment.authorRole === 'hq_admin' ? '#E0F2FE' : COLORS.surfaceLight,
                     color: comment.authorRole === 'hq_admin' ? '#1a1a1a' : COLORS.text.primary,
                     borderTopRightRadius: comment.authorRole === 'hq_admin' ? '0.15rem' : '0.75rem',
@@ -635,7 +698,7 @@ ${plainText}`;
                       </button>
                     )}
                     <div style={{
-                      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '0.75rem',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem',
                       marginBottom: '0.3rem', paddingBottom: '0.3rem',
                       borderBottom: `1px solid ${comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.1)' : COLORS.border}`,
                       paddingRight: canDeleteComment ? '1.2rem' : 0,
@@ -643,11 +706,62 @@ ${plainText}`;
                       <span style={{ fontWeight: '700', fontSize: '0.75rem' }}>
                         {comment.authorBranch} {comment.authorRole === 'hq_admin' ? '(HQ Admin)' : ''}
                       </span>
-                      <span style={{ fontSize: '0.6rem', opacity: 0.7 }}>
-                        {comment.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                      {/* Comment translate buttons */}
+                      <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center', flexShrink: 0 }}>
+                        {commentTranslateButtons.map(btn => {
+                          const tKey = `${comment.id}_${btn.code}`;
+                          const isTranslating = commentTranslating[tKey];
+                          return (
+                            <button
+                              key={btn.code}
+                              onClick={(e) => { e.stopPropagation(); handleTranslateComment(comment.id, comment.text, btn.code); }}
+                              disabled={isTranslating}
+                              title={`Translate to ${btn.label}`}
+                              style={{
+                                padding: '0.1rem 0.3rem', borderRadius: '3px', border: 'none',
+                                background: translation?.lang === btn.code ? 'rgba(59,130,246,0.2)' : (comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'),
+                                color: translation?.lang === btn.code ? '#3B82F6' : (comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)'),
+                                cursor: isTranslating ? 'wait' : 'pointer',
+                                fontSize: '0.55rem', fontWeight: '700', letterSpacing: '0.03em',
+                                transition: 'all 0.15s',
+                                lineHeight: 1,
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.15)'; e.currentTarget.style.color = '#3B82F6'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = translation?.lang === btn.code ? 'rgba(59,130,246,0.2)' : (comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)'); e.currentTarget.style.color = translation?.lang === btn.code ? '#3B82F6' : (comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)'); }}
+                            >
+                              {isTranslating ? '...' : btn.label}
+                            </button>
+                          );
+                        })}
+                        <span style={{ fontSize: '0.6rem', opacity: 0.5, marginLeft: '0.25rem' }}>
+                          {comment.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
                     </div>
                     <p style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem', lineHeight: '1.5', margin: 0 }}>{comment.text}</p>
+                    {/* Translated comment */}
+                    {translation && (
+                      <div style={{
+                        marginTop: '0.4rem', paddingTop: '0.35rem',
+                        borderTop: `1px dashed ${comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.1)' : COLORS.border}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.15rem' }}>
+                          <Languages size={9} color={translation.error ? '#F87171' : '#3B82F6'} />
+                          <span style={{ fontSize: '0.55rem', fontWeight: '600', color: translation.error ? '#F87171' : '#3B82F6' }}>
+                            {LANGUAGE_OPTIONS.find(l => l.code === translation.lang)?.flag} {LANGUAGE_OPTIONS.find(l => l.code === translation.lang)?.label}
+                          </span>
+                          <button onClick={() => setCommentTranslations(prev => { const u = { ...prev }; delete u[comment.id]; return u; })}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: comment.authorRole === 'hq_admin' ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.2)', padding: 0, display: 'flex', marginLeft: 'auto' }}>
+                            <X size={10} />
+                          </button>
+                        </div>
+                        <p style={{
+                          whiteSpace: 'pre-wrap', fontSize: '0.78rem', lineHeight: '1.45', margin: 0,
+                          color: translation.error ? '#F87171' : (comment.authorRole === 'hq_admin' ? '#1a4a7a' : '#93c5fd'),
+                          fontStyle: 'italic',
+                        }}>{translation.text}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )})}
