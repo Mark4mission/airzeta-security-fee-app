@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.5
+> **Document Version**: 1.6
 > **Last Updated**: 2026-03-02
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -333,15 +333,19 @@ And add `'divider'` to `quillFormats` array.
   - When drag-and-drop "flickers" but doesn't actually add files, check for parent elements intercepting the events.
   - The v1.4 fix was a RED HERRING that masked the real issue. Always verify that the actual file state (`newFiles`) updates after drop, not just that the page doesn't reload.
 
-### 7.12 Home Dashboard Card Visualizations (v1.4)
+### 7.12 Home Dashboard Card Visualizations (v1.4, Updated v1.6)
 **Security Level Mini Map Enhancements**:
-  - Replaced ellipse-based continent shapes with SVG path outlines for more recognizable geography
-  - Added connection lines between nearby stations (diagram-like effect)
-  - Added animated pulse rings for red (alert) level stations
-  - Added SVG glow filters for markers by risk tier
-  - Added IATA code labels on select prominent stations
-  - Added "Global Status" label overlay with MapPin icon
+  - (v1.6) Replaced hand-drawn continent path outlines with **real TopoJSON country geometry** loaded at runtime from `/public/countries-110m.json` via `topojson-client`. This produces a detailed, accurate world map even at card size
+  - (v1.6) **Removed all IATA code labels** from station markers on the mini-map for security (general users should not see which stations are registered)
+  - (v1.6) **Enlarged statistics legend** (bottom-right overlay) — changed from horizontal single-line to vertical layout with title "Station Statistics", larger dot indicators (7px), explicit label per risk tier, and "total stations" count with blue accent. This improves readability at a glance
+  - (v1.6) Updated viewBox height from 140 to 160 for better proportions with detailed country outlines
+  - (v1.6) Added `miniGeoPath()` utility that converts GeoJSON Polygon/MultiPolygon geometry to SVG `<path>` d-strings using the same Mercator projection as `miniProject()`
+  - (v1.4) Added connection lines between nearby stations (diagram-like effect)
+  - (v1.4) Added animated pulse rings for red (alert) level stations
+  - (v1.4) Added SVG glow filters for markers by risk tier
+  - (v1.4) Added "Global Status" label overlay with MapPin icon
   - All interactions are purely visual (no zoom, no click modals) to preserve security
+  - **LESSON**: Using runtime TopoJSON loading (same as AdminWorldMapView) ensures the mini-map stays consistent with the full Security Level page. The ~50KB TopoJSON file is already used by the admin view, so there is no extra bundle cost
 
 **Security Fee Mini Chart Enhancements**:
   - Added gradient area fills under both Est. and Actual lines for visual depth
@@ -357,7 +361,7 @@ And add `'divider'` to `quillFormats` array.
   - Added separate "New Tab" link button alongside the modal button
   - Shield icon now has its own styled container
 
-### 7.13 Google Sheets CSV Integration for Pledge Data (v1.5)
+### 7.13 Google Sheets CSV Integration for Pledge Data (v1.5, Updated v1.6)
 **Problem**: Need to display real-time pledge signatory data from a Google Sheet in the portal without API keys.
 **Solution**: Use the public CSV export endpoint:
   - URL format: `https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv`
@@ -368,9 +372,18 @@ And add `'divider'` to `quillFormats` array.
   - Korean 2-char: first + asterisk (e.g., "김*")
   - English with space: ~66% of first name + asterisked last (e.g., "Tae*** h**")
   - Longer names: keep front + back, mask middle
-**Deduplication**: Entries are deduped by lowercase name, keeping the latest entry per person
+**Count Logic (v1.6 FIX)**:
+  - **Total count** = all valid data rows with non-empty name + valid timestamp, excluding test entries. This counts total **submissions**, not unique signers
+  - Previous v1.5 logic deduped by name, showing 86 unique signers instead of 90 total submissions. The user confirmed the Google Sheet has 90 data rows (excluding the header)
+  - **Empty row filtering**: Google Sheets CSV export may return hundreds of empty trailing rows (e.g., 969 rows where only 91 have data). The parser now validates both `name.trim()` and `!isNaN(new Date(timestamp).getTime())` to skip empty/invalid rows
+  - **Donut chart max value**: Based on actual valid submission count, NOT the total CSV row count
+  - Recent signers list is still deduped for display (to avoid showing the same person twice)
 **Filtering**: Test entries (containing "테스트" or "test") are excluded
-**LESSON LEARNED**: Google Sheets CSV export via `/gviz/tq?tqx=out:csv` is a reliable zero-auth approach for reading published sheets. The CSV may contain commas within quoted fields, so `line.split(',')` is NOT sufficient — a proper CSV parser is needed.
+**LESSON LEARNED**: 
+  - Google Sheets CSV export via `/gviz/tq?tqx=out:csv` is a reliable zero-auth approach for reading published sheets
+  - The CSV may contain commas within quoted fields, so `line.split(',')` is NOT sufficient — a proper CSV parser is needed
+  - **CRITICAL**: Google Sheets CSV export includes ALL rows up to the last row ever edited, not just rows with data. Always validate each row's content before counting
+  - When displaying submission counts, clarify whether the number represents unique persons or total submissions — these can differ significantly when people submit multiple times
 
 ---
 
@@ -422,6 +435,18 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-02 (Session 8)
+- **Improved**: Security Level mini-map on Home Dashboard — replaced hand-drawn SVG continent shapes with **real TopoJSON country outlines** loaded at runtime via `topojson-client`, producing an accurate detailed world map at card size
+- **Removed**: IATA code labels from mini-map station markers for security (prevents identifying registered stations)
+- **Improved**: Statistics legend overlay (bottom-right) enlarged to vertical layout with "Station Statistics" title, larger color dots (7px), per-tier labels (Safe/Caution/Alert), and total station count with blue accent
+- **Fixed**: Security Pledge donut chart count — changed from 86 (unique signers after deduplication) to correct total of 90 (all valid non-test submissions). Chart now shows total **submissions** not unique persons
+- **Fixed**: Google Sheets CSV empty-row filtering — added `!isNaN(new Date(timestamp))` validation to prevent counting hundreds of trailing empty rows that Google Sheets exports
+- **Added**: `miniGeoPath()` utility function to convert GeoJSON geometry to SVG path strings for the mini-map
+- **Added**: `topojson-client` import to HomePage.jsx (already in project dependencies)
+- **Updated**: Donut chart label from "SIGNATORIES" to "SUBMISSIONS"
+- **Updated**: PROJECT_GUIDE.md to v1.6 with mini-map architecture notes, CSV empty-row lesson learned
+- **Build**: 0 errors, 2,542 modules
 
 ### 2026-03-02 (Session 7)
 - **Fixed (CORRECT)**: DocumentEdit drag-and-drop upload — REMOVED form-level drag event handlers (`onDragOver`, `onDragEnter`, `onDrop`) that were consuming drop events before the inner drop zone could process them. This was the actual root cause (Session 6 fix was incorrect — it ADDED form handlers that caused the same problem)
