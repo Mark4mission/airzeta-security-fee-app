@@ -396,7 +396,23 @@ export default function DocumentUpload() {
               padding: '1.5rem', border: `2px dashed ${COLORS.border}`, borderRadius: '0.5rem',
               background: COLORS.surfaceLight, cursor: 'pointer', transition: 'border-color 0.2s',
             }}
-              onClick={() => document.getElementById('doc-file-input')?.click()}
+              onClick={() => window.document.getElementById('doc-file-input')?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = COLORS.blue; e.currentTarget.style.background = 'rgba(59,130,246,0.08)'; }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.borderColor = COLORS.border; e.currentTarget.style.background = COLORS.surfaceLight; }}
+              onDrop={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                e.currentTarget.style.borderColor = COLORS.border;
+                e.currentTarget.style.background = COLORS.surfaceLight;
+                const droppedFiles = Array.from(e.dataTransfer.files);
+                const validFiles = droppedFiles.filter(file => {
+                  if (file.size > MAX_FILE_SIZE_BYTES) {
+                    setError(`File "${file.name}" exceeds the ${MAX_FILE_SIZE_MB}MB limit.`);
+                    return false;
+                  }
+                  return true;
+                });
+                if (validFiles.length > 0) setFiles(prev => [...prev, ...validFiles]);
+              }}
             >
               <UploadCloud size={36} color={COLORS.text.light} style={{ marginBottom: '0.5rem' }} />
               <p style={{ fontSize: '0.8rem', color: COLORS.text.secondary, margin: 0 }}>

@@ -1,7 +1,7 @@
-# Airzeta Station Security Portal — Branch User Usage Manual v2.0
+# Airzeta Station Security Portal — Branch User Usage Manual v2.1
 
-**Version**: 2.0  
-**Effective Date**: February 27, 2026  
+**Version**: 2.1  
+**Effective Date**: March 2, 2026  
 **Audience**: Branch/Station Users  
 **Classification**: Internal Use Only
 
@@ -28,27 +28,35 @@
    - 5.1 Viewing Announcements
    - 5.2 Reading a Post in Detail
    - 5.3 Downloading Attachments
-6. [Security Fee Management](#6-security-fee-management)
-   - 6.1 Your Branch Cost View
-   - 6.2 Submitting Monthly Security Costs
-   - 6.3 Viewing Cost History
-   - 6.4 Uploading Attachments
-7. [Security Level — Your Station](#7-security-level)
-   - 7.1 Overview
-   - 7.2 Viewing Your Current Threat Level
-   - 7.3 Changing the Active Security Level
-   - 7.4 Configuring Level Names
-   - 7.5 Optional Color Assignment
-   - 7.6 Setting Action Guidelines
-   - 7.7 Viewing Level Change History
-   - 7.8 Deleting History Entries
-   - 7.9 Saving Your Configuration
-8. [Important Links](#8-important-links)
-   - 8.1 Browsing the Link Library
-   - 8.2 Using Category Filters
-   - 8.3 Opening Links
-9. [Frequently Asked Questions](#9-faq)
-10. [Appendix](#10-appendix)
+6. [Document Library](#6-document-library)
+   - 6.1 Browsing the Document Library
+   - 6.2 Searching & Filtering
+   - 6.3 Viewing a Document
+   - 6.4 Downloading Files
+   - 6.5 Uploading a Document
+   - 6.6 Understanding Permissions
+7. [Security Fee Management](#7-security-fee-management)
+   - 7.1 Your Branch Cost View
+   - 7.2 Submitting Monthly Security Costs
+   - 7.3 Viewing Cost History
+   - 7.4 Uploading Attachments
+8. [Security Level — Your Station](#8-security-level)
+   - 8.1 Overview
+   - 8.2 Viewing Your Current Threat Level
+   - 8.3 Changing the Active Security Level
+   - 8.4 Setting the Airport Code for Map Display
+   - 8.5 Configuring Level Names
+   - 8.6 Optional Color Assignment
+   - 8.7 Setting Action Guidelines
+   - 8.8 Viewing Level Change History
+   - 8.9 Deleting History Entries
+   - 8.10 Saving Your Configuration
+9. [Important Links](#9-important-links)
+   - 9.1 Browsing the Link Library
+   - 9.2 Using Category Filters
+   - 9.3 Opening Links
+10. [Frequently Asked Questions](#10-faq)
+11. [Appendix](#11-appendix)
     - A. Supported Browsers
     - B. Troubleshooting
 
@@ -92,6 +100,7 @@ As a branch user, you have access to the following modules:
 | **Home** | View dashboard, QR code, news feed |
 | **Security Policy** | Read the policy, download PDF, print |
 | **Security Bulletin** | Read announcements, download attachments |
+| **Document Library** | Browse documents, download files, upload documents |
 | **Security Fee** | Submit your station's cost reports |
 | **Security Level** | Configure your station's threat levels |
 | **Important Links** | Browse the curated link library |
@@ -202,7 +211,83 @@ If a post includes file attachments:
 
 ---
 
-## 6. Security Fee Management
+## 6. Document Library
+
+Navigate to **Document Library** from the left sidebar.
+
+The Document Library is a centralized repository for Station Security Operation Manuals (SSOP), regulations, guidelines, and reference materials shared across all stations.
+
+### 6.1 Browsing the Document Library
+
+The dashboard displays all uploaded documents in a table format. Each document shows:
+- **Pin icon** (yellow pin) — pinned documents appear at the top
+- **Title** — with IATA code prefix (e.g., `[ICN] SSOP Manual v3`)
+- **Category** — color-coded badge (Regulation, Guideline, Material, General, Other)
+- **Uploaded By** — the branch that uploaded the document
+- **Date** — upload date
+- **Access** — "Admin" (lock icon) or "All" (users icon) indicating download permission
+- **Downloads** — total download count
+
+All users can see all documents in the list regardless of download permission settings. Download restrictions only apply when attempting to download files.
+
+### 6.2 Searching & Filtering
+
+- **Search bar**: Type keywords to filter by document title, IATA code, or branch name
+- **Category filter**: Use the dropdown to show only documents of a specific category (Regulation, Guideline, Material, General, Other)
+- Documents are always sorted with **pinned items first**, then by most recent upload date
+
+### 6.3 Viewing a Document
+
+Click any document row in the table to open its detail page. The detail page shows:
+- **Title** with IATA code and category badge
+- **Description** — full document description
+- **Upload info** — who uploaded it, when, and total download count
+- **Attached files** — listed with file names and sizes
+- **Download permission badge** — shows whether the file is admin-only or accessible to all branches
+
+### 6.4 Downloading Files
+
+On the document detail page:
+1. If you have download access, you will see file buttons with a **download icon**.
+2. Click any file to download it to your device.
+3. Each download is tracked (your branch name and email are recorded for the admin).
+
+If you see a **"Download Restricted"** message, the document's download permission is set to "Admin Only" and your branch was not the uploader. Contact HQ if you need access.
+
+### 6.5 Uploading a Document
+
+Any authenticated user (admin or branch user) can upload documents:
+
+1. Click the **"Upload Document"** button on the Document Library dashboard.
+2. Fill in the required fields:
+   - **IATA Code** — your station's 3-letter IATA airport code (auto-filled for branch users)
+   - **Category** — select from Regulation, Guideline, Material, General, or Other
+   - **Document Title** — a descriptive name for the document
+3. Optionally add:
+   - **Description** — a brief summary of the document
+   - **Download Permission** — choose "Admin Only" or "All Branches"
+4. Attach files:
+   - Click the **upload area** or **drag and drop** files directly into the dashed box
+   - Maximum file size: **100 MB per file**
+   - Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, images, and more
+5. Click **"Upload Document"** to submit.
+
+A **title preview** is shown below the input fields so you can see how the document will appear in the list: `[IATA] (Category) Title`.
+
+### 6.6 Understanding Permissions
+
+| Permission | Who Can View List | Who Can Download |
+|---|---|---|
+| **All Branches** | Everyone | All logged-in users |
+| **Admin Only** | Everyone | Only admins and the uploading branch |
+
+- The **uploader's branch** always has download access, regardless of the permission setting.
+- **Admin users** always have full access to all documents and downloads.
+- All users can always **see** the document list and detail page, even if downloads are restricted.
+
+---
+
+## 7. Security Fee Management
 
 Navigate to **Security Fee** from the left sidebar.
 
@@ -241,13 +326,13 @@ Supporting documents such as invoices, receipts, or contracts can be attached to
 
 ---
 
-## 7. Security Level — Your Station
+## 8. Security Level — Your Station
 
 Navigate to **Security Level** from the left sidebar.
 
 This is your station's threat level management page. You are responsible for keeping your station's security level current and accurate.
 
-### 7.1 Overview
+### 8.1 Overview
 
 The Security Level page allows you to:
 - View and change your station's current threat level
@@ -256,14 +341,14 @@ The Security Level page allows you to:
 - Document action guidelines for each level
 - Track the history of all level changes
 
-### 7.2 Viewing Your Current Threat Level
+### 8.2 Viewing Your Current Threat Level
 
 At the top of the page, after the header, you'll see the **Current Threat Level** section. It displays:
 - A row of **level buttons** — one for each defined security level
 - The **currently active level** is highlighted with a colored border, slight scale-up, and glow effect
 - The **effective date** shown below the buttons ("Effective since: YYYY-MM-DD")
 
-### 7.3 Changing the Active Security Level
+### 8.3 Changing the Active Security Level
 
 To change your station's current threat level:
 
@@ -275,7 +360,21 @@ To change your station's current threat level:
 
 > **Critical**: Always click **Save Configuration** after making changes. Unsaved changes are lost if you navigate away.
 
-### 7.4 Configuring Level Names
+### 8.4 Setting the Airport Code for Map Display
+
+If your branch/station name does not match an IATA airport code (e.g., your branch is named "LONSF" for the London office, but the actual airport is "STN" for Stansted), you can set the airport code manually:
+
+1. In the "Current Threat Level" section, find the **Airport (IATA)** field next to the date picker.
+2. Start typing the 3-letter IATA airport code (e.g., "STN").
+3. A **dropdown** will appear showing matching airports from the database with their city names.
+4. Select the correct airport or type the full 3-letter code.
+5. A **green city name** appears if the code is recognized (e.g., "London/Stansted").
+6. A **yellow "Not in database"** warning appears if the code is not in the system — the map won't show your station until the code is added by HQ.
+7. Click **Save Configuration** to persist the airport code.
+
+> **Tip**: If your branch name starts with a valid IATA code (e.g., "HANSF" → "HAN"), the system auto-detects it. You only need to set the airport code if the auto-detection picks the wrong airport.
+
+### 8.5 Configuring Level Names
 
 In the "Security Levels Configuration" section:
 
@@ -288,7 +387,7 @@ In the "Security Levels Configuration" section:
 
 > **Tip**: Use clear, descriptive level names that your team can easily understand at a glance.
 
-### 7.5 Optional Color Assignment
+### 8.6 Optional Color Assignment
 
 Colors are optional and help with visual identification:
 
@@ -300,7 +399,7 @@ Colors are optional and help with visual identification:
 
 **Auto-detected colors**: If you type a color keyword in the level name (e.g., "Green Alert"), the system automatically assigns the matching color.
 
-### 7.6 Setting Action Guidelines
+### 8.7 Setting Action Guidelines
 
 In the **"Action Guidelines per Level"** section:
 
@@ -313,7 +412,7 @@ In the **"Action Guidelines per Level"** section:
 
 These guidelines serve as a quick reference for your on-ground security personnel.
 
-### 7.7 Viewing Level Change History
+### 8.8 Viewing Level Change History
 
 The **Level Change History** section is located below the guidelines:
 
@@ -326,7 +425,7 @@ The **Level Change History** section is located below the guidelines:
 4. The list is scrollable (up to 280px height) and sorted newest-first.
 5. A maximum of 50 entries are retained.
 
-### 7.8 Deleting History Entries
+### 8.9 Deleting History Entries
 
 If a history entry was created by mistake (e.g., accidentally clicking the wrong level), you can delete it:
 
@@ -339,7 +438,7 @@ If a history entry was created by mistake (e.g., accidentally clicking the wrong
 
 > **Warning**: Deleted history entries cannot be recovered after saving. Only delete entries that are genuinely incorrect.
 
-### 7.9 Saving Your Configuration
+### 8.10 Saving Your Configuration
 
 The **Save Configuration** button is at the bottom right of the page:
 
@@ -356,11 +455,11 @@ All of the following are saved together in one operation:
 
 ---
 
-## 8. Important Links
+## 9. Important Links
 
 Navigate to **Important Links** from the left sidebar.
 
-### 8.1 Browsing the Link Library
+### 9.1 Browsing the Link Library
 
 The Important Links page provides a curated collection of websites and resources relevant to aviation cargo security. Links are organized into **five categories**:
 
@@ -374,13 +473,13 @@ The Important Links page provides a curated collection of websites and resources
 
 Each category is a collapsible section with a count badge showing the number of links.
 
-### 8.2 Using Category Filters
+### 9.2 Using Category Filters
 
 - Click a **category header** to expand or collapse that section.
 - All categories start expanded by default.
 - The count badge (e.g., "3") shows how many links are in each category.
 
-### 8.3 Opening Links
+### 9.3 Opening Links
 
 **Click anywhere on a link card** to open the URL in a new browser tab. Each card displays:
 - **Title** — the link name in bright white text
@@ -393,7 +492,16 @@ You do not need to find a specific button or icon — the entire card is clickab
 
 ---
 
-## 9. Frequently Asked Questions
+## 10. Frequently Asked Questions
+
+**Q: I can't download a file from the Document Library.**  
+A: Check the "Access" column in the list. If it shows a lock icon with "Admin", the download is restricted to administrators and the uploading branch. You can still view the document details but cannot download the files. Contact HQ if you need access.
+
+**Q: How do I upload a document to the Document Library?**  
+A: Click the "Upload Document" button on the Document Library page. Fill in the IATA code, category, title, and attach your file(s). The maximum file size is 100 MB per file. You can drag and drop files into the upload area.
+
+**Q: My station doesn't appear on the Security Level map.**  
+A: If your branch name doesn't start with a recognized IATA airport code, you need to manually set it. Go to Security Level, find the "Airport (IATA)" field next to the date picker, and enter your airport's 3-letter IATA code (e.g., STN for London Stansted). Click Save Configuration.
 
 **Q: How do I change my password?**  
 A: Contact your HQ administrator to reset your password or use the password reset link on the login page if available.
@@ -421,7 +529,7 @@ A: Open your phone's camera app and point it at the QR code on the Home page. A 
 
 ---
 
-## 10. Appendix
+## 11. Appendix
 
 ### A. Supported Browsers
 
@@ -450,5 +558,5 @@ A: Open your phone's camera app and point it at the QR code on the Home page. A 
 
 *This manual is maintained by the Airzeta HQ Security Operations team. For questions, feedback, or feature requests, contact your HQ administrator or post in the Security Bulletin Board.*
 
-*Document ID: AZSP-USER-MANUAL-v2.0*  
-*Last Updated: 2026-02-27*
+*Document ID: AZSP-USER-MANUAL-v2.1*  
+*Last Updated: 2026-03-02*

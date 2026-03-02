@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { collection, doc, getDoc, setDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../core/AuthContext';
-import { ShieldAlert, Plus, Trash2, Save, Calendar, AlertTriangle, CheckCircle, Globe2, Info, History, Palette, ChevronDown, ChevronUp, X, MapPin, ArrowLeft, Edit3, Eye } from 'lucide-react';
+import { ShieldAlert, Plus, Trash2, Save, Calendar, AlertTriangle, CheckCircle, Globe2, Info, History, Palette, ChevronDown, ChevronUp, X, MapPin, ArrowLeft, Edit3, Eye, Plane } from 'lucide-react';
 import * as topojson from 'topojson-client';
 
 const COLORS = {
@@ -114,6 +114,35 @@ const AIRPORT_COORDS = {
   MUC: { lat: 48.35, lng: 11.79, city: 'Munich' },
   ZRH: { lat: 47.46, lng: 8.55, city: 'Zurich' },
   BCN: { lat: 41.30, lng: 2.08, city: 'Barcelona' },
+  STN: { lat: 51.89, lng: 0.26, city: 'London/Stansted' },
+  LGW: { lat: 51.15, lng: -0.19, city: 'London/Gatwick' },
+  LTN: { lat: 51.87, lng: -0.37, city: 'London/Luton' },
+  VIE: { lat: 48.11, lng: 16.57, city: 'Vienna' },
+  BRU: { lat: 50.90, lng: 4.48, city: 'Brussels' },
+  CPH: { lat: 55.62, lng: 12.66, city: 'Copenhagen' },
+  OSL: { lat: 60.20, lng: 11.08, city: 'Oslo' },
+  HEL: { lat: 60.32, lng: 24.96, city: 'Helsinki' },
+  WAW: { lat: 52.17, lng: 20.97, city: 'Warsaw' },
+  PRG: { lat: 50.10, lng: 14.26, city: 'Prague' },
+  BUD: { lat: 47.44, lng: 19.26, city: 'Budapest' },
+  LIS: { lat: 38.77, lng: -9.13, city: 'Lisbon' },
+  ATH: { lat: 37.94, lng: 23.94, city: 'Athens' },
+  MXP: { lat: 45.63, lng: 8.72, city: 'Milan/Malpensa' },
+  DUS: { lat: 51.29, lng: 6.77, city: 'Dusseldorf' },
+  HAM: { lat: 53.63, lng: 9.99, city: 'Hamburg' },
+  SEA: { lat: 47.45, lng: -122.31, city: 'Seattle' },
+  DFW: { lat: 32.90, lng: -97.04, city: 'Dallas/Fort Worth' },
+  IAD: { lat: 38.95, lng: -77.46, city: 'Washington/Dulles' },
+  MIA: { lat: 25.80, lng: -80.29, city: 'Miami' },
+  YVR: { lat: 49.20, lng: -123.18, city: 'Vancouver' },
+  AKL: { lat: -37.01, lng: 174.79, city: 'Auckland' },
+  PNH: { lat: 11.55, lng: 104.84, city: 'Phnom Penh' },
+  RGN: { lat: 16.91, lng: 96.13, city: 'Yangon' },
+  KTM: { lat: 27.70, lng: 85.36, city: 'Kathmandu' },
+  CJU: { lat: 33.51, lng: 126.49, city: 'Jeju' },
+  PUS: { lat: 35.18, lng: 128.94, city: 'Busan' },
+  TAE: { lat: 35.89, lng: 128.66, city: 'Daegu' },
+  OKA: { lat: 26.20, lng: 127.65, city: 'Okinawa' },
 };
 
 // ============================================================
@@ -172,6 +201,8 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
   const [saved, setSaved] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHistory, setShowHistory] = useState(true);
+  const [airportCode, setAirportCode] = useState(''); // IATA airport code for map placement
+  const [showAirportDropdown, setShowAirportDropdown] = useState(false);
 
   useEffect(() => {
     if (!branchName) return;
@@ -185,6 +216,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
         setActiveSince(data.activeSince || new Date().toISOString().split('T')[0]);
         setGuidelines(data.guidelines || []);
         setHistory(data.history || []);
+        setAirportCode(data.airportCode || '');
       } else {
         setLevels([{ name: 'Level 1' }, { name: 'Level 2' }, { name: 'Level 3' }]);
         setActiveLevel(0);
@@ -196,6 +228,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
           { level: 2, action: 'Maximum screening, restricted access zones' },
         ]);
         setHistory([]);
+        setAirportCode('');
       }
     };
     loadData();
@@ -261,6 +294,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
       }
       await setDoc(doc(db, 'securityLevels', branchName), {
         branchName, levels, activeLevel, activeSince, guidelines, history: updatedHistory,
+        airportCode: airportCode.toUpperCase().trim(),
         updatedAt: serverTimestamp(),
         updatedBy: currentUser?.uid || 'unknown',
       });
@@ -348,11 +382,56 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
               );
             })}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <Calendar size={14} color={COLORS.text.secondary} />
             <label style={{ fontSize: '0.72rem', color: COLORS.text.secondary }}>Effective since:</label>
             <input type="date" value={activeSince} onChange={e => setActiveSince(e.target.value)}
               style={{ padding: '0.3rem 0.5rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.35rem', color: COLORS.input.text, fontSize: '0.75rem' }} />
+
+            {/* Airport Code */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginLeft: '0.75rem', position: 'relative' }}>
+              <Plane size={14} color={COLORS.text.secondary} />
+              <label style={{ fontSize: '0.72rem', color: COLORS.text.secondary }}>Airport (IATA):</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text" maxLength={3} value={airportCode}
+                  placeholder={extractIATA(branchName) || 'e.g. STN'}
+                  onChange={e => { setAirportCode(e.target.value.toUpperCase()); setShowAirportDropdown(true); }}
+                  onFocus={() => setShowAirportDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowAirportDropdown(false), 200)}
+                  style={{ width: '70px', padding: '0.3rem 0.5rem', background: COLORS.input.bg, border: `1px solid ${airportCode && AIRPORT_COORDS[airportCode.toUpperCase()] ? 'rgba(34,197,94,0.4)' : COLORS.input.border}`, borderRadius: '0.35rem', color: COLORS.input.text, fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: '700', textAlign: 'center' }}
+                />
+                {showAirportDropdown && airportCode.length >= 1 && (() => {
+                  const filtered = Object.entries(AIRPORT_COORDS).filter(([code]) => code.startsWith(airportCode.toUpperCase())).slice(0, 8);
+                  if (filtered.length === 0) return null;
+                  return (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: '0.2rem', zIndex: 60, background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', maxHeight: '160px', overflowY: 'auto', minWidth: '180px' }}>
+                      {filtered.map(([code, info]) => (
+                        <div key={code}
+                          onMouseDown={() => { setAirportCode(code); setShowAirportDropdown(false); }}
+                          style={{ padding: '0.35rem 0.6rem', cursor: 'pointer', fontSize: '0.72rem', color: COLORS.text.primary, display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.08)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <span style={{ fontWeight: '700', color: COLORS.blue }}>{code}</span>
+                          <span style={{ color: COLORS.text.light }}>{info.city}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+              {airportCode && AIRPORT_COORDS[airportCode.toUpperCase()] && (
+                <span style={{ fontSize: '0.62rem', color: '#22c55e', fontWeight: '600' }}>
+                  {AIRPORT_COORDS[airportCode.toUpperCase()].city}
+                </span>
+              )}
+              {airportCode && !AIRPORT_COORDS[airportCode.toUpperCase()] && airportCode.length === 3 && (
+                <span style={{ fontSize: '0.62rem', color: '#FBBF24', fontWeight: '600' }}>
+                  Not in database
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -536,8 +615,10 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
   const stationData = useMemo(() => {
     return allLevels.map(s => {
       const rawCode = s.branchName || s.id;
-      const iata = extractIATA(rawCode);
-      const coords = AIRPORT_COORDS[iata] || AIRPORT_COORDS[rawCode?.toUpperCase()];
+      // Use explicit airportCode if set, otherwise extract from branch name
+      const explicitAirport = s.airportCode?.toUpperCase().trim();
+      const iata = explicitAirport || extractIATA(rawCode);
+      const coords = AIRPORT_COORDS[explicitAirport] || AIRPORT_COORDS[extractIATA(rawCode)] || AIRPORT_COORDS[rawCode?.toUpperCase()];
       const activeIdx = s.activeLevel ?? 0;
       const totalLevels = s.levels?.length || 1;
       const activeLevelData = s.levels?.[activeIdx];
@@ -666,7 +747,7 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
                   <circle cx={station.pos.x - 1.2} cy={station.pos.y - 1.2} r={r * 0.3} fill="rgba(255,255,255,0.3)" />
                   {/* IATA label */}
                   <text x={station.pos.x} y={station.pos.y - r - 4} textAnchor="middle" fill="#E8EAED" fontSize={isHovered ? '10' : '7.5'} fontWeight="700" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
-                    {station.iata || station.rawCode}
+                    {station.iata || extractIATA(station.rawCode) || station.rawCode}
                   </text>
                 </g>
               );
@@ -687,7 +768,7 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
               }}>
                 <div style={{ fontSize: '0.8rem', fontWeight: '700', color: COLORS.text.primary, marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <MapPin size={11} color={station.riskColor} />
-                  {station.iata || station.rawCode} — {station.coords?.city || 'Unknown'}
+                  {station.rawCode} ({station.iata}) — {station.coords?.city || 'Unknown'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.15rem' }}>
                   <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: station.riskColor }} />
