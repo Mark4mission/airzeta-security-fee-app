@@ -6,7 +6,7 @@ import { db, storage } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye, FileUp, Table } from 'lucide-react';
+import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye, FileUp, Table, Minus } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -68,18 +68,25 @@ export default function PostEdit() {
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
 
-  // Insert table into Quill editor via clipboard paste
+  // Insert horizontal rule into content
+  const handleInsertHR = useCallback(() => {
+    setContent(prev => {
+      const clean = prev && prev !== '<p><br></p>' ? prev : '';
+      return clean + '<hr>';
+    });
+  }, []);
+
+  // Insert table using Quill's native table module
   const handleInsertTable = useCallback(() => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor) return;
-    const rows = Math.max(1, Math.min(tableRows, 20));
+    const rows = Math.max(2, Math.min(tableRows, 20));
     const cols = Math.max(1, Math.min(tableCols, 10));
-    const headerCells = Array.from({ length: cols }, (_, i) => `<th>Header ${i + 1}</th>`).join('');
-    const bodyCells = Array.from({ length: cols }, () => '<td>&nbsp;</td>').join('');
-    const bodyRows = Array.from({ length: rows - 1 }, () => `<tr>${bodyCells}</tr>`).join('');
-    const tableHTML = `<table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`;
-    const range = editor.getSelection(true);
-    editor.clipboard.dangerouslyPasteHTML(range.index, tableHTML);
+    const editor = quillRef.current?.getEditor?.();
+    if (editor) {
+      const tableModule = editor.getModule('table');
+      if (tableModule) {
+        tableModule.insertTable(rows, cols);
+      }
+    }
     setShowTableDialog(false);
   }, [tableRows, tableCols]);
 
@@ -96,6 +103,7 @@ export default function PostEdit() {
         ['clean']
       ],
     },
+    table: true,
     clipboard: {
       matchVisual: false,
     },
@@ -115,8 +123,9 @@ export default function PostEdit() {
 
   const quillFormats = [
     'header', 'bold', 'italic', 'underline', 'strike',
-    'color', 'background', 'list', 'bullet', 'align',
+    'color', 'background', 'list', 'align',
     'blockquote', 'code-block', 'link', 'image',
+    'table', 'table-row', 'table-body', 'table-container',
   ];
 
   useEffect(() => {
@@ -404,9 +413,10 @@ ${plainText}`;
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                 {/* Insert table button */}
                 {!markdownMode && (
-                  <div style={{ position: 'relative' }}>
-                    <button type="button" onClick={() => setShowTableDialog(!showTableDialog)}
-                      title="Insert Table"
+                  <>
+                    <div style={{ position: 'relative' }}>
+                      <button type="button" onClick={() => setShowTableDialog(!showTableDialog)}
+                        title="Insert Table"
                       style={{
                         display: 'flex', alignItems: 'center', gap: '0.25rem',
                         padding: '0.3rem 0.55rem', background: showTableDialog ? 'rgba(59,130,246,0.12)' : COLORS.surfaceLight,
@@ -445,7 +455,18 @@ ${plainText}`;
                         </div>
                       </div>
                     )}
-                  </div>
+                    </div>
+                    <button type="button" onClick={handleInsertHR}
+                      title="Insert Horizontal Rule"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.25rem',
+                        padding: '0.3rem 0.55rem', background: COLORS.surfaceLight,
+                        border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
+                        color: COLORS.text.secondary, fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
+                      }}>
+                      <Minus size={11} /> HR
+                    </button>
+                  </>
                 )}
                 {/* Upload .md file */}
                 <button type="button" title="Upload .md file"

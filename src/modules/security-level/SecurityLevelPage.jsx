@@ -164,6 +164,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
   const branchName = stationId || currentUser?.branchName || '';
   const [levels, setLevels] = useState([]);
   const [activeLevel, setActiveLevel] = useState(0);
+  const [savedActiveLevel, setSavedActiveLevel] = useState(0); // tracks the last-saved level
   const [activeSince, setActiveSince] = useState('');
   const [guidelines, setGuidelines] = useState([]);
   const [history, setHistory] = useState([]);
@@ -180,12 +181,14 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
         const data = snap.data();
         setLevels(data.levels || []);
         setActiveLevel(data.activeLevel ?? 0);
+        setSavedActiveLevel(data.activeLevel ?? 0);
         setActiveSince(data.activeSince || new Date().toISOString().split('T')[0]);
         setGuidelines(data.guidelines || []);
         setHistory(data.history || []);
       } else {
         setLevels([{ name: 'Level 1' }, { name: 'Level 2' }, { name: 'Level 3' }]);
         setActiveLevel(0);
+        setSavedActiveLevel(0);
         setActiveSince(new Date().toISOString().split('T')[0]);
         setGuidelines([
           { level: 0, action: 'Standard security procedures in effect' },
@@ -232,17 +235,8 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
   };
   const handleSelectLevel = (idx) => {
     if (idx === activeLevel) return;
-    const prevLevel = activeLevel;
+    // Only update the UI selection — history is recorded on Save
     setActiveLevel(idx);
-    // Use the Effective Since date (activeSince) for history, not today's date
-    const effectiveDate = activeSince || new Date().toISOString().split('T')[0];
-    const newEntry = {
-      from: levels[prevLevel]?.name || `Level ${prevLevel + 1}`,
-      to: levels[idx]?.name || `Level ${idx + 1}`,
-      date: effectiveDate,
-      timestamp: Date.now(),
-    };
-    setHistory(prev => [newEntry, ...prev].slice(0, 50));
   };
   const handleDeleteHistory = (idx) => {
     if (!window.confirm('Delete this history entry?')) return;
@@ -252,11 +246,25 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
     if (!branchName) return;
     setSaving(true);
     try {
+      // If the active level changed since last save, record a history entry
+      let updatedHistory = history;
+      if (activeLevel !== savedActiveLevel) {
+        const effectiveDate = activeSince || new Date().toISOString().split('T')[0];
+        const newEntry = {
+          from: levels[savedActiveLevel]?.name || `Level ${savedActiveLevel + 1}`,
+          to: levels[activeLevel]?.name || `Level ${activeLevel + 1}`,
+          date: effectiveDate,
+          timestamp: Date.now(),
+        };
+        updatedHistory = [newEntry, ...history].slice(0, 50);
+        setHistory(updatedHistory);
+      }
       await setDoc(doc(db, 'securityLevels', branchName), {
-        branchName, levels, activeLevel, activeSince, guidelines, history,
+        branchName, levels, activeLevel, activeSince, guidelines, history: updatedHistory,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser?.uid || 'unknown',
       });
+      setSavedActiveLevel(activeLevel);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
