@@ -6,7 +6,7 @@ import { db, storage } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Paperclip, X, UploadCloud, AlertCircle, Languages, Loader, ChevronDown, Minus, Table, Code, Eye, EyeOff, FileUp } from 'lucide-react';
+import { ArrowLeft, Paperclip, X, UploadCloud, AlertCircle, Languages, Loader, ChevronDown, Code, Eye, EyeOff, FileUp, Table } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -58,12 +58,12 @@ export default function PostWrite() {
   const [markdownMode, setMarkdownMode] = useState(false);
   const [markdownText, setMarkdownText] = useState('');
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+  // .md file upload
+  const mdFileInputRef = useRef(null);
   // Table insert dialog
   const [showTableDialog, setShowTableDialog] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
-  // .md file upload
-  const mdFileInputRef = useRef(null);
 
   const { currentUser, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -80,36 +80,22 @@ export default function PostWrite() {
     else if (detected === 'en' && targetLang === 'en') setTargetLang('ko');
   }, [content]);
 
-  // ---- Custom toolbar handlers ----
-  const insertHorizontalRule = useCallback(() => {
-    const quill = quillRef.current?.getEditor();
-    if (!quill) return;
-    const range = quill.getSelection(true);
-    quill.insertText(range.index, '\n');
-    quill.insertEmbed(range.index + 1, 'divider', true);
-    quill.insertText(range.index + 2, '\n');
-    quill.setSelection(range.index + 3, 0);
-  }, []);
-
-  const insertTable = useCallback(() => {
-    const quill = quillRef.current?.getEditor();
-    if (!quill) return;
-    const range = quill.getSelection(true);
-    // Build HTML table
-    let tableHTML = '<table><thead><tr>';
-    for (let c = 0; c < tableCols; c++) tableHTML += `<th>Header ${c + 1}</th>`;
-    tableHTML += '</tr></thead><tbody>';
-    for (let r = 0; r < tableRows; r++) {
-      tableHTML += '<tr>';
-      for (let c = 0; c < tableCols; c++) tableHTML += '<td>&nbsp;</td>';
-      tableHTML += '</tr>';
-    }
-    tableHTML += '</tbody></table>';
-    quill.clipboard.dangerouslyPasteHTML(range.index, tableHTML);
+  // Insert table into Quill editor via clipboard paste (bypasses broken blot)
+  const handleInsertTable = useCallback(() => {
+    const editor = quillRef.current?.getEditor();
+    if (!editor) return;
+    const rows = Math.max(1, Math.min(tableRows, 20));
+    const cols = Math.max(1, Math.min(tableCols, 10));
+    const headerCells = Array.from({ length: cols }, (_, i) => `<th>Header ${i + 1}</th>`).join('');
+    const bodyCells = Array.from({ length: cols }, () => '<td>&nbsp;</td>').join('');
+    const bodyRows = Array.from({ length: rows - 1 }, () => `<tr>${bodyCells}</tr>`).join('');
+    const tableHTML = `<table><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+    const range = editor.getSelection(true);
+    editor.clipboard.dangerouslyPasteHTML(range.index, tableHTML);
     setShowTableDialog(false);
   }, [tableRows, tableCols]);
 
-  // ---- Quill modules with custom handlers ----
+  // ---- Quill modules ----
   const quillModules = useMemo(() => ({
     toolbar: {
       container: [
@@ -120,54 +106,31 @@ export default function PostWrite() {
         [{ 'align': [] }],
         ['blockquote', 'code-block'],
         ['link', 'image'],
-        ['divider'],
         ['clean']
       ],
-      handlers: {
-        'divider': function() {
-          // Will be overridden after mount
-        }
-      }
     },
     clipboard: {
-      matchVisual: false,  // Preserve line breaks on paste
+      matchVisual: false,
+    },
+    keyboard: {
+      bindings: {
+        // Enter key inserts a line break (<br>) instead of a new paragraph (<p>)
+        enter: {
+          key: 'Enter',
+          handler: function(range) {
+            this.quill.insertText(range.index, '\n');
+            this.quill.setSelection(range.index + 1, 0);
+            return false;
+          }
+        },
+      },
     },
   }), []);
-
-  // Register custom Quill blot for divider
-  useEffect(() => {
-    const quill = quillRef.current?.getEditor();
-    if (!quill) return;
-
-    // Override the divider handler
-    const toolbar = quill.getModule('toolbar');
-    if (toolbar) {
-      toolbar.addHandler('divider', () => {
-        const range = quill.getSelection(true);
-        if (range) {
-          quill.insertText(range.index, '\n');
-          quill.clipboard.dangerouslyPasteHTML(range.index + 1, '<hr>');
-          quill.setSelection(range.index + 2, 0);
-        }
-      });
-    }
-
-    // Style the custom divider button in toolbar
-    const toolbarEl = quill.container?.previousSibling;
-    if (toolbarEl) {
-      const dividerBtn = toolbarEl.querySelector('.ql-divider');
-      if (dividerBtn) {
-        dividerBtn.innerHTML = '<svg viewBox="0 0 18 18" style="width:18px;height:18px;"><line x1="1" y1="9" x2="17" y2="9" stroke="currentColor" stroke-width="2"/></svg>';
-        dividerBtn.title = 'Horizontal Rule';
-      }
-    }
-  }, []);
 
   const quillFormats = [
     'header', 'bold', 'italic', 'underline', 'strike',
     'color', 'background', 'list', 'bullet', 'align',
     'blockquote', 'code-block', 'link', 'image',
-    'table', 'divider',
   ];
 
   // ---- Markdown conversion ----
@@ -508,84 +471,48 @@ ${plainText}`;
                 <label style={{ fontSize: '0.8rem', fontWeight: '600', color: COLORS.text.secondary }}>
                   Content & Details
                 </label>
-                {/* Custom action buttons */}
                 {!markdownMode && (
-                  <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    {/* Insert HR button */}
-                    <button type="button" title="Insert Horizontal Rule"
-                      onClick={() => {
-                        const quill = quillRef.current?.getEditor();
-                        if (quill) {
-                          const range = quill.getSelection(true);
-                          quill.clipboard.dangerouslyPasteHTML(range.index, '<hr>');
-                          quill.setSelection(range.index + 1, 0);
-                        }
-                      }}
+                  <div style={{ position: 'relative' }}>
+                    <button type="button" onClick={() => setShowTableDialog(!showTableDialog)}
+                      title="Insert Table"
                       style={{
-                        padding: '0.2rem 0.4rem', background: COLORS.surfaceLight,
-                        border: `1px solid ${COLORS.border}`, borderRadius: '0.25rem',
-                        color: COLORS.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        display: 'flex', alignItems: 'center', gap: '0.25rem',
+                        padding: '0.3rem 0.55rem', background: showTableDialog ? 'rgba(59,130,246,0.12)' : COLORS.surfaceLight,
+                        border: `1px solid ${showTableDialog ? 'rgba(59,130,246,0.3)' : COLORS.border}`, borderRadius: '0.35rem',
+                        color: showTableDialog ? COLORS.blue : COLORS.text.secondary, fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
                       }}>
-                      <Minus size={14} />
+                      <Table size={12} /> Table
                     </button>
-                    {/* Insert Table button */}
-                    <div style={{ position: 'relative' }}>
-                      <button type="button" title="Insert Table"
-                        onClick={() => setShowTableDialog(!showTableDialog)}
-                        style={{
-                          padding: '0.2rem 0.4rem', background: COLORS.surfaceLight,
-                          border: `1px solid ${COLORS.border}`, borderRadius: '0.25rem',
-                          color: COLORS.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center',
-                        }}>
-                        <Table size={14} />
-                      </button>
-                      {showTableDialog && (
-                        <div style={{
-                          position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', zIndex: 50,
-                          background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                          borderRadius: '0.5rem', padding: '0.75rem', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-                          minWidth: '180px',
-                        }}>
-                          <p style={{ fontSize: '0.7rem', fontWeight: '600', color: COLORS.text.secondary, margin: '0 0 0.5rem' }}>
-                            Insert Table
-                          </p>
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <label style={{ fontSize: '0.68rem', color: COLORS.text.secondary }}>Rows</label>
-                            <input type="number" min="1" max="20" value={tableRows}
-                              onChange={e => setTableRows(Math.min(20, Math.max(1, +e.target.value)))}
-                              style={{
-                                width: '3rem', padding: '0.2rem 0.3rem', background: COLORS.input.bg,
-                                border: `1px solid ${COLORS.input.border}`, borderRadius: '0.25rem',
-                                color: COLORS.input.text, fontSize: '0.75rem', textAlign: 'center',
-                              }}
-                            />
-                            <label style={{ fontSize: '0.68rem', color: COLORS.text.secondary }}>Cols</label>
-                            <input type="number" min="1" max="10" value={tableCols}
-                              onChange={e => setTableCols(Math.min(10, Math.max(1, +e.target.value)))}
-                              style={{
-                                width: '3rem', padding: '0.2rem 0.3rem', background: COLORS.input.bg,
-                                border: `1px solid ${COLORS.input.border}`, borderRadius: '0.25rem',
-                                color: COLORS.input.text, fontSize: '0.75rem', textAlign: 'center',
-                              }}
-                            />
+                    {showTableDialog && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, marginTop: '0.25rem', zIndex: 50,
+                        background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                        borderRadius: '0.5rem', boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
+                        padding: '0.75rem', minWidth: '200px',
+                      }}>
+                        <div style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary, marginBottom: '0.5rem' }}>Insert Table</div>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '0.6rem', color: COLORS.text.light, display: 'block', marginBottom: '0.2rem' }}>Rows</label>
+                            <input type="number" min="2" max="20" value={tableRows}
+                              onChange={e => setTableRows(Number(e.target.value))}
+                              style={{ width: '100%', padding: '0.3rem 0.4rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.3rem', color: COLORS.input.text, fontSize: '0.75rem' }} />
                           </div>
-                          <div style={{ display: 'flex', gap: '0.35rem' }}>
-                            <button type="button" onClick={insertTable}
-                              style={{
-                                padding: '0.25rem 0.6rem', background: COLORS.blue, color: '#fff',
-                                border: 'none', borderRadius: '0.25rem', fontSize: '0.7rem',
-                                fontWeight: '600', cursor: 'pointer',
-                              }}>Insert</button>
-                            <button type="button" onClick={() => setShowTableDialog(false)}
-                              style={{
-                                padding: '0.25rem 0.6rem', background: 'transparent',
-                                color: COLORS.text.secondary, border: `1px solid ${COLORS.border}`,
-                                borderRadius: '0.25rem', fontSize: '0.7rem', cursor: 'pointer',
-                              }}>Cancel</button>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '0.6rem', color: COLORS.text.light, display: 'block', marginBottom: '0.2rem' }}>Columns</label>
+                            <input type="number" min="1" max="10" value={tableCols}
+                              onChange={e => setTableCols(Number(e.target.value))}
+                              style={{ width: '100%', padding: '0.3rem 0.4rem', background: COLORS.input.bg, border: `1px solid ${COLORS.input.border}`, borderRadius: '0.3rem', color: COLORS.input.text, fontSize: '0.75rem' }} />
                           </div>
                         </div>
-                      )}
-                    </div>
+                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                          <button type="button" onClick={() => setShowTableDialog(false)}
+                            style={{ flex: 1, padding: '0.3rem', background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`, borderRadius: '0.3rem', color: COLORS.text.secondary, fontSize: '0.68rem', cursor: 'pointer' }}>Cancel</button>
+                          <button type="button" onClick={handleInsertTable}
+                            style={{ flex: 1, padding: '0.3rem', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '0.3rem', color: COLORS.blue, fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>Insert</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

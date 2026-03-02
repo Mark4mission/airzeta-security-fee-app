@@ -124,6 +124,34 @@ textarea::placeholder {
   margin: 0.75em 0;
 }
 
+/* Quill editor: table support */
+.ql-editor table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  font-size: 0.85rem;
+}
+.ql-editor table th,
+.ql-editor table td {
+  border: 1px solid #2A5080;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+  min-width: 60px;
+}
+.ql-editor table th {
+  background: rgba(59,130,246,0.12);
+  font-weight: 700;
+  color: #E8EAED;
+}
+.ql-editor table td {
+  color: #C8CCD0;
+}
+
+/* Quill editor: underline */
+.ql-editor u {
+  text-decoration: underline;
+}
+
 /* ============================================
    Bulletin Content - Display Styles
    ============================================ */
