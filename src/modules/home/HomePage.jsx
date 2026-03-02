@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp } from 'lucide-react';
+import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
@@ -604,11 +604,143 @@ function HomePage() {
 }
 
 // ============================================================
-// SECURITY PLEDGE AGREEMENT CARD
+// SECURITY PLEDGE AGREEMENT CARD (with Google Sheets data)
 // ============================================================
+const PLEDGE_SHEET_ID = '1rAN--sDV6dj9N5fgB71y7NoUyjgfkOHnmyAoBRiuHIw';
+const PLEDGE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/gviz/tq?tqx=out:csv`;
+const PLEDGE_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/edit?usp=sharing`;
+
+/** Mask ~1/3 of a name with asterisks for privacy */
+function maskName(name) {
+  if (!name || name.length <= 1) return name || '';
+  const trimmed = name.trim();
+  // Check if it contains a space (English-style: "Taemin huh" → "Tae*** huh")
+  if (trimmed.includes(' ')) {
+    const parts = trimmed.split(' ');
+    if (parts.length >= 2) {
+      const first = parts[0];
+      const rest = parts.slice(1).join(' ');
+      // Mask ~1/3 of first name
+      const visLen = Math.max(1, Math.ceil(first.length * 0.66));
+      const maskedFirst = first.slice(0, visLen) + '*'.repeat(first.length - visLen);
+      return `${maskedFirst} ${rest.charAt(0)}${'*'.repeat(Math.max(rest.length - 1, 0))}`;
+    }
+  }
+  // Korean-style 2-3 char names: "홍길동" → "홍*동", "김철수" → "김*수"
+  if (trimmed.length === 2) return trimmed[0] + '*';
+  if (trimmed.length === 3) return trimmed[0] + '*' + trimmed[2];
+  // Longer names: mask middle ~1/3
+  const keep = Math.ceil(trimmed.length * 0.66);
+  const front = Math.ceil(keep / 2);
+  const back = keep - front;
+  return trimmed.slice(0, front) + '*'.repeat(trimmed.length - front - back) + trimmed.slice(trimmed.length - back);
+}
+
+/** Parse CSV rows (handles quoted fields) */
+function parseCSVRow(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+/** Donut chart SVG for total signatories */
+function PledgeDonutChart({ total, recent }) {
+  const R = 32, STROKE = 7, CX = 40, CY = 40;
+  const C = 2 * Math.PI * R;
+  const recentRatio = total > 0 ? Math.min(recent / total, 1) : 0;
+  return (
+    <svg width="80" height="80" viewBox="0 0 80 80">
+      <circle cx={CX} cy={CY} r={R} fill="none" stroke="#1E3A5F" strokeWidth={STROKE} />
+      <circle cx={CX} cy={CY} r={R} fill="none" stroke="#E94560" strokeWidth={STROKE}
+        strokeDasharray={`${C}`} strokeDashoffset="0" strokeLinecap="round"
+        transform={`rotate(-90 ${CX} ${CY})`} opacity="0.3" />
+      {recentRatio > 0 && (
+        <circle cx={CX} cy={CY} r={R} fill="none" stroke="#34D399" strokeWidth={STROKE}
+          strokeDasharray={`${(recentRatio * C).toFixed(1)} ${C.toFixed(1)}`}
+          strokeDashoffset="0" strokeLinecap="round"
+          transform={`rotate(-90 ${CX} ${CY})`} />
+      )}
+      <text x={CX} y={CY - 4} textAnchor="middle" fontSize="15" fontWeight="800" fill="#E8EAED">{total}</text>
+      <text x={CX} y={CY + 9} textAnchor="middle" fontSize="5.5" fill="#8B99A8" fontWeight="600">SIGNATORIES</text>
+    </svg>
+  );
+}
+
 function SecurityPledgeCard() {
+  const { isAdmin } = useAuth();
   const [showModal, setShowModal] = useState(false);
+  const [pledgeData, setPledgeData] = useState({ total: 0, recentSigners: [], loading: true });
   const pledgeUrl = 'https://mark4mission.github.io/airzeta-security-agreement/';
+
+  useEffect(() => {
+    const fetchPledgeData = async () => {
+      try {
+        const resp = await fetch(PLEDGE_SHEET_CSV_URL);
+        if (!resp.ok) throw new Error('Failed to fetch');
+        const text = await resp.text();
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length <= 1) { setPledgeData({ total: 0, recentSigners: [], loading: false }); return; }
+
+        // Parse rows (skip header)
+        const allRows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = parseCSVRow(lines[i]);
+          if (cols.length >= 3) {
+            const timestamp = cols[0]?.replace(/^"|"$/g, '');
+            const name = cols[1]?.replace(/^"|"$/g, '');
+            const dept = cols[2]?.replace(/^"|"$/g, '');
+            const position = cols[3]?.replace(/^"|"$/g, '') || '';
+            if (name && timestamp) {
+              allRows.push({ timestamp, name, dept, position, date: new Date(timestamp) });
+            }
+          }
+        }
+
+        // Filter unique signers (last entry per name) and exclude test entries
+        const uniqueMap = new Map();
+        allRows.forEach(r => {
+          const key = r.name.toLowerCase();
+          if (key.includes('테스트') || key.includes('test')) return;
+          if (!uniqueMap.has(key) || r.date > uniqueMap.get(key).date) {
+            uniqueMap.set(key, r);
+          }
+        });
+        const uniqueSigners = Array.from(uniqueMap.values());
+
+        // Get recent signers (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const recentSigners = allRows
+          .filter(r => r.date >= thirtyDaysAgo && !r.name.toLowerCase().includes('테스트') && !r.name.toLowerCase().includes('test'))
+          .sort((a, b) => b.date - a.date)
+          .slice(0, 8);
+
+        setPledgeData({ total: uniqueSigners.length, recentSigners, loading: false });
+      } catch (err) {
+        console.error('[Pledge] Sheet fetch error:', err);
+        setPledgeData({ total: 0, recentSigners: [], loading: false });
+      }
+    };
+    fetchPledgeData();
+  }, []);
 
   return (
     <>
@@ -617,11 +749,12 @@ function SecurityPledgeCard() {
         borderRadius: '1rem', border: `1px solid ${COLORS.cardBorder}`,
         padding: '1.5rem', marginTop: '0.5rem', position: 'relative', overflow: 'hidden',
       }}>
-        {/* Decorative background element */}
+        {/* Decorative background elements */}
         <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', width: '140px', height: '140px', borderRadius: '50%', background: 'rgba(233,69,96,0.04)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', left: '-10px', top: '-10px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(59,130,246,0.03)', pointerEvents: 'none' }} />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+          {/* QR Code */}
           <div
             onClick={() => setShowModal(true)}
             style={{
@@ -629,7 +762,7 @@ function SecurityPledgeCard() {
               borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden',
               boxShadow: '0 2px 12px rgba(0,0,0,0.3)', padding: '8px', flexDirection: 'column',
-              transition: 'transform 0.2s, box-shadow 0.2s',
+              transition: 'transform 0.2s, box-shadow 0.2s', alignSelf: 'flex-start',
             }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.4)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.3)'; }}
@@ -637,6 +770,8 @@ function SecurityPledgeCard() {
             <QRCodeSVG value={pledgeUrl} size={88} level="M" includeMargin={false} bgColor="#ffffff" fgColor="#1a1a1a" />
             <div style={{ fontSize: '0.4rem', color: '#666', textAlign: 'center', marginTop: '2px', fontWeight: '600', letterSpacing: '0.05em' }}>SCAN TO SIGN</div>
           </div>
+
+          {/* Center: Description + buttons */}
           <div style={{ flex: 1, minWidth: '250px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
               <div style={{ width: '28px', height: '28px', borderRadius: '0.4rem', background: 'rgba(233,69,96,0.12)', border: '1px solid rgba(233,69,96,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -675,8 +810,61 @@ function SecurityPledgeCard() {
               }}>
                 <ExternalLink size={12} /> New Tab
               </a>
+              {isAdmin && (
+                <a href={PLEDGE_SHEET_EDIT_URL} target="_blank" rel="noopener noreferrer" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                  padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+                  background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)',
+                  color: '#34D399', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', textDecoration: 'none', transition: 'all 0.2s',
+                }}>
+                  <FileText size={12} /> View Responses
+                </a>
+              )}
             </div>
           </div>
+
+          {/* Right side: Total count donut + Recent signers */}
+          {!pledgeData.loading && pledgeData.total > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '200px' }}>
+              <PledgeDonutChart total={pledgeData.total} recent={pledgeData.recentSigners.length} />
+
+              {pledgeData.recentSigners.length > 0 && (
+                <div style={{
+                  width: '100%', maxWidth: '220px',
+                  background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
+                  border: '1px solid rgba(30,58,95,0.5)', padding: '0.5rem 0.6rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.35rem' }}>
+                    <Users size={10} color="#34D399" />
+                    <span style={{ fontSize: '0.55rem', color: '#34D399', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Recent Signers (30 days)
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                    {pledgeData.recentSigners.map((signer, idx) => (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        padding: '0.15rem 0.25rem', borderRadius: '0.2rem',
+                        background: idx === 0 ? 'rgba(52,211,153,0.06)' : 'transparent',
+                      }}>
+                        <CheckCircle2 size={9} color={idx < 3 ? '#34D399' : '#5F6B7A'} style={{ flexShrink: 0 }} />
+                        <span style={{
+                          fontSize: '0.62rem', fontWeight: '600', flex: 1,
+                          color: idx < 3 ? '#E8EAED' : '#8B99A8',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {maskName(signer.name)}
+                        </span>
+                        <span style={{ fontSize: '0.48rem', color: '#5F6B7A', fontFamily: 'monospace', flexShrink: 0 }}>
+                          {signer.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
