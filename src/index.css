@@ -124,19 +124,21 @@ textarea::placeholder {
   margin: 0.75em 0;
 }
 
-/* Quill editor: table support */
+/* Quill editor: table support (native Quill 2.0 tables) */
 .ql-editor table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.75em 0;
   font-size: 0.85rem;
+  table-layout: fixed;
 }
 .ql-editor table th,
 .ql-editor table td {
-  border: 1px solid #2A5080;
+  border: 1px solid #2A5080 !important;
   padding: 0.45rem 0.65rem;
   text-align: left;
   min-width: 60px;
+  color: #C8CCD0;
 }
 .ql-editor table th {
   background: rgba(59,130,246,0.12);
@@ -145,6 +147,11 @@ textarea::placeholder {
 }
 .ql-editor table td {
   color: #C8CCD0;
+}
+/* Quill 2 uses data-row attributes on TD, ensure they are always bordered */
+.ql-editor td[data-row] {
+  border: 1px solid #2A5080 !important;
+  padding: 0.45rem 0.65rem;
 }
 
 /* Quill editor: underline */
