@@ -50,17 +50,9 @@ export default function DocumentDashboard() {
     } catch { return ''; }
   };
 
-  // Filter: user can only see documents they have permission to access
-  const accessibleDocuments = documents.filter(doc => {
-    if (isAdmin) return true;
-    // All Branches permission
-    if (doc.downloadPermission === 'all_branches') return true;
-    // Admin only
-    if (doc.downloadPermission === 'admin_only' && isAdmin) return true;
-    // Uploader's branch auto-access
-    if (doc.uploaderBranch && doc.uploaderBranch === branchName) return true;
-    return false;
-  });
+  // All users can see ALL documents in the list (file visibility is universal)
+  // Download permission is enforced only on the detail/download page
+  const accessibleDocuments = documents;
 
   // Apply search and category filter
   const filteredDocuments = accessibleDocuments.filter(doc => {

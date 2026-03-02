@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.2
+> **Document Version**: 1.3
 > **Last Updated**: 2026-03-02
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -165,7 +165,7 @@ webapp/
 | `branchCodes` | Registered branch stations | (doc ID = branch name) |
 | `bulletinPosts` | Security directives | title, content, authorId, authorName, authorRole, attachments, acknowledgedBy[], viewCount, createdAt |
 | `bulletinPosts/{id}/comments` | Comments on posts | text, authorId, authorBranch, authorRole, createdAt |
-| `securityLevels` | Per-station security config | branchName, levels[], activeLevel, activeSince, guidelines[], history[], updatedAt, updatedBy |
+| `securityLevels` | Per-station security config | branchName, levels[], activeLevel, activeSince, guidelines[], history[], **airportCode**, updatedAt, updatedBy |
 | `securityFees` | Fee data | (branch-specific fee records) |
 | `securityPolicies` | Policy documents | (policy content) |
 | `importantLinks` | Important links | url, title, category, order |
@@ -177,21 +177,27 @@ webapp/
 
 ### 6.1 Security Level Module
 - **World Map**: TopoJSON rendering via custom SVG projection (Robinson-like Mercator)
-- **IATA Codes**: First 3 letters of branchName map to AIRPORT_COORDS dictionary
+- **IATA Codes**: Uses `airportCode` field (explicitly set by user) OR falls back to first 3 letters of branchName → AIRPORT_COORDS dictionary
+- **Airport Code Input (v1.3)**: Each station can set an explicit IATA airport code via a text field with autocomplete dropdown from `AIRPORT_COORDS`. This solves the branch name ≠ airport code problem (e.g., "LONSF" branch → "STN" airport). Saved in `securityLevels` document as `airportCode` field.
+- **AIRPORT_COORDS**: Contains 85+ airports worldwide (expanded in v1.3 to include STN, LGW, LTN, VIE, BRU, CPH, OSL, HEL, WAW, PRG, BUD, LIS, ATH, MXP, DUS, HAM, SEA, DFW, IAD, MIA, YVR, AKL, PNH, RGN, KTM, CJU, PUS, TAE, OKA)
 - **Risk Tiers**: Safe (#22c55e) / Caution (#f97316) / Alert (#ef4444)
 - **History**: Level changes are recorded ONLY when "Save Configuration" is clicked (not on UI selection)
 - **History Date**: Uses the "Effective Since" date field, not today's date
 
-### 6.2 Document Library Module (NEW - v1.2)
+### 6.2 Document Library Module (NEW - v1.2, Updated v1.3)
 - **Purpose**: Station Security Operation Manuals (SSOP) & reference documents
 - **Firestore Collection**: `documentLibrary`
 - **File Storage**: Firebase Storage under `document_library/` path
 - **Upload Limit**: 100 MB per file
 - **Title Format**: `[IATA Code] (Category) Document Title` - e.g. `[ICN] (Regulation) SSOP Manual v3`
 - **Categories**: Regulation, Guideline, Material, General, Other (color-coded badges)
+- **Visibility (v1.3)**: ALL documents are visible to ALL users in the dashboard and detail page. The file list is always shown to everyone regardless of permission.
 - **Download Permission**: Radio buttons - "Admin Only" or "All Branches"
+  - This controls **download ability only**, not document/file visibility
   - Uploader's branch ALWAYS has access automatically
   - Admin users ALWAYS have access
+  - Users without download access see file names (grayed out with lock icon) but cannot download
+- **Drag-and-Drop Download (v1.3)**: File items use `<a>` tags with `draggable="true"` and `DownloadURL` data transfer. Users can click to download or drag a file to their desktop/file manager to save it.
 - **Pin to Top**: Admin-only checkbox; pinned documents sort above all others
 - **Download Tracking**: Every download records `{userId, userEmail, branchName, fileName, downloadedAt}` in `downloadLog[]` array
   - Admin view: expandable section showing downloads grouped by branch
@@ -287,6 +293,24 @@ And add `'divider'` to `quillFormats` array.
 - Squash commits before push: `git reset --soft HEAD~N && git commit -m "message"`
 - Force push after rebase/squash: `git push -f origin genspark_ai_developer`
 
+### 7.8 Drag-and-Drop Download (v1.3)
+**Problem**: `DocumentDetail.jsx` download buttons used `<button>` elements which don't support native HTML5 drag-to-desktop.
+**Root Cause**: The HTML5 drag-and-drop download feature requires:
+  1. An `<a>` element (not `<button>`) with `href` and `download` attributes
+  2. `draggable="true"` attribute
+  3. `dataTransfer.setData('DownloadURL', 'mime:filename:url')` in `onDragStart`
+**Fix**: Changed file download items from `<button>` to `<a>` tags with proper `href`, `download`, `draggable`, `onDragStart` handlers. Click still works via `onClick` with `e.preventDefault()`.
+**LESSON LEARNED**: Browser drag-to-desktop downloads require the `DownloadURL` MIME type in dataTransfer, and the element must be a proper `<a>` tag.
+
+### 7.9 Branch Name vs Airport Code Mismatch (v1.3)
+**Problem**: Branch names like "LONSF" (London office) don't match IATA codes ("STN" for Stansted). The `extractIATA()` function only takes first 3 letters, yielding "LON" which isn't a valid IATA code.
+**Fix**: Added an `airportCode` field to the security level form. Users can manually set their airport's 3-letter IATA code, which takes priority over the auto-extracted code. The admin world map uses `airportCode` first, then falls back to `extractIATA(branchName)`. Also expanded `AIRPORT_COORDS` from ~55 to ~85 airports.
+**LESSON LEARNED**: Never assume naming conventions will be consistent across international operations. Always provide manual override fields.
+
+### 7.10 Build Performance
+**Problem**: `npm run build` (vite build) can hang/timeout in memory-constrained sandbox environments.
+**Fix**: Use `NODE_OPTIONS="--max-old-space-size=512"` before build commands in sandboxed environments. The project transforms ~2,542 modules and needs careful memory management.
+
 ---
 
 ## 8. Color Theme
@@ -337,6 +361,16 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-02 (Session 5)
+- **Added**: Airport code (IATA) input field in Security Level form with autocomplete dropdown from AIRPORT_COORDS
+- **Added**: 30 new airports to AIRPORT_COORDS (STN, LGW, LTN, VIE, BRU, CPH, OSL, HEL, WAW, PRG, BUD, LIS, ATH, MXP, DUS, HAM, SEA, DFW, IAD, MIA, YVR, AKL, PNH, RGN, KTM, CJU, PUS, TAE, OKA) — total now ~85
+- **Fixed**: Document Library drag-and-drop download — changed `<button>` to `<a>` with `draggable`, `href/download`, and `DownloadURL` dataTransfer
+- **Improved**: Document detail restricted files now show file names with sizes (grayed out + lock icon) even when download is not permitted
+- **Confirmed**: Document Library file list is visible to ALL users/branches; download permission only controls file download ability
+- **Confirmed**: `airportCode` field already saves/loads to Firestore securityLevels; admin map view uses it for marker placement
+- **Updated**: PROJECT_GUIDE.md to v1.3 with lessons learned (drag-and-drop download, branch vs airport code, build performance)
+- **Updated**: User manual v2.1 already includes Document Library and airport code sections
 
 ### 2026-03-02 (Session 4)
 - **Fixed**: HR rendering completely - registered custom `DividerBlot` (BlockEmbed) so `<hr>` persists in Quill Delta after save
@@ -401,7 +435,7 @@ npm run lint
 ## 11. Important Data & Variables
 
 ### AIRPORT_COORDS
-The `SecurityLevelPage.jsx` contains an `AIRPORT_COORDS` object mapping IATA 3-letter codes to `{lat, lng, city}` for 55+ airports worldwide. New stations can be added by including their IATA code in this dictionary.
+The `SecurityLevelPage.jsx` contains an `AIRPORT_COORDS` object mapping IATA 3-letter codes to `{lat, lng, city}` for ~85 airports worldwide. New stations can be added by including their IATA code in this dictionary. The `airportCode` field in `securityLevels` Firestore documents takes priority over auto-extracted codes from branch names.
 
 ### LANGUAGE_OPTIONS
 Used across bulletin modules for AI translation:

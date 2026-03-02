@@ -49,8 +49,8 @@ export default function DocumentDetail() {
     fetchDocument();
   }, [id, navigate]);
 
-  // Check access permission
-  const hasAccess = () => {
+  // Check download permission (not view permission - everyone can view)
+  const hasDownloadAccess = () => {
     if (!document) return false;
     if (isAdmin) return true;
     if (document.downloadPermission === 'all_branches') return true;
@@ -63,16 +63,13 @@ export default function DocumentDetail() {
     return isAdmin || currentUser?.uid === document.uploaderId;
   };
 
-  const handleDownload = async (file) => {
-    if (!hasAccess()) return;
-
-    // Record download in Firestore
+  const trackDownload = async (fileName) => {
     try {
       const downloadEntry = {
         userId: currentUser?.uid || 'unknown',
         userEmail: currentUser?.email || '',
         branchName: branchName,
-        fileName: file.name,
+        fileName: fileName,
         downloadedAt: new Date().toISOString(),
       };
 
@@ -81,7 +78,6 @@ export default function DocumentDetail() {
         downloadLog: arrayUnion(downloadEntry),
       });
 
-      // Update local state
       setDocument(prev => ({
         ...prev,
         downloadCount: (prev.downloadCount || 0) + 1,
@@ -90,9 +86,45 @@ export default function DocumentDetail() {
     } catch (err) {
       console.error('[DocDetail] Download tracking error:', err);
     }
+  };
 
-    // Open the file URL
-    window.open(file.url, '_blank', 'noopener,noreferrer');
+  const handleDownload = async (file) => {
+    if (!hasDownloadAccess()) return;
+
+    // Record download in Firestore
+    await trackDownload(file.name);
+
+    // Fetch and download the file properly (not just open in new tab)
+    try {
+      const response = await fetch(file.url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = window.document.createElement('a');
+      a.href = blobUrl;
+      a.download = file.name;
+      window.document.body.appendChild(a);
+      a.click();
+      window.document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fallback: open in new tab if fetch fails (e.g. CORS)
+      window.open(file.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  // Handle drag start for file download via drag-and-drop
+  const handleDragStart = (e, file) => {
+    if (!hasDownloadAccess()) {
+      e.preventDefault();
+      return;
+    }
+    // Set download data for drag-and-drop to desktop
+    e.dataTransfer.setData('DownloadURL', `${file.type || 'application/octet-stream'}:${file.name}:${file.url}`);
+    e.dataTransfer.setData('text/uri-list', file.url);
+    e.dataTransfer.setData('text/plain', file.url);
+    e.dataTransfer.effectAllowed = 'copy';
+    // Track the download
+    trackDownload(file.name);
   };
 
   const handleDelete = async () => {
@@ -238,29 +270,51 @@ export default function DocumentDetail() {
             <Paperclip size={16} /> Attached Files
           </h3>
 
-          {!hasAccess() ? (
-            <div style={{
-              padding: '1.5rem', textAlign: 'center', background: 'rgba(239,68,68,0.05)',
-              borderRadius: '0.5rem', border: '1px solid rgba(239,68,68,0.1)',
-            }}>
-              <Lock size={32} color="#F87171" style={{ margin: '0 auto 0.5rem' }} />
-              <p style={{ color: '#F87171', fontSize: '0.85rem', fontWeight: '600', margin: 0 }}>
-                Access Restricted
-              </p>
-              <p style={{ color: COLORS.text.light, fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                This document is restricted to admin users or the uploading branch.
-              </p>
+          {!hasDownloadAccess() ? (
+            <div>
+              {/* Show file names so users can see what's available, but no download */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {(document.attachments || []).map((file, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', padding: '0.7rem 0.9rem',
+                    background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
+                    borderRadius: '0.5rem', opacity: 0.6,
+                  }}>
+                    <FileText size={18} color={COLORS.text.light} style={{ marginRight: '0.6rem', flexShrink: 0 }} />
+                    <div style={{ overflow: 'hidden', flex: 1 }}>
+                      <p style={{ fontSize: '0.82rem', fontWeight: '500', color: COLORS.text.secondary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
+                      <p style={{ fontSize: '0.65rem', color: COLORS.text.light, margin: 0 }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <Lock size={14} color="#F87171" style={{ flexShrink: 0 }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{
+                padding: '1rem', textAlign: 'center', background: 'rgba(239,68,68,0.05)',
+                borderRadius: '0.5rem', border: '1px solid rgba(239,68,68,0.1)',
+              }}>
+                <p style={{ color: '#F87171', fontSize: '0.8rem', fontWeight: '600', margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                  <Lock size={14} /> Download Restricted
+                </p>
+                <p style={{ color: COLORS.text.light, fontSize: '0.72rem', marginTop: '0.2rem' }}>
+                  File downloads are restricted to admin users or the uploading branch.
+                </p>
+              </div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.5rem' }}>
               {(document.attachments || []).map((file, i) => (
-                <button key={i}
-                  onClick={() => handleDownload(file)}
+                <a key={i}
+                  href={file.url}
+                  download={file.name}
+                  draggable="true"
+                  onClick={(e) => { e.preventDefault(); handleDownload(file); }}
+                  onDragStart={(e) => handleDragStart(e, file)}
                   style={{
                     display: 'flex', alignItems: 'center', padding: '0.7rem 0.9rem',
                     background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
                     borderRadius: '0.5rem', cursor: 'pointer', transition: 'border-color 0.15s',
-                    textAlign: 'left', width: '100%',
+                    textAlign: 'left', width: '100%', textDecoration: 'none', boxSizing: 'border-box',
                   }}
                   onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.blue}
                   onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
@@ -268,9 +322,11 @@ export default function DocumentDetail() {
                   <Download size={18} color={COLORS.blue} style={{ marginRight: '0.6rem', flexShrink: 0 }} />
                   <div style={{ overflow: 'hidden', flex: 1 }}>
                     <p style={{ fontSize: '0.82rem', fontWeight: '500', color: COLORS.text.primary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
-                    <p style={{ fontSize: '0.65rem', color: COLORS.text.light, margin: 0 }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p style={{ fontSize: '0.65rem', color: COLORS.text.light, margin: 0 }}>
+                      {(file.size / 1024 / 1024).toFixed(2)} MB — click or drag to download
+                    </p>
                   </div>
-                </button>
+                </a>
               ))}
             </div>
           )}
