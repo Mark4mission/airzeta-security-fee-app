@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2 } from 'lucide-react';
+import * as topojson from 'topojson-client';
 import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
@@ -74,7 +75,7 @@ function getRiskTierSimple(activeIdx, totalLevels, levelColor) {
 
 // Mini projection for a card-sized map
 const MINI_W = 320;
-const MINI_H = 140;
+const MINI_H = 160;
 function miniProject(lng, lat) {
   const x = ((lng + 180) / 360) * MINI_W;
   const latRad = (lat * Math.PI) / 180;
@@ -84,6 +85,30 @@ function miniProject(lng, lat) {
   const maxMercY = Math.log(Math.tan(Math.PI / 4 + maxLatRad / 2));
   const y = MINI_H / 2 - (mercY / maxMercY) * (MINI_H / 2);
   return [x, y];
+}
+
+/** Convert GeoJSON geometry to SVG path string for mini-map */
+function miniGeoPath(geometry) {
+  const pathParts = [];
+  function processRing(ring) {
+    if (ring.length < 3) return '';
+    const pts = ring.map(c => miniProject(c[0], c[1]));
+    return 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+  }
+  if (geometry.type === 'Polygon') {
+    geometry.coordinates.forEach(ring => {
+      const p = processRing(ring);
+      if (p) pathParts.push(p);
+    });
+  } else if (geometry.type === 'MultiPolygon') {
+    geometry.coordinates.forEach(poly => {
+      poly.forEach(ring => {
+        const p = processRing(ring);
+        if (p) pathParts.push(p);
+      });
+    });
+  }
+  return pathParts.join(' ');
 }
 
 // ============================================================
@@ -124,6 +149,27 @@ function TimeZoneInfo() {
 // SECURITY LEVEL MINI MAP (for card)
 // ============================================================
 function SecurityLevelMiniMap({ stations }) {
+  const [countryPaths, setCountryPaths] = useState([]);
+
+  // Load TopoJSON for detailed country outlines
+  useEffect(() => {
+    fetch('/countries-110m.json')
+      .then(r => r.json())
+      .then(topo => {
+        try {
+          const countries = topojson.feature(topo, topo.objects.countries);
+          const paths = countries.features.map((f, i) => ({
+            key: f.id || i,
+            d: miniGeoPath(f.geometry),
+          })).filter(p => p.d);
+          setCountryPaths(paths);
+        } catch (e) {
+          console.error('[MiniMap] TopoJSON parse:', e);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const mapped = useMemo(() => {
     return stations.map(s => {
       const iata = s.airportCode?.toUpperCase().trim() || extractIATA(s.branchName || s.id);
@@ -141,24 +187,6 @@ function SecurityLevelMiniMap({ stations }) {
   const green = mapped.filter(s => s.color === '#22c55e').length;
   const orange = mapped.filter(s => s.color === '#f97316').length;
   const red = mapped.filter(s => s.color === '#ef4444').length;
-
-  // Simplified continent path outlines (low-detail shapes for visual appeal)
-  const continentPaths = [
-    // North America
-    'M32,20 C36,18 44,18 52,22 C56,24 62,30 64,36 C60,40 52,44 46,42 C40,46 34,42 30,38 C28,34 30,26 32,20Z',
-    // South America
-    'M52,50 C56,48 60,50 62,54 C64,60 62,68 58,74 C56,78 52,80 50,76 C46,70 44,62 46,56 C48,52 50,50 52,50Z',
-    // Europe
-    'M140,18 C144,16 152,16 156,20 C158,24 156,28 152,30 C148,32 142,30 140,26 C138,22 138,20 140,18Z',
-    // Africa
-    'M140,36 C146,34 152,36 156,40 C160,46 158,56 154,62 C150,66 144,66 140,60 C136,54 134,44 138,38Z',
-    // Asia
-    'M170,14 C180,12 200,14 218,18 C226,22 230,28 228,34 C224,40 216,44 206,44 C196,46 186,42 178,38 C170,34 164,28 166,22 C168,16 170,14Z',
-    // Oceania
-    'M220,56 C228,54 238,56 242,60 C244,64 240,68 234,68 C228,66 222,62 220,58Z',
-    // Oceania (NZ)
-    'M248,68 C250,66 254,68 254,72 C252,74 248,72 248,68Z',
-  ];
 
   return (
     <div style={{ position: 'relative' }}>
@@ -186,9 +214,9 @@ function SecurityLevelMiniMap({ stations }) {
           const [x] = miniProject(lng, 0);
           return <line key={`lng${lng}`} x1={x} y1="0" x2={x} y2={MINI_H} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="2,6" opacity="0.12" />;
         })}
-        {/* Continent outlines */}
-        {continentPaths.map((d, i) => (
-          <path key={`c${i}`} d={d} fill="#172e4a" stroke="#1E3A5F" strokeWidth="0.4" opacity="0.55" />
+        {/* Country outlines from TopoJSON (detailed) */}
+        {countryPaths.map(cp => (
+          <path key={cp.key} d={cp.d} fill="#172e4a" stroke="#1E4D7A" strokeWidth="0.35" opacity="0.8" />
         ))}
         {/* Connection lines between nearby stations (diagram effect) */}
         {mapped.length > 1 && mapped.slice(0, -1).map((s, i) => {
@@ -207,7 +235,7 @@ function SecurityLevelMiniMap({ stations }) {
             <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite" />
           </circle>
         ))}
-        {/* Station markers */}
+        {/* Station markers (no labels for security) */}
         {mapped.map((s, i) => {
           const glowId = s.color === '#ef4444' ? 'glow-r' : s.color === '#f97316' ? 'glow-o' : 'glow-g';
           return (
@@ -218,29 +246,26 @@ function SecurityLevelMiniMap({ stations }) {
             </g>
           );
         })}
-        {/* IATA labels for a few prominent stations */}
-        {mapped.filter((_, i) => i % Math.max(1, Math.floor(mapped.length / 5)) === 0).slice(0, 5).map((s, i) => (
-          <text key={`lbl${i}`} x={s.x} y={s.y - 5} textAnchor="middle" fontSize="3.5" fill={s.color} opacity="0.7" fontWeight="700" fontFamily="monospace">
-            {s.iata}
-          </text>
-        ))}
       </svg>
-      {/* Stats overlay */}
+      {/* Stats overlay – enlarged for readability */}
       <div style={{
-        position: 'absolute', bottom: '0.35rem', right: '0.35rem',
-        display: 'flex', gap: '0.35rem', padding: '0.2rem 0.45rem',
-        background: 'rgba(10,22,40,0.88)', borderRadius: '0.3rem',
-        backdropFilter: 'blur(4px)', border: '1px solid rgba(30,58,95,0.5)',
+        position: 'absolute', bottom: '0.4rem', right: '0.4rem',
+        display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.35rem 0.55rem',
+        background: 'rgba(10,22,40,0.92)', borderRadius: '0.35rem',
+        backdropFilter: 'blur(6px)', border: '1px solid rgba(30,58,95,0.6)',
       }}>
+        <span style={{ fontSize: '0.5rem', color: '#8B99A8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.1rem' }}>
+          Station Statistics
+        </span>
         {[{ c: '#22c55e', n: green, label: 'Safe' }, { c: '#f97316', n: orange, label: 'Caution' }, { c: '#ef4444', n: red, label: 'Alert' }]
           .filter(v => v.n > 0).map((v, i) => (
-          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', fontSize: '0.55rem', color: v.c, fontWeight: '700' }}>
-            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: v.c, display: 'inline-block', boxShadow: `0 0 3px ${v.c}` }} />
-            {v.n}
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.6rem', color: v.c, fontWeight: '700' }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: v.c, display: 'inline-block', boxShadow: `0 0 4px ${v.c}` }} />
+            {v.n} <span style={{ fontWeight: '400', color: '#8B99A8', fontSize: '0.52rem' }}>{v.label}</span>
           </span>
         ))}
-        <span style={{ fontSize: '0.5rem', color: '#8B99A8', marginLeft: '0.1rem' }}>
-          {mapped.length} stations
+        <span style={{ fontSize: '0.52rem', color: '#60A5FA', fontWeight: '600', borderTop: '1px solid rgba(30,58,95,0.5)', paddingTop: '0.15rem', marginTop: '0.05rem' }}>
+          {mapped.length} total stations
         </span>
       </div>
       {/* Left label */}
@@ -679,7 +704,7 @@ function PledgeDonutChart({ total, recent }) {
           transform={`rotate(-90 ${CX} ${CY})`} />
       )}
       <text x={CX} y={CY - 4} textAnchor="middle" fontSize="15" fontWeight="800" fill="#E8EAED">{total}</text>
-      <text x={CX} y={CY + 9} textAnchor="middle" fontSize="5.5" fill="#8B99A8" fontWeight="600">SIGNATORIES</text>
+      <text x={CX} y={CY + 9} textAnchor="middle" fontSize="5.5" fill="#8B99A8" fontWeight="600">SUBMISSIONS</text>
     </svg>
   );
 }
@@ -699,41 +724,43 @@ function SecurityPledgeCard() {
         const lines = text.split('\n').filter(l => l.trim());
         if (lines.length <= 1) { setPledgeData({ total: 0, recentSigners: [], loading: false }); return; }
 
-        // Parse rows (skip header)
+        // Parse rows (skip header), only keep rows with actual data
         const allRows = [];
         for (let i = 1; i < lines.length; i++) {
           const cols = parseCSVRow(lines[i]);
           if (cols.length >= 3) {
-            const timestamp = cols[0]?.replace(/^"|"$/g, '');
-            const name = cols[1]?.replace(/^"|"$/g, '');
-            const dept = cols[2]?.replace(/^"|"$/g, '');
+            const timestamp = cols[0]?.replace(/^"|"$/g, '').trim();
+            const name = cols[1]?.replace(/^"|"$/g, '').trim();
+            const dept = cols[2]?.replace(/^"|"$/g, '').trim();
             const position = cols[3]?.replace(/^"|"$/g, '') || '';
-            if (name && timestamp) {
+            // Only count rows with both a valid name and timestamp (skip empty rows)
+            if (name && timestamp && !isNaN(new Date(timestamp).getTime())) {
               allRows.push({ timestamp, name, dept, position, date: new Date(timestamp) });
             }
           }
         }
 
-        // Filter unique signers (last entry per name) and exclude test entries
-        const uniqueMap = new Map();
-        allRows.forEach(r => {
+        // Count total valid submissions (exclude test entries, do NOT deduplicate)
+        const validSubmissions = allRows.filter(r => {
           const key = r.name.toLowerCase();
-          if (key.includes('테스트') || key.includes('test')) return;
-          if (!uniqueMap.has(key) || r.date > uniqueMap.get(key).date) {
-            uniqueMap.set(key, r);
-          }
+          return !key.includes('테스트') && !key.includes('test');
         });
-        const uniqueSigners = Array.from(uniqueMap.values());
+        const totalCount = validSubmissions.length;
 
-        // Get recent signers (last 30 days)
+        // Get recent signers (last 30 days) — deduplicate for display only
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const recentSigners = allRows
-          .filter(r => r.date >= thirtyDaysAgo && !r.name.toLowerCase().includes('테스트') && !r.name.toLowerCase().includes('test'))
+        const recentMap = new Map();
+        validSubmissions
+          .filter(r => r.date >= thirtyDaysAgo)
           .sort((a, b) => b.date - a.date)
-          .slice(0, 8);
+          .forEach(r => {
+            const key = r.name.toLowerCase();
+            if (!recentMap.has(key)) recentMap.set(key, r);
+          });
+        const recentSigners = Array.from(recentMap.values()).slice(0, 8);
 
-        setPledgeData({ total: uniqueSigners.length, recentSigners, loading: false });
+        setPledgeData({ total: totalCount, recentSigners, loading: false });
       } catch (err) {
         console.error('[Pledge] Sheet fetch error:', err);
         setPledgeData({ total: 0, recentSigners: [], loading: false });
