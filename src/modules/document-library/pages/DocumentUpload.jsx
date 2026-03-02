@@ -164,7 +164,11 @@ export default function DocumentUpload() {
         background: COLORS.surface, borderRadius: '0.75rem',
         border: `1px solid ${COLORS.border}`, overflow: 'hidden',
       }}>
-        <form onSubmit={handleSubmit} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={handleSubmit}
+          onDragOver={(e) => e.preventDefault()}
+          onDragEnter={(e) => e.preventDefault()}
+          onDrop={(e) => e.preventDefault()}
+          style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {error && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
