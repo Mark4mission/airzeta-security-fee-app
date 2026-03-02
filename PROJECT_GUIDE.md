@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.3
+> **Document Version**: 1.4
 > **Last Updated**: 2026-03-02
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -311,6 +311,46 @@ And add `'divider'` to `quillFormats` array.
 **Problem**: `npm run build` (vite build) can hang/timeout in memory-constrained sandbox environments.
 **Fix**: Use `NODE_OPTIONS="--max-old-space-size=512"` before build commands in sandboxed environments. The project transforms ~2,542 modules and needs careful memory management.
 
+### 7.11 Drag-and-Drop File Upload in Edit Mode (v1.4)
+**Problem**: In `DocumentEdit.jsx`, dragging files onto the upload drop zone caused the page to "flicker" (momentary reload) without actually adding the files.
+**Root Cause**: Multiple issues:
+  1. The browser's default drag-and-drop behavior navigates to the dropped file, causing a page reload (the "flicker").
+  2. The `<form>` element did not prevent default drag events, so drops outside the exact drop zone area triggered navigation.
+  3. Using `e.currentTarget.style` directly for visual feedback was fragile and caused rendering glitches.
+  4. Missing `onDragEnter` handler and `e.dataTransfer.dropEffect = 'copy'` meant the browser didn't show the correct cursor.
+**Fix (v1.4)**:
+  1. Added `onDragOver`, `onDragEnter`, and `onDrop` handlers to the `<form>` element itself, all calling `e.preventDefault()` to block browser navigation.
+  2. Replaced inline style mutations with React state (`isDragOver`) for reactive visual feedback.
+  3. Added `onDragEnter` with `setIsDragOver(true)` and `e.dataTransfer.dropEffect = 'copy'`.
+  4. Added `e.relatedTarget` check in `onDragLeave` to prevent flickering when hovering over child elements.
+  5. Added null guard: `Array.from(e.dataTransfer?.files || [])`.
+  6. Applied the same form-level drag prevention to `DocumentUpload.jsx` for consistency.
+**LESSON LEARNED**: When implementing drag-and-drop in forms, the `<form>` element must prevent default drag events. Otherwise, drops that miss the target zone cause browser navigation to the file URL.
+
+### 7.12 Home Dashboard Card Visualizations (v1.4)
+**Security Level Mini Map Enhancements**:
+  - Replaced ellipse-based continent shapes with SVG path outlines for more recognizable geography
+  - Added connection lines between nearby stations (diagram-like effect)
+  - Added animated pulse rings for red (alert) level stations
+  - Added SVG glow filters for markers by risk tier
+  - Added IATA code labels on select prominent stations
+  - Added "Global Status" label overlay with MapPin icon
+  - All interactions are purely visual (no zoom, no click modals) to preserve security
+
+**Security Fee Mini Chart Enhancements**:
+  - Added gradient area fills under both Est. and Actual lines for visual depth
+  - Enhanced endpoint dots with outer glow circles
+  - Improved stat summary boxes with TrendingUp icons
+  - Added "sites" label to branch count displays
+  - Centered and improved legend positioning
+
+**Security Pledge Card Enhancements**:
+  - Added decorative background elements
+  - Added hover animation on QR code card
+  - Added "SSI Access Required" and "Mobile Friendly" badges
+  - Added separate "New Tab" link button alongside the modal button
+  - Shield icon now has its own styled container
+
 ---
 
 ## 8. Color Theme
@@ -361,6 +401,16 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-02 (Session 6)
+- **Fixed**: Document Library drag-and-drop file upload in Edit mode — form-level `preventDefault()` on drag events prevents browser file navigation (flicker), React state-driven visual feedback replaces fragile inline style mutations, added `onDragEnter` + `dropEffect='copy'`
+- **Improved**: Security Level mini map on Home Dashboard — SVG path continent outlines, connection lines between nearby stations, animated pulse rings for alert stations, glow filters per risk tier, IATA labels, "Global Status" overlay
+- **Improved**: Security Fee mini chart on Home Dashboard — gradient area fills, enhanced endpoint dots, TrendingUp icons in stat boxes, centered legend
+- **Improved**: Security Pledge Agreement card — decorative backgrounds, QR hover animation, status badges, "New Tab" link
+- **Applied**: Same form-level drag prevention to DocumentUpload.jsx for consistency
+- **Updated**: User manual to v2.2 with enhanced Dashboard card descriptions
+- **Updated**: PROJECT_GUIDE.md to v1.4 with new known issues and lessons learned
+- **Build**: 0 errors, 2,542 modules
 
 ### 2026-03-02 (Session 5)
 - **Added**: Airport code (IATA) input field in Security Level form with autocomplete dropdown from AIRPORT_COORDS

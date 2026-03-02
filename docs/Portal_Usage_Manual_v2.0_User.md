@@ -1,6 +1,6 @@
-# Airzeta Station Security Portal — Branch User Usage Manual v2.1
+# Airzeta Station Security Portal — Branch User Usage Manual v2.2
 
-**Version**: 2.1  
+**Version**: 2.2  
 **Effective Date**: March 2, 2026  
 **Audience**: Branch/Station Users  
 **Classification**: Internal Use Only
@@ -134,17 +134,18 @@ This is especially useful for coordinating with HQ and other stations across tim
 Three large clickable cards provide direct access to the most-used modules:
 
 1. **Security Bulletin Board** — with previews of the 3 latest post titles
-2. **Security Fee Management** — for submitting monthly costs
-3. **Security Level** — for managing your station's threat level
+2. **Security Fee Management** — shows at-a-glance stats: how many stations submitted last month's Actual Cost and this month's Estimated Cost (e.g., "3/12 sites"), plus a mini sparkline chart of Estimated vs Actual Cost trends over the last 6 months (no numeric labels, just visual trend lines with area fills)
+3. **Security Level** — includes a mini world-map visualization showing all registered station markers color-coded by risk tier (Safe=green, Caution=orange, Alert=red). The map displays simplified continent outlines, connection lines between nearby stations, animated pulse rings for alert-level stations, and IATA labels for select stations. A stats overlay shows the count per risk level. The map is static (no zoom or click interactions) to preserve security.
 
 Click any card to navigate directly to that module.
 
-### 3.4 Security Pledge QR Code
+### 3.4 Security Pledge Agreement
 
-A QR code links to the Airzeta Security Agreement page. You can:
-- **Scan** the QR code with your phone camera to open the agreement on your mobile device
-- **Click** the "View Pledge" button to open it in an in-page modal window
-- **Open in new tab** using the link at the top of the modal
+At the bottom of the Home Dashboard, a **Security Pledge Agreement** card allows all personnel to sign the required SSI (Security Sensitive Information) access agreement. Features:
+- **QR Code**: Scan with your phone camera to open the agreement on your mobile device. The QR card shows a hover animation.
+- **"Open Pledge Form" button**: Opens the agreement in a full-screen modal window within the portal.
+- **"New Tab" link**: Opens the pledge form in a separate browser tab.
+- **Badges**: Indicates "SSI Access Required" and "Mobile Friendly" status.
 
 This is convenient for sharing the pledge with on-site personnel during training sessions.
 
@@ -268,8 +269,10 @@ Any authenticated user (admin or branch user) can upload documents:
    - **Download Permission** — choose "Admin Only" or "All Branches"
 4. Attach files:
    - Click the **upload area** or **drag and drop** files directly into the dashed box
+   - When dragging files over the drop zone, the border turns blue and text changes to "Drop files here to add" for visual confirmation
    - Maximum file size: **100 MB per file**
    - Supported formats: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, ZIP, images, and more
+   - The same drag-and-drop upload also works in the **Edit Document** page
 5. Click **"Upload Document"** to submit.
 
 A **title preview** is shown below the input fields so you can see how the document will appear in the list: `[IATA] (Category) Title`.
@@ -558,5 +561,5 @@ A: Open your phone's camera app and point it at the QR code on the Home page. A 
 
 *This manual is maintained by the Airzeta HQ Security Operations team. For questions, feedback, or feature requests, contact your HQ administrator or post in the Security Bulletin Board.*
 
-*Document ID: AZSP-USER-MANUAL-v2.1*  
+*Document ID: AZSP-USER-MANUAL-v2.2*  
 *Last Updated: 2026-03-02*

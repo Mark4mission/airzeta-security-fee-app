@@ -38,6 +38,7 @@ export default function DocumentEdit() {
   const [error, setError] = useState('');
   const [allBranches, setAllBranches] = useState([]);
   const [showIataDropdown, setShowIataDropdown] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     const fetchDoc = async () => {
@@ -128,7 +129,8 @@ export default function DocumentEdit() {
       </div>
 
       <div style={{ background: COLORS.surface, borderRadius: '0.75rem', border: `1px solid ${COLORS.border}`, padding: '1.5rem' }}>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <form onSubmit={handleSubmit}
+          style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {error && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -312,6 +314,7 @@ export default function DocumentEdit() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
                   <UploadCloud size={14} color={COLORS.blue} />
                   <span style={{ fontSize: '0.8rem', color: COLORS.blue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name} (new)</span>
+                  <span style={{ fontSize: '0.65rem', color: COLORS.text.light, flexShrink: 0 }}>({(f.size / 1024 / 1024).toFixed(2)} MB)</span>
                 </div>
                 <button type="button" onClick={() => setNewFiles(newFiles.filter((_, idx) => idx !== i))}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#F87171', display: 'flex', padding: '0.15rem' }}>
@@ -319,27 +322,57 @@ export default function DocumentEdit() {
                 </button>
               </div>
             ))}
-            <div style={{ marginTop: '0.5rem' }}>
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                padding: '0.4rem 0.8rem', background: COLORS.surfaceLight,
-                border: `1px solid ${COLORS.border}`, borderRadius: '0.5rem',
-                cursor: 'pointer', fontSize: '0.8rem', color: COLORS.text.secondary, fontWeight: '500',
-              }}>
-                <UploadCloud size={14} /> Add Files
-                <input type="file" multiple style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files).filter(f => {
-                      if (f.size > MAX_FILE_SIZE_BYTES) {
-                        setError(`File "${f.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
-                        return false;
-                      }
-                      return true;
-                    });
-                    setNewFiles(prev => [...prev, ...files]);
-                  }}
-                />
-              </label>
+            {/* Drag-and-drop zone + Add Files button */}
+            <div
+              style={{
+                marginTop: '0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', padding: '1.25rem', border: `2px dashed ${isDragOver ? COLORS.blue : COLORS.border}`,
+                borderRadius: '0.5rem', background: isDragOver ? 'rgba(59,130,246,0.08)' : COLORS.surfaceLight,
+                cursor: 'pointer', transition: 'border-color 0.2s, background 0.2s',
+              }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); document.getElementById('edit-file-input')?.click(); }}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setIsDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                const droppedFiles = Array.from(e.dataTransfer?.files || []);
+                if (droppedFiles.length === 0) return;
+                const validFiles = droppedFiles.filter(file => {
+                  if (file.size > MAX_FILE_SIZE_BYTES) {
+                    setError(`File "${file.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+                    return false;
+                  }
+                  return true;
+                });
+                if (validFiles.length > 0) {
+                  setError('');
+                  setNewFiles(prev => [...prev, ...validFiles]);
+                }
+              }}
+            >
+              <UploadCloud size={28} color={isDragOver ? COLORS.blue : COLORS.text.light} style={{ marginBottom: '0.35rem', transition: 'color 0.2s' }} />
+              <p style={{ fontSize: '0.78rem', color: isDragOver ? COLORS.blue : COLORS.text.secondary, margin: 0, transition: 'color 0.2s' }}>
+                {isDragOver ? 'Drop files here to add' : 'Click to browse or drag & drop files here'}
+              </p>
+              <p style={{ fontSize: '0.65rem', color: COLORS.text.light, margin: '0.15rem 0 0' }}>
+                Max {MAX_FILE_SIZE_MB}MB per file
+              </p>
+              <input id="edit-file-input" type="file" multiple style={{ display: 'none' }}
+                onChange={(e) => {
+                  const files = Array.from(e.target.files).filter(f => {
+                    if (f.size > MAX_FILE_SIZE_BYTES) {
+                      setError(`File "${f.name}" exceeds ${MAX_FILE_SIZE_MB}MB limit.`);
+                      return false;
+                    }
+                    return true;
+                  });
+                  if (files.length > 0) setNewFiles(prev => [...prev, ...files]);
+                  e.target.value = '';
+                }}
+              />
             </div>
           </div>
 
