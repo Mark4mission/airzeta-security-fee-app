@@ -4,9 +4,10 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
-import ReactQuill from 'react-quill-new';
+import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye, FileUp, Table, Minus } from 'lucide-react';
+
+import { ArrowLeft, Paperclip, X, UploadCloud, Languages, Loader, ChevronDown, Code, Eye, FileUp, Table } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -67,14 +68,6 @@ export default function PostEdit() {
   const [showTableDialog, setShowTableDialog] = useState(false);
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
-
-  // Insert horizontal rule into content
-  const handleInsertHR = useCallback(() => {
-    setContent(prev => {
-      const clean = prev && prev !== '<p><br></p>' ? prev : '';
-      return clean + '<hr>';
-    });
-  }, []);
 
   // Insert table using Quill's native table module
   const handleInsertTable = useCallback(() => {
@@ -456,16 +449,6 @@ ${plainText}`;
                       </div>
                     )}
                     </div>
-                    <button type="button" onClick={handleInsertHR}
-                      title="Insert Horizontal Rule"
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.25rem',
-                        padding: '0.3rem 0.55rem', background: COLORS.surfaceLight,
-                        border: `1px solid ${COLORS.border}`, borderRadius: '0.35rem',
-                        color: COLORS.text.secondary, fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
-                      }}>
-                      <Minus size={11} /> HR
-                    </button>
                   </>
                 )}
                 {/* Upload .md file */}
