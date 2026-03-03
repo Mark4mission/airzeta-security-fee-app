@@ -247,25 +247,23 @@ function SecurityLevelMiniMap({ stations }) {
           );
         })}
       </svg>
-      {/* Stats overlay – enlarged for readability */}
+      {/* Stats overlay – horizontal bar at bottom */}
       <div style={{
-        position: 'absolute', bottom: '0.4rem', right: '0.4rem',
-        display: 'flex', flexDirection: 'column', gap: '0.2rem', padding: '0.35rem 0.55rem',
-        background: 'rgba(10,22,40,0.92)', borderRadius: '0.35rem',
-        backdropFilter: 'blur(6px)', border: '1px solid rgba(30,58,95,0.6)',
+        position: 'absolute', bottom: '0', left: '0', right: '0',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+        padding: '0.3rem 0.5rem',
+        background: 'rgba(10,22,40,0.92)', borderRadius: '0 0 0.5rem 0.5rem',
+        backdropFilter: 'blur(6px)', borderTop: '1px solid rgba(30,58,95,0.6)',
       }}>
-        <span style={{ fontSize: '0.5rem', color: '#8B99A8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.1rem' }}>
-          Station Statistics
-        </span>
         {[{ c: '#22c55e', n: green, label: 'Safe' }, { c: '#f97316', n: orange, label: 'Caution' }, { c: '#ef4444', n: red, label: 'Alert' }]
           .filter(v => v.n > 0).map((v, i) => (
-          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.6rem', color: v.c, fontWeight: '700' }}>
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.6rem', color: v.c, fontWeight: '700' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: v.c, display: 'inline-block', boxShadow: `0 0 4px ${v.c}` }} />
             {v.n} <span style={{ fontWeight: '400', color: '#8B99A8', fontSize: '0.52rem' }}>{v.label}</span>
           </span>
         ))}
-        <span style={{ fontSize: '0.52rem', color: '#60A5FA', fontWeight: '600', borderTop: '1px solid rgba(30,58,95,0.5)', paddingTop: '0.15rem', marginTop: '0.05rem' }}>
-          {mapped.length} total stations
+        <span style={{ fontSize: '0.52rem', color: '#60A5FA', fontWeight: '600', borderLeft: '1px solid rgba(30,58,95,0.6)', paddingLeft: '0.5rem', marginLeft: '0.1rem' }}>
+          {mapped.length} stations
         </span>
       </div>
       {/* Left label */}
