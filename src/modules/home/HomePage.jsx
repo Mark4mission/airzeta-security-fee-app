@@ -51,6 +51,7 @@ const MINI_AIRPORT_COORDS = {
   SEA: { lat: 47.45, lng: -122.31 }, MIA: { lat: 25.80, lng: -80.29 },
   CJU: { lat: 33.51, lng: 126.49 }, PUS: { lat: 35.18, lng: 128.94 },
   OKA: { lat: 26.20, lng: 127.65 },
+  ANC: { lat: 61.17, lng: -150.00 },
 };
 
 function extractIATA(branchName) {

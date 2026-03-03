@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../../firebase/config';
+import DOMPurify from 'dompurify';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill, { Quill } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -591,7 +592,7 @@ ${plainText}`;
                           fontSize: '0.85rem', lineHeight: '1.7', overflowY: 'auto',
                           background: COLORS.surfaceLight, minHeight: '280px',
                         }}
-                        dangerouslySetInnerHTML={{ __html: markdownPreview }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(markdownPreview) }}
                       />
                     </div>
                   </div>
@@ -628,7 +629,7 @@ ${plainText}`;
                       padding: '0.75rem', color: COLORS.text.primary, fontSize: '0.85rem',
                       lineHeight: '1.7', overflowY: 'auto', flex: 1,
                     }}
-                    dangerouslySetInnerHTML={{ __html: translatedContent }} />
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(translatedContent) }} />
                 </div>
               )}
             </div>
