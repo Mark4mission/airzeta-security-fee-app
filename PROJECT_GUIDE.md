@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.6
-> **Last Updated**: 2026-03-02
+> **Document Version**: 1.7
+> **Last Updated**: 2026-03-03
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -177,6 +177,10 @@ webapp/
 
 ### 6.1 Security Level Module
 - **World Map**: TopoJSON rendering via custom SVG projection (Robinson-like Mercator)
+- **Access Control (v1.7)**: The global world map view (`AdminWorldMapView`) is now visible to ALL logged-in users, not just admins. However:
+  - **Admin users**: Can click map markers and station cards to edit any station's configuration. Tooltip shows "Click to edit configuration". Station cards show "Edit Configuration" link.
+  - **Branch users**: View-only access to the global map. No click-to-edit on markers or cards. A separate "Edit My Station" button below the map navigates to their own station's `BranchUserView` editor.
+  - **LESSON**: Separating read access (map viewing) from write access (station editing) via `isAdmin` prop gives all users situational awareness without compromising security controls.
 - **IATA Codes**: Uses `airportCode` field (explicitly set by user) OR falls back to first 3 letters of branchName → AIRPORT_COORDS dictionary
 - **Airport Code Input (v1.3)**: Each station can set an explicit IATA airport code via a text field with autocomplete dropdown from `AIRPORT_COORDS`. This solves the branch name ≠ airport code problem (e.g., "LONSF" branch → "STN" airport). Saved in `securityLevels` document as `airportCode` field.
 - **AIRPORT_COORDS**: Contains 85+ airports worldwide (expanded in v1.3 to include STN, LGW, LTN, VIE, BRU, CPH, OSL, HEL, WAW, PRG, BUD, LIS, ATH, MXP, DUS, HAM, SEA, DFW, IAD, MIA, YVR, AKL, PNH, RGN, KTM, CJU, PUS, TAE, OKA)
@@ -333,11 +337,11 @@ And add `'divider'` to `quillFormats` array.
   - When drag-and-drop "flickers" but doesn't actually add files, check for parent elements intercepting the events.
   - The v1.4 fix was a RED HERRING that masked the real issue. Always verify that the actual file state (`newFiles`) updates after drop, not just that the page doesn't reload.
 
-### 7.12 Home Dashboard Card Visualizations (v1.4, Updated v1.6)
+### 7.12 Home Dashboard Card Visualizations (v1.4, Updated v1.7)
 **Security Level Mini Map Enhancements**:
+  - (v1.7) **Statistics legend changed to horizontal bottom bar** — spans the full width of the map at the bottom instead of a vertical box in the corner. This covers less of the map area while remaining readable. Uses flex row layout with colored dots, counts, tier labels, and total station count separated by a vertical divider
   - (v1.6) Replaced hand-drawn continent path outlines with **real TopoJSON country geometry** loaded at runtime from `/public/countries-110m.json` via `topojson-client`. This produces a detailed, accurate world map even at card size
   - (v1.6) **Removed all IATA code labels** from station markers on the mini-map for security (general users should not see which stations are registered)
-  - (v1.6) **Enlarged statistics legend** (bottom-right overlay) — changed from horizontal single-line to vertical layout with title "Station Statistics", larger dot indicators (7px), explicit label per risk tier, and "total stations" count with blue accent. This improves readability at a glance
   - (v1.6) Updated viewBox height from 140 to 160 for better proportions with detailed country outlines
   - (v1.6) Added `miniGeoPath()` utility that converts GeoJSON Polygon/MultiPolygon geometry to SVG `<path>` d-strings using the same Mercator projection as `miniProject()`
   - (v1.4) Added connection lines between nearby stations (diagram-like effect)
@@ -374,11 +378,16 @@ And add `'divider'` to `quillFormats` array.
   - Longer names: keep front + back, mask middle
 **Count Logic (v1.6 FIX)**:
   - **Total count** = all valid data rows with non-empty name + valid timestamp, excluding test entries. This counts total **submissions**, not unique signers
-  - Previous v1.5 logic deduped by name, showing 86 unique signers instead of 90 total submissions. The user confirmed the Google Sheet has 90 data rows (excluding the header)
+  - Previous v1.5 logic deduped by name, showing 86 unique signers instead of total submissions
   - **Empty row filtering**: Google Sheets CSV export may return hundreds of empty trailing rows (e.g., 969 rows where only 91 have data). The parser now validates both `name.trim()` and `!isNaN(new Date(timestamp).getTime())` to skip empty/invalid rows
   - **Donut chart max value**: Based on actual valid submission count, NOT the total CSV row count
   - Recent signers list is still deduped for display (to avoid showing the same person twice)
 **Filtering**: Test entries (containing "테스트" or "test") are excluded
+**Data Validation (v1.7 CLARIFICATION)**:
+  - Google Sheet has 91 CSV lines = 1 header + 90 data rows
+  - 1 test entry ("작동 테스트") is excluded → **89 valid submissions** is the correct displayed count
+  - Previous claim of "90 total" was inaccurate (included the test row). The displayed value 89 is verified correct
+  - 3 people submitted twice → unique signers = 86, but the chart correctly shows total valid submissions (89)
 **LESSON LEARNED**: 
   - Google Sheets CSV export via `/gviz/tq?tqx=out:csv` is a reliable zero-auth approach for reading published sheets
   - The CSV may contain commas within quoted fields, so `line.split(',')` is NOT sufficient — a proper CSV parser is needed
@@ -435,6 +444,13 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-03 (Session 9)
+- **Changed**: Security Level page — global world map view now accessible to ALL users (was admin-only). Branch users see the map read-only with no edit controls; a separate "Edit My Station" button lets them edit their own station. Admin users retain full click-to-edit functionality on markers and cards.
+- **Improved**: Mini-map Station Statistics overlay — changed from vertical box (bottom-right) to **horizontal bottom bar** spanning the full width. This covers less map area while improving readability. Uses flex row layout with colored dots, tier counts, labels, and total stations separated by a vertical divider.
+- **Verified**: Pledge Submissions count is **89** (correct). Google Sheet has 90 data rows; 1 test entry ("작동 테스트") is excluded. Previous claim of "90" was inaccurate.
+- **Updated**: PROJECT_GUIDE.md to v1.7 with Security Level access control documentation (Section 6.1), mini-map legend layout notes, and pledge count clarification.
+- **Build**: 0 errors, 2,542 modules
 
 ### 2026-03-02 (Session 8)
 - **Improved**: Security Level mini-map on Home Dashboard — replaced hand-drawn SVG continent shapes with **real TopoJSON country outlines** loaded at runtime via `topojson-client`, producing an accurate detailed world map at card size

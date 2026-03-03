@@ -575,7 +575,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
 // ============================================================
 // ADMIN VIEW: Real World Map with TopoJSON
 // ============================================================
-function AdminWorldMapView({ currentUser, onEditStation }) {
+function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
   const [allLevels, setAllLevels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [geoData, setGeoData] = useState(null);
@@ -669,7 +669,7 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: '1.15rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>Global Security Level Overview</h1>
             <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, margin: 0 }}>
-              {stationData.length} station{stationData.length !== 1 ? 's' : ''} reporting ({mappedStations.length} on map) — Click a station card to edit
+              {stationData.length} station{stationData.length !== 1 ? 's' : ''} reporting ({mappedStations.length} on map){isAdmin ? ' — Click a station card to edit' : ''}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -731,8 +731,8 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
                   onMouseEnter={e => handleStationHover(station, e.nativeEvent)}
                   onMouseLeave={() => { setHoveredStation(null); setTooltipPos(null); }}
                   onMouseMove={e => { if (svgRef.current) { const rect = svgRef.current.getBoundingClientRect(); setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top }); }}}
-                  onClick={() => onEditStation(station.rawCode)}
-                  style={{ cursor: 'pointer' }}
+                  onClick={() => isAdmin && onEditStation(station.rawCode)}
+                  style={{ cursor: isAdmin ? 'pointer' : 'default' }}
                 >
                   {/* Pulse */}
                   <circle cx={station.pos.x} cy={station.pos.y} r="12" fill="none" stroke={station.riskColor} strokeWidth="0.8" opacity="0.25">
@@ -775,7 +775,7 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
                   <span style={{ fontSize: '0.7rem', fontWeight: '600', color: station.riskColor }}>{station.activeLevelData?.name || `Level ${station.activeIdx + 1}`}</span>
                 </div>
                 {station.activeSince && <div style={{ fontSize: '0.6rem', color: COLORS.text.light }}>Since: {station.activeSince}</div>}
-                <div style={{ fontSize: '0.55rem', color: COLORS.blue, marginTop: '0.2rem', fontWeight: '600' }}>Click to edit configuration</div>
+                {isAdmin && <div style={{ fontSize: '0.55rem', color: COLORS.blue, marginTop: '0.2rem', fontWeight: '600' }}>Click to edit configuration</div>}
               </div>
             );
           })()}
@@ -795,7 +795,7 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
       {/* Station Cards — clicking opens edit view */}
       <div style={{ background: COLORS.surface, borderRadius: '0.75rem', border: `1px solid ${COLORS.border}`, padding: '1.25rem' }}>
         <h2 style={{ fontSize: '0.95rem', fontWeight: '700', color: COLORS.text.primary, margin: '0 0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          All Stations <span style={{ fontSize: '0.62rem', color: COLORS.text.light, fontWeight: '500' }}>— click to edit</span>
+          All Stations {isAdmin && <span style={{ fontSize: '0.62rem', color: COLORS.text.light, fontWeight: '500' }}>— click to edit</span>}
         </h2>
         {stationData.length === 0 ? (
           <p style={{ color: COLORS.text.light, fontSize: '0.82rem', textAlign: 'center', padding: '2rem' }}>No stations have configured security levels yet.</p>
@@ -806,13 +806,13 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
               const activeLvl = station.levels?.[activeIdx];
               const levelName = activeLvl?.name || `Level ${activeIdx + 1}`;
               return (
-                <div key={station.id} onClick={() => onEditStation(station.rawCode)}
+                <div key={station.id} onClick={() => isAdmin && onEditStation(station.rawCode)}
                   style={{
                     padding: '0.75rem', background: COLORS.surfaceLight, borderRadius: '0.5rem',
                     border: `1px solid ${COLORS.border}`, borderLeft: `3px solid ${station.riskColor}`,
-                    cursor: 'pointer', transition: 'all 0.15s',
+                    cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.15s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)'; e.currentTarget.style.borderColor = station.riskColor; }}
+                  onMouseEnter={e => { if (isAdmin) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)'; e.currentTarget.style.borderColor = station.riskColor; } }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = COLORS.border; }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
@@ -835,9 +835,11 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
                       <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', background: i === activeIdx ? (lvl.color || station.riskColor) : COLORS.border, opacity: i === activeIdx ? 1 : 0.3 }} />
                     ))}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.35rem', fontSize: '0.58rem', color: COLORS.blue, fontWeight: '600' }}>
-                    <Edit3 size={9} /> Edit Configuration
-                  </div>
+                  {isAdmin && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.35rem', fontSize: '0.58rem', color: COLORS.blue, fontWeight: '600' }}>
+                      <Edit3 size={9} /> Edit Configuration
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -862,20 +864,68 @@ function AdminWorldMapView({ currentUser, onEditStation }) {
 export default function SecurityLevelPage() {
   const { currentUser, isAdmin } = useAuth();
   const [editingStation, setEditingStation] = useState(null);
+  const [showMyStation, setShowMyStation] = useState(false);
 
-  if (isAdmin) {
-    if (editingStation) {
-      return (
-        <BranchUserView
-          currentUser={currentUser}
-          stationId={editingStation}
-          onBack={() => setEditingStation(null)}
-          isAdminEditing={true}
-        />
-      );
-    }
-    return <AdminWorldMapView currentUser={currentUser} onEditStation={setEditingStation} />;
+  // Admin editing a specific station from the map
+  if (isAdmin && editingStation) {
+    return (
+      <BranchUserView
+        currentUser={currentUser}
+        stationId={editingStation}
+        onBack={() => setEditingStation(null)}
+        isAdminEditing={true}
+      />
+    );
   }
 
-  return <BranchUserView currentUser={currentUser} />;
+  // Branch user editing their own station
+  if (!isAdmin && showMyStation) {
+    return (
+      <BranchUserView
+        currentUser={currentUser}
+        onBack={() => setShowMyStation(false)}
+      />
+    );
+  }
+
+  // Global map view for ALL users (admin can click to edit, branch users view-only)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <AdminWorldMapView
+        currentUser={currentUser}
+        onEditStation={setEditingStation}
+        isAdmin={isAdmin}
+      />
+      {/* Branch users get a button to edit their own station */}
+      {!isAdmin && (
+        <div style={{
+          background: COLORS.surface, borderRadius: '0.75rem',
+          border: `1px solid ${COLORS.border}`, padding: '1.25rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: '0.75rem',
+        }}>
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>
+              My Station: {currentUser?.branchName || 'Unknown'}
+            </h3>
+            <p style={{ fontSize: '0.72rem', color: COLORS.text.secondary, margin: '0.25rem 0 0' }}>
+              Configure security levels, set threat status, and manage guidelines for your station.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowMyStation(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.35rem',
+              padding: '0.55rem 1rem', borderRadius: '0.5rem',
+              background: 'rgba(59,130,246,0.12)', border: `1px solid rgba(59,130,246,0.3)`,
+              color: COLORS.blue, fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            <Edit3 size={14} /> Edit My Station
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
