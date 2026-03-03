@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, increment } from 'firebase/firestore';
 import { db } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
+import DOMPurify from 'dompurify';
 import { useReactToPrint } from 'react-to-print';
 import 'react-quill-new/dist/quill.snow.css';
 import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify, Eye } from 'lucide-react';
@@ -589,7 +590,7 @@ ${plainText}`;
             <div
               className="ql-editor bulletin-content"
               style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }}
-              dangerouslySetInnerHTML={{ __html: post.content }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content) }}
             />
           </div>
 
@@ -623,7 +624,7 @@ ${plainText}`;
               <div
                 className="ql-editor bulletin-content"
                 style={{ color: COLORS.text.primary, lineHeight: '1.7', padding: 0 }}
-                dangerouslySetInnerHTML={{ __html: translatedContent }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(translatedContent) }}
               />
             </div>
           )}

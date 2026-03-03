@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.7
+> **Document Version**: 1.8
 > **Last Updated**: 2026-03-03
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -183,7 +183,7 @@ webapp/
   - **LESSON**: Separating read access (map viewing) from write access (station editing) via `isAdmin` prop gives all users situational awareness without compromising security controls.
 - **IATA Codes**: Uses `airportCode` field (explicitly set by user) OR falls back to first 3 letters of branchName → AIRPORT_COORDS dictionary
 - **Airport Code Input (v1.3)**: Each station can set an explicit IATA airport code via a text field with autocomplete dropdown from `AIRPORT_COORDS`. This solves the branch name ≠ airport code problem (e.g., "LONSF" branch → "STN" airport). Saved in `securityLevels` document as `airportCode` field.
-- **AIRPORT_COORDS**: Contains 85+ airports worldwide (expanded in v1.3 to include STN, LGW, LTN, VIE, BRU, CPH, OSL, HEL, WAW, PRG, BUD, LIS, ATH, MXP, DUS, HAM, SEA, DFW, IAD, MIA, YVR, AKL, PNH, RGN, KTM, CJU, PUS, TAE, OKA)
+- **AIRPORT_COORDS**: Contains 86+ airports worldwide (expanded in v1.3, v1.8 added ANC)
 - **Risk Tiers**: Safe (#22c55e) / Caution (#f97316) / Alert (#ef4444)
 - **History**: Level changes are recorded ONLY when "Save Configuration" is clicked (not on UI selection)
 - **History Date**: Uses the "Effective Since" date field, not today's date
@@ -443,7 +443,27 @@ npm run lint
 
 ---
 
+## 9.5 Security Measures (v1.8)
+
+- **XSS Protection**: All `dangerouslySetInnerHTML` usages wrapped with `DOMPurify.sanitize()` (PostDetail, PostEdit, PostWrite)
+- **Firebase Config**: Uses environment variables (`import.meta.env.VITE_FIREBASE_*`), no hardcoded keys
+- **Env Files**: `.env`, `.env.local`, `.env.*.local` in `.gitignore`
+- **No eval()**: No `eval()` or `new Function()` usage
+- **External Fetch**: Only Google Sheets CSV, Google News RSS, local TopoJSON — no untrusted origins
+- **npm audit**: 2 low-severity issues (acceptable)
+
+---
+
 ## 10. Changelog / Work History
+
+### 2026-03-03 (Session 10)
+- **Added**: ANC (Anchorage) airport to AIRPORT_COORDS and MINI_AIRPORT_COORDS (lat: 61.17, lng: -150.00)
+- **Security Fix**: Added DOMPurify sanitization to ALL 6 `dangerouslySetInnerHTML` usages in bulletin module (PostDetail, PostEdit, PostWrite). Previously unsanitized HTML from Firestore was rendered directly, creating XSS risk.
+- **Security Audit**: Verified Firebase config uses env vars, no hardcoded secrets, no eval(), .env in .gitignore, npm audit shows only 2 low-severity issues
+- **Updated**: PROJECT_GUIDE.md to v1.8, CLAUDE.md v2.0, GEMINI.md v2.0, AI_HANDOFF_PROMPT.md v2.0 — all onboarding guides rewritten to reflect current multi-module architecture (previous versions described the legacy single-page fee-only app)
+- **Documentation**: All AI guides now include complete module list, file structure, Firestore collections, AIRPORT_COORDS rules, DOMPurify requirements, and backup/restore instructions
+- **Build**: 0 errors, 2,543 modules (DOMPurify +1)
+- **Deployed**: GitHub Pages + Vercel (auto-deploy from main)
 
 ### 2026-03-03 (Session 9)
 - **Changed**: Security Level page — global world map view now accessible to ALL users (was admin-only). Branch users see the map read-only with no edit controls; a separate "Edit My Station" button lets them edit their own station. Admin users retain full click-to-edit functionality on markers and cards.

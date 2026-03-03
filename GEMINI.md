@@ -1,26 +1,31 @@
-# GEMINI.md - Genspark / Gemini AI Instructions
+# GEMINI.md - Genspark / Antigravity AI Instructions
 
-## Project: Air Zeta Security Fee App
+> **Last Updated**: 2026-03-03 (Session 10)
+> **Document Version**: 2.0
+
+## Project: AirZeta Station Security Portal
 
 ### Quick Context
-React 19 + Vite 7 + Firebase Firestore/Auth web app for managing branch security costs across international offices. See `PROJECT_CONTEXT.md` for complete documentation.
+React 19 + Vite 7 + Firebase multi-module aviation security portal. Manages security threat levels, bulletins, fees, documents, and policies for worldwide branch stations.
 
-### Repository
+**Full Documentation**: `PROJECT_GUIDE.md` (v1.8)
+
+### Repository & URLs
 ```
-GitHub: https://github.com/Mark4mission/airzeta-security-fee-app
-Production: main branch
-Development: genspark_ai_developer branch
-Live URL: https://mark4mission.github.io/airzeta-security-fee-app/
+GitHub:   https://github.com/Mark4mission/airzeta-security-fee-app
+Main:     main (production)
+Dev:      genspark_ai_developer (feature work → PR to main)
+Vercel:   https://airzeta-security-fee-app.vercel.app (auto-deploy from main)
+GH Pages: npm run deploy
 ```
 
-### Setup (if working in sandbox)
+### Setup
 ```bash
-# If cloning fresh:
+# Fresh clone
 git clone https://github.com/Mark4mission/airzeta-security-fee-app.git
-cd airzeta-security-fee-app
-npm install
+cd airzeta-security-fee-app && npm install
 
-# Create .env file (REQUIRED - not in git)
+# .env (REQUIRED)
 cat > .env << 'EOF'
 VITE_FIREBASE_API_KEY=AIzaSyC1WRvtCRCkQbsPQ28Zjrr16kfdPIrZeYo
 VITE_FIREBASE_AUTH_DOMAIN=airzeta-security-system.firebaseapp.com
@@ -28,61 +33,78 @@ VITE_FIREBASE_PROJECT_ID=airzeta-security-system
 VITE_FIREBASE_STORAGE_BUCKET=airzeta-security-system.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=803391050005
 VITE_FIREBASE_APP_ID=1:803391050005:web:b79b059aad13ddeaf5591c
+VITE_GEMINI_API_KEY=<your-gemini-api-key>
 EOF
 
-# If sandbox already has the project:
-cd /home/user/webapp
-git checkout main && git pull origin main
+# In Genspark sandbox:
+cd /home/user/webapp && git checkout main && git pull origin main
 ```
 
-### Key Commands
+### Commands
 ```bash
-npm run dev          # Local dev server (port 5173)
-npm run build        # Production build (ALWAYS verify before commit!)
+npm run dev          # Dev server (port 5173)
+npm run build        # Production build (ALWAYS run before commit)
 npm run deploy       # Build + deploy to GitHub Pages
+npm run lint         # ESLint check
+npm run preview      # Preview production build locally
 ```
 
-### Genspark-Specific Workflow
-1. Always use `genspark_ai_developer` branch for development
-2. **Start**: `git checkout -B genspark_ai_developer origin/main`
-3. Make changes, verify build: `npm run build`
-4. Commit: `git add -A && git commit -m "type(scope): description"`
-5. Push: `git push -f origin genspark_ai_developer`
-6. Create PR: `gh pr create --base main --head genspark_ai_developer --title "..." --body "..."`
-7. Deploy: `npm run deploy`
-8. Merge: `gh pr merge <number> --merge`
-9. Always provide PR link to user
-10. Squash commits before merging if multiple
+### Architecture Overview
+- **Routing**: HashRouter in `App.jsx` → module pages
+- **Auth**: Firebase Auth (Email/Password + Google) via `AuthContext.jsx`
+- **Layout**: `PortalLayout.jsx` (sidebar + content)
+- **Styling**: All inline CSS (`style={{}}`), `COLORS` constant per component, dark navy theme
+- **State**: Pure React hooks (useState, useEffect, useCallback, useMemo)
+- **No TypeScript, No Redux, No CSS modules**
 
-### Architecture Summary
-- **App.jsx** (1,498 lines): Main component - all state, form handling, submission logic
-- **firebase/**: `config.js` (init from .env), `auth.js` (authentication), `collections.js` (Firestore CRUD)
-- **components/**: Login, BranchSelection, AdminDashboard, BranchCostHistory, Settings, UserManagement
-- **Styling**: All inline CSS (`style={{}}`), color constants via `COLORS` object in each component
-- **No Router/Redux/TypeScript** - pure React hooks (useState, useEffect, useCallback, useMemo)
+### Modules
+| Module | Route | Key File | Description |
+|--------|-------|----------|-------------|
+| Home | `/` | `modules/home/HomePage.jsx` | Dashboard cards (bulletin, security level mini-map, fee chart, pledge donut, news) |
+| Bulletin | `/bulletin/*` | `modules/bulletin/` | Post CRUD, rich text + markdown, translation, acknowledgement |
+| Security Level | `/security-level` | `modules/security-level/SecurityLevelPage.jsx` | TopoJSON world map (all users read-only, admin edit), branch threat levels |
+| Security Fee | `/security-fee` | `modules/security-fee/` | Cost management, admin dashboard, branch history |
+| Document Library | `/document-library/*` | `modules/document-library/` | File upload, categories, download tracking |
+| Security Policy | `/security-policy` | `modules/security-policy/SecurityPolicyPage.jsx` | Policy references |
+| Important Links | `/important-links` | `modules/important-links/ImportantLinksPage.jsx` | External links |
+| Settings | `/settings` | `modules/settings/SettingsPage.jsx` | Branch, cost items, currencies config |
 
 ### Firestore Collections
-| Collection | Purpose | Doc ID | Key Fields |
-|-----------|---------|--------|------------|
-| `branchCodes` | Branch settings | Branch name | name, manager, currency, paymentMethod |
-| `securityCosts` | Submitted costs | Auto-generated | branchName, targetMonth, items[], totalEstimated, totalActual |
-| `users` | User profiles | Firebase Auth UID | email, role, branchName, preferredCurrency |
-| `settings/appSettings` | App config | Fixed "appSettings" | costItems[], currencies[], paymentMethods[] |
+| Collection | Key Fields |
+|-----------|------------|
+| `branchCodes` | branchName, manager, currency, paymentMethod, active |
+| `securityCosts` | branchName, targetMonth, items[], totalEstimated, totalActual |
+| `users` | email, role (hq_admin/branch_user), branchName |
+| `settings/appSettings` | costItems[], currencies[], paymentMethods[] |
+| `securityLevels` | branchName, levels, activeLevel, airportCode, history |
+| `bulletins` | title, content, category, acknowledgements, comments |
+| `documentLibrary` | title, category, fileUrl, downloadCount |
 
-### User Roles
-- `hq_admin`: Full access (dashboard, all branches, settings, user management)
-- `branch_user`: Own branch only (submit costs, view history)
-- `pending_admin`: Awaiting approval (cannot access any features)
+### Genspark AI Developer Workflow
+```bash
+git checkout main && git pull origin main
+git checkout -B genspark_ai_developer origin/main
+# ... make changes ...
+npm run build                    # ALWAYS verify 0 errors
+git add -A && git commit -m "type(scope): description"
+git push -f origin genspark_ai_developer
+gh pr create --base main --head genspark_ai_developer --title "..." --body "..."
+# After merge:
+git checkout main && git pull
+npm run deploy                   # GitHub Pages deploy
+# Vercel auto-deploys from main branch
+```
 
 ### Critical Rules
-- **Currency display uses `branch.currency`** (NOT user preferences) - caused past bugs
-- Estimated Cost editable only for current/past months
-- Actual Cost editable only after 28th of target month
-- Manager name syncs to `branchCodes` on submit via `updateBranchManager()`
-- Firestore queries: avoid compound indexes, use client-side filtering
-- Unicode in JSX: use template literals or JS expressions, not bare text
-- After submit with `serverTimestamp()`, wait 1.5s before re-query
-- KRW Exchange Rate helper text dynamically shows branch currency (e.g., "Enter the THB to KRW exchange rate")
+1. **Build check**: `npm run build` before every commit (0 errors required)
+2. **Inline CSS only**: `style={{}}` with `COLORS` constant — no Tailwind, no class names
+3. **DOMPurify**: ALL `dangerouslySetInnerHTML` MUST use `DOMPurify.sanitize()`
+4. **AIRPORT_COORDS**: When adding airports, update BOTH `SecurityLevelPage.jsx` (full coords) AND `HomePage.jsx` (mini coords)
+5. **Currency**: Always `branch.currency`, never `currentUser.preferredCurrency`
+6. **Korean comments**: Preserve all existing Korean comments in code
+7. **TopoJSON**: `/public/countries-110m.json` must exist for map rendering
+8. **Firestore**: Avoid compound indexes; prefer single-field queries + client-side filter
+9. **Post-submit**: Wait 1.5s+ after `serverTimestamp()` before re-querying
 
 ### Test Accounts
 ```
@@ -94,19 +116,13 @@ Branch: alasu@test.airzeta.com / Test1234! (ALASU, USD)
 ### Backup & Restore
 ```bash
 # Latest backup tag:
-git checkout backup-2026-02-21-v6-final-docs
-
-# Create branch from backup:
-git checkout -b restore-branch backup-2026-02-21-v6-final-docs
-
-# Backup archive (if available): airzeta_backup_2026-02-21_v6_final.tar.gz
+git checkout backup-2026-03-03-v10-session10
+# Or from archive:
+tar -xzf airzeta_backup_2026-03-03_session10.tar.gz
 ```
 
-### Full Documentation
-Read `PROJECT_CONTEXT.md` in the repository root for:
-- Complete feature descriptions and user flows
-- All Firestore data models with example documents
-- File structure with line counts
-- Implementation details and past bug fixes
-- PR history (#1 ~ #23)
-- Known issues and technical debt
+### Current State (2026-03-03)
+- PROJECT_GUIDE.md v1.8, Build: 0 errors, 2,543 modules
+- All modules functional, DOMPurify applied, ANC airport added
+- Last PR: #60 (Session 10)
+- Read `PROJECT_GUIDE.md` for full changelog, troubleshooting, and architecture details
