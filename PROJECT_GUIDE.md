@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.0
+> **Document Version**: 2.1
 > **Last Updated**: 2026-03-04
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -40,7 +40,7 @@ AirZeta Security Portal is a **React SPA (Single Page Application)** for managin
 | Service | Version | Purpose |
 |---------|---------|---------|
 | Firebase | ^12.9.0 | Auth, Firestore DB, Storage |
-| Google Gemini AI | @google/genai ^1.43.0 | AI translation (gemini-2.5-flash-lite model) |
+| Google Gemini AI | @google/genai ^1.43.0 | AI translation (gemini-2.5-flash model) |
 
 ### Key Libraries
 | Library | Version | Purpose |
@@ -176,7 +176,7 @@ webapp/
 ## 6. Key Features & Implementation Details
 
 ### 6.1 Security Level Module
-- **World Map**: TopoJSON rendering via custom SVG projection (Robinson-like Mercator)
+- **World Map**: TopoJSON rendering via custom SVG Mercator projection centered on ICN (126°E)
 - **Access Control (v1.7)**: The global world map view (`AdminWorldMapView`) is now visible to ALL logged-in users, not just admins. However:
   - **Admin users**: Can click map markers and station cards to edit any station's configuration. Tooltip shows "Click to edit configuration". Station cards show "Edit Configuration" link.
   - **Branch users**: View-only access to the global map. No click-to-edit on markers or cards. A separate "Edit My Station" button below the map navigates to their own station's `BranchUserView` editor.
@@ -455,6 +455,19 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-04 (Session 13)
+- **Fixed**: World map horizontal banding artifacts — removed latitude grid lines that created prominent horizontal stripes across the map. Removed the CSS linear-gradient background that caused additional banding. Replaced with clean solid ocean color (#0b1929) + subtle radial glow
+- **Improved**: Country fill contrast — changed from `fill="#172e4a" opacity="0.85"` to `fill="#1a3a5c"` (full opacity) with better border strokes (`#254d73`, 0.5px, round joins) for clearer land mass definition
+- **Improved**: Kept only subtle vertical longitude lines (no horizontal latitude lines) — eliminates visual banding while maintaining geographic reference
+- **Fixed**: Marker zoom scaling — station markers now rendered outside the SVG zoom transform group with individual `translate()` positioning; markers maintain constant pixel size at any zoom level
+- **Fixed**: Double-click & scroll-wheel zoom centering — corrected map↔screen coordinate math so zoom centers on the mouse cursor position
+- **Improved**: Initial map view panned vertically so ICN (lat 37.46°N) appears near vertical center instead of equator-centered default
+- **Updated**: PowerPoint guide documents regenerated with latest features
+- **Updated**: PROJECT_GUIDE.md to v2.1
+- **Backup**: Project archive saved to AI Drive
+- **Build**: 0 errors, 2,543 modules
+- **Deploy**: GitHub Pages, PR #66 (map zoom fixes) + PR #67 (map cleanup) merged
 
 ### 2026-03-04 (Session 12)
 - **Fixed**: Removed 'TA' prefix from Security Directive board — HQ admin posts no longer show site code prefix in Directive board (only Communication board shows prefixes)

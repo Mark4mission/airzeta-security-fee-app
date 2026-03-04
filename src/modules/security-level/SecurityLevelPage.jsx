@@ -811,35 +811,36 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
           onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
           onDoubleClick={handleMapDoubleClick}>
           <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} onWheel={handleWheel}
-            style={{ width: '100%', height: 'auto', background: 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)', borderRadius: '0.5rem', display: 'block', userSelect: 'none', overflow: 'hidden' }}>
+            style={{ width: '100%', height: 'auto', background: '#0b1929', borderRadius: '0.5rem', display: 'block', userSelect: 'none', overflow: 'hidden' }}>
             <defs>
-              <radialGradient id="ocean-glow" cx="50%" cy="40%" r="60%">
-                <stop offset="0%" stopColor="#1a2d4a" stopOpacity="0.5" />
-                <stop offset="100%" stopColor="#0a1628" stopOpacity="0" />
+              <radialGradient id="ocean-glow" cx="50%" cy="40%" r="65%">
+                <stop offset="0%" stopColor="#112240" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#0b1929" stopOpacity="0" />
               </radialGradient>
               <filter id="marker-shadow" x="-100%" y="-100%" width="300%" height="300%">
                 <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.5" />
               </filter>
+              <filter id="land-glow">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="0.5" />
+              </filter>
             </defs>
 
-            {/* Zoomable layer — countries, grid, ocean scale with zoom */}
+            {/* Zoomable layer — countries, ocean scale with zoom */}
             <g transform={mapTransform}>
+              {/* Ocean background — clean solid with subtle center glow */}
+              <rect width={MAP_W} height={MAP_H} fill="#0b1929" />
               <rect width={MAP_W} height={MAP_H} fill="url(#ocean-glow)" />
 
-              {/* Latitude/longitude grid */}
-              {[-60, -30, 0, 30, 60].map(lat => {
-              const [, y] = projectGeo(0, lat);
-              return <line key={`lat${lat}`} x1="0" y1={y} x2={MAP_W} y2={y} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="3,5" opacity="0.2" />;
-            })}
+            {/* Country/continent fills from TopoJSON — clear, high-contrast land masses */}
+            {countryPaths.map(cp => (
+              <path key={cp.key} d={cp.d} fill="#1a3a5c" stroke="#254d73" strokeWidth="0.5" strokeLinejoin="round" />
+            ))}
+
+            {/* Subtle longitude lines only (vertical — no horizontal banding) */}
             {[-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].map(lng => {
               const [x] = projectGeo(lng, 0);
-              return <line key={`lng${lng}`} x1={x} y1="0" x2={x} y2={MAP_H} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="3,5" opacity="0.2" />;
+              return <line key={`lng${lng}`} x1={x} y1="0" x2={x} y2={MAP_H} stroke="#1a3050" strokeWidth="0.25" strokeDasharray="2,8" opacity="0.15" />;
             })}
-
-            {/* Country/continent fills from TopoJSON */}
-            {countryPaths.map(cp => (
-              <path key={cp.key} d={cp.d} fill="#172e4a" stroke="#1E4D7A" strokeWidth="0.4" opacity="0.85" />
-            ))}
 
             {/* Fallback if no geo loaded */}
             {countryPaths.length === 0 && (

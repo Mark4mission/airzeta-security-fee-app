@@ -75,7 +75,7 @@ def add_para(text_frame, text, font_size=12, color=WHITE, bold=False, alignment=
     p.space_after = space_after
     return p
 
-def add_title_slide(prs, title, subtitle, version="v1.9"):
+def add_title_slide(prs, title, subtitle, version="v2.1"):
     slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank
     set_slide_bg(slide, NAVY_DARK)
     
@@ -361,11 +361,12 @@ def create_admin_guide():
     
     add_content_slide(prs, "보안 레벨 관리", [
         "## 세계 지도 (World Map)",
-        "- TopoJSON 기반 실제 세계 지도 렌더링",
-        "- 85+ IATA 공항 마커 표시",
+        "- TopoJSON 기반 실제 세계 지도 렌더링 (깔끔한 다크 테마)",
+        "- 85+ IATA 공항 마커 표시 (고정 크기 - 줌 시 확대되지 않음)",
         "- 마커 색상: 녹색(Safe), 주황(Caution), 빨강(Alert)",
-        "- 확대/축소 (마우스 휠), 이동 (드래그), 더블클릭 확대",
-        "- ICN(인천) 중심 지도 배치",
+        "- 확대/축소 (마우스 휠/더블클릭) - 마우스 포인터 위치 중심 줌",
+        "- ICN(인천) 중심 지도 배치, 깨끗한 해양 배경",
+        "- 드래그로 지도 이동, Reset Zoom 버튼으로 초기 위치 복원",
         "",
         "## Admin 기능",
         "- 지도에서 마커 클릭 시 해당 지점 편집 모드",
@@ -549,10 +550,12 @@ def create_branch_guide():
     
     add_content_slide(prs, "6. Security Level (View Only)", [
         "## World Map",
-        "- View the global security level map",
+        "- View the global security level map (centered on ICN/Korea)",
         "- Each station is marked with a colored dot:",
         "  - Green = Safe, Orange = Caution, Red = Alert",
         "- Scroll to zoom, drag to pan, double-click to zoom in",
+        "- Markers stay the same size when you zoom in for precise viewing",
+        "- Zoom always centers on your mouse pointer location",
         "",
         "## Your Station",
         "- Click 'Edit My Station' to update your station's security level",
@@ -732,20 +735,21 @@ def create_it_planner_guide():
         "- topojson-client로 GeoJSON 변환",
         "",
         "## 투영 방식",
-        "- D3-like SVG 프로젝션 (Mercator 변형)",
-        "- ICN(인천, 경도 127) 중심 지도",
-        "- 중심 경도 오프셋: 127 (기본 180 대신)",
+        "- 커스텀 Mercator SVG 프로젝션 (CENTER_LNG = 126°E)",
+        "- ICN(인천) 중심 지도 — 경도+위도 모두 중심 배치",
+        "- 초기 panY 오프셋으로 북반구(37°N) 수직 중심화",
         "",
-        "## 인터랙션",
-        "- 확대/축소: 마우스 휠 (1x ~ 8x), 더블클릭 2x",
-        "- 이동: 클릭 드래그 (mousedown → mousemove → mouseup)",
-        "- data-station 속성으로 공항 마커 vs 배경 클릭 구분",
+        "## 줌 시스템 (v2.1 개선)",
+        "- SVG viewBox 고정, <g transform> 기반 줌/팬",
+        "- 마커: 줌 그룹 밖에 배치 → 확대 시에도 고정 크기 유지",
+        "- screenX = (mapX - cx) * zoom + cx + panX 공식 적용",
+        "- 마우스 포인터 중심 줌 (스크롤/더블클릭 모두)",
+        "- 줌 범위: 1x ~ 12x, 더블클릭 시 2x 증가",
         "",
         "## 마커 시스템",
         "- AIRPORT_COORDS: 86+ 공항 {lat, lng, city} 사전",
-        "- 위험 수준별 색상: 녹색/주황/빨강",
-        "- 빨간 마커는 렌더링 우선순위 최상위 (z-order sorting)",
-        "- 펄스 애니메이션 (빨강 마커)",
+        "- 위험 수준별 색상: 녹색/주황/빨강 (z-order sorting)",
+        "- 펄스 애니메이션, 깨끗한 해양 배경 (가로줄 없음)",
     ])
     
     add_content_slide(prs, "에디터 아키텍처 (Quill 2)", [
