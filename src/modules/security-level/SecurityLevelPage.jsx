@@ -173,26 +173,19 @@ function projectGeo(lng, lat) {
 function geoPathFromRing(ring) {
   if (!ring || ring.length === 0) return '';
   const parts = [];
-  let prevCoord = null;
+  let prevX = null, prevY = null;
   for (let i = 0; i < ring.length; i++) {
-    const coord = ring[i];
-    // Skip segments that span more than 90° longitude at nearly the same latitude
-    // — these are TopoJSON boundary artifacts (e.g., lat 71°N, -16°S, -85°S)
-    // that render as full-width horizontal lines across the map
-    if (prevCoord) {
-      const dlng = Math.abs(coord[0] - prevCoord[0]);
-      const dlat = Math.abs(coord[1] - prevCoord[1]);
-      if (dlng > 90 && dlat < 2) {
-        // Break the path: start a new sub-path at this point instead of drawing a line
-        const [x, y] = projectGeo(coord[0], coord[1]);
-        parts.push(`M${x.toFixed(1)},${y.toFixed(1)}`);
-        prevCoord = coord;
-        continue;
-      }
+    const [x, y] = projectGeo(ring[i][0], ring[i][1]);
+    // If the projected segment spans more than half the map width,
+    // it's crossing the antimeridian (at lng -54° when CENTER_LNG=126).
+    // Break the path to avoid a full-width horizontal line artifact.
+    if (prevX !== null && Math.abs(x - prevX) > MAP_W * 0.5) {
+      parts.push(`M${x.toFixed(1)},${y.toFixed(1)}`);
+    } else {
+      parts.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
     }
-    const [x, y] = projectGeo(coord[0], coord[1]);
-    parts.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
-    prevCoord = coord;
+    prevX = x;
+    prevY = y;
   }
   return parts.join(' ') + ' Z';
 }
