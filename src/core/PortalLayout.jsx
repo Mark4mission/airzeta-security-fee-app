@@ -44,7 +44,8 @@ function PortalLayout({ children }) {
   const { currentUser, handleLogout, isAdmin } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState({ '/bulletins': true });
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [userToggledGroups, setUserToggledGroups] = useState({});
   const location = useLocation();
 
   const userRole = currentUser?.role || 'branch_user';
@@ -53,6 +54,7 @@ function PortalLayout({ children }) {
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const toggleGroup = (groupPath) => {
     setExpandedGroups(prev => ({ ...prev, [groupPath]: !prev[groupPath] }));
+    setUserToggledGroups(prev => ({ ...prev, [groupPath]: true }));
   };
 
   return (
@@ -119,7 +121,11 @@ function PortalLayout({ children }) {
               const isGroupActive = item.children?.some(child =>
                 location.pathname === child.path || location.pathname.startsWith(child.path + '/')
               );
-              const isExpanded = expandedGroups[item.path] || isGroupActive;
+              // If user has explicitly toggled this group, respect their choice.
+              // Otherwise, auto-expand if a child is active.
+              const isExpanded = userToggledGroups[item.path]
+                ? !!expandedGroups[item.path]
+                : (expandedGroups[item.path] || isGroupActive);
 
               return (
                 <div key={item.path}>

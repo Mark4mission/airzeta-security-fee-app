@@ -279,7 +279,7 @@ SOURCE TEXT:
 ${plainText}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
@@ -349,6 +349,51 @@ ${plainText}`;
 
   const removeFile = (indexToRemove) => setFiles(files.filter((_, index) => index !== indexToRemove));
 
+  // Drag-and-drop handlers
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    const validFiles = droppedFiles.filter(file => {
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        setError(`File "${file.name}" exceeds the ${MAX_FILE_SIZE_MB}MB limit.`);
+        return false;
+      }
+      return true;
+    });
+    if (validFiles.length > 0) {
+      setFiles(prev => [...prev, ...validFiles]);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -390,8 +435,9 @@ ${plainText}`;
       const branchName = currentUser?.branchName || currentUser?.displayName || currentUser?.email || 'Unknown';
       const role = currentUser?.role || 'branch_user';
 
-      // Generate site code prefix
-      const siteCode = role === 'hq_admin' ? 'TA' : (branchName.match(/^([A-Z]{2,4})/) || ['', branchName.substring(0, 3).toUpperCase()])[1];
+      // Generate site code prefix (max 3 chars)
+      const rawCode = role === 'hq_admin' ? 'TA' : (branchName.match(/^([A-Z]{2,4})/) || ['', branchName.substring(0, 3).toUpperCase()])[1];
+      const siteCode = rawCode.substring(0, 3);
 
       await addDoc(collection(db, collectionName), {
         title: title.trim(),
@@ -408,7 +454,7 @@ ${plainText}`;
       navigate(basePath);
     } catch (err) {
       console.error(err);
-      setError('Failed to post the directive: ' + err.message);
+      setError(`Failed to post: ${err.message}`);
       setIsSubmitting(false);
     }
   };
@@ -457,7 +503,7 @@ ${plainText}`;
           {/* Title */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: COLORS.text.secondary, marginBottom: '0.4rem' }}>
-              Directive Title
+              {isComm ? 'Title' : 'Directive Title'}
             </label>
             <input
               type="text" required value={title}
@@ -699,7 +745,7 @@ ${plainText}`;
                     modules={quillModules}
                     formats={quillFormats}
                     style={{ flex: 1, minHeight: '280px', marginBottom: showTranslation && translatedContent ? 0 : '3rem', display: 'flex', flexDirection: 'column' }}
-                    placeholder="Write your directive content here..."
+                    placeholder={isComm ? "Write your message here..." : "Write your directive content here..."}
                   />
                 )}
               </div>
@@ -745,13 +791,19 @@ ${plainText}`;
             </label>
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '1.5rem', border: `2px dashed ${COLORS.border}`, borderRadius: '0.5rem',
-              background: COLORS.surfaceLight, cursor: 'pointer', transition: 'border-color 0.2s',
+              padding: '1.5rem', border: `2px dashed ${isDragging ? COLORS.blue : COLORS.border}`, borderRadius: '0.5rem',
+              background: isDragging ? 'rgba(59,130,246,0.08)' : COLORS.surfaceLight, cursor: 'pointer', transition: 'all 0.2s',
             }}
               onClick={() => document.getElementById('bulletin-file-input')?.click()}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
             >
-              <UploadCloud size={36} color={COLORS.text.light} style={{ marginBottom: '0.5rem' }} />
-              <p style={{ fontSize: '0.8rem', color: COLORS.text.secondary, margin: 0 }}>Drag & drop files here, or click to browse</p>
+              <UploadCloud size={36} color={isDragging ? COLORS.blue : COLORS.text.light} style={{ marginBottom: '0.5rem' }} />
+              <p style={{ fontSize: '0.8rem', color: isDragging ? COLORS.blue : COLORS.text.secondary, margin: 0 }}>
+                {isDragging ? 'Drop files here!' : 'Drag & drop files here, or click to browse'}
+              </p>
               <input id="bulletin-file-input" type="file" multiple style={{ display: 'none' }} onChange={handleFileChange} />
             </div>
             {files.length > 0 && (
@@ -808,7 +860,7 @@ ${plainText}`;
                   fontSize: '0.85rem', fontWeight: '700',
                   boxShadow: '0 2px 8px rgba(233,69,96,0.25)',
                 }}>
-                {isSubmitting ? 'Publishing...' : 'Publish Directive'}
+                {isSubmitting ? 'Publishing...' : isComm ? 'Publish Post' : 'Publish Directive'}
               </button>
             </div>
           </div>
