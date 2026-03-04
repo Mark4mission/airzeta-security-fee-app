@@ -135,7 +135,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
     setArr(prev => prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]);
   };
 
-  // Monthly KRW totals (using per-month exchange rates)
+  // Monthly KRW totals (using per-item currency conversion for accuracy)
   const monthlyKRWTotals = useMemo(() => {
     const { map, activeMonths, displayBranches } = summaryData;
     const totals = {};
@@ -143,7 +143,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
     activeMonths.forEach(m => {
       const yearMonth = `${filterYear}-${m}`;
       const monthRates = monthlyExchangeRates?.[yearMonth];
-      if (!monthRates?.rates) return; // no rates for this month
+      if (!monthRates?.rates) return;
       
       let estTotal = 0;
       let actTotal = 0;
@@ -155,17 +155,25 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
         const cost = map[key];
         if (!cost) return;
         
-        const branchCurrency = cost.currency || branchCurrencyMap[bn] || 'USD';
-        const rate = getRateForCurrency(branchCurrency, yearMonth);
-        if (!rate) return;
-        
-        if (cost.totalEstimated > 0) {
-          estTotal += cost.totalEstimated * rate;
-          hasAnyEst = true;
-        }
-        if (cost.totalActual > 0) {
-          actTotal += cost.totalActual * rate;
-          hasAnyAct = true;
+        // Per-item conversion: convert each item using its own currency
+        if (cost.items?.length > 0) {
+          cost.items.forEach(item => {
+            const itemCurrency = item.currency || cost.currency || branchCurrencyMap[bn] || 'USD';
+            const rate = getRateForCurrency(itemCurrency, yearMonth);
+            if (!rate) return;
+            
+            const est = parseFloat(item.estimatedCost) || 0;
+            const act = parseFloat(item.actualCost) || 0;
+            if (est > 0) { estTotal += est * rate; hasAnyEst = true; }
+            if (act > 0) { actTotal += act * rate; hasAnyAct = true; }
+          });
+        } else {
+          // Fallback: use branch-level total when items array is not available
+          const branchCurrency = cost.currency || branchCurrencyMap[bn] || 'USD';
+          const rate = getRateForCurrency(branchCurrency, yearMonth);
+          if (!rate) return;
+          if (cost.totalEstimated > 0) { estTotal += cost.totalEstimated * rate; hasAnyEst = true; }
+          if (cost.totalActual > 0) { actTotal += cost.totalActual * rate; hasAnyAct = true; }
         }
       });
       
