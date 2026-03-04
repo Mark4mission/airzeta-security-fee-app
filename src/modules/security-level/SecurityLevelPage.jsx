@@ -148,18 +148,22 @@ const AIRPORT_COORDS = {
 };
 
 // ============================================================
-// SVG GEO PROJECTION — Natural Earth–like Mercator
+// SVG GEO PROJECTION — Mercator centered on ICN (~126°E)
 // ============================================================
 const MAP_W = 960;
 const MAP_H = 500;
+const CENTER_LNG = 126; // ICN longitude — map center
 
 function projectGeo(lng, lat) {
-  // Robinson-like projection
-  const x = ((lng + 180) / 360) * MAP_W;
+  // Shift longitude so CENTER_LNG maps to the middle
+  let adjustedLng = lng - CENTER_LNG;
+  // Wrap around to keep within -180..180
+  if (adjustedLng > 180) adjustedLng -= 360;
+  if (adjustedLng < -180) adjustedLng += 360;
+  const x = (adjustedLng / 360 + 0.5) * MAP_W;
   const latRad = (lat * Math.PI) / 180;
   const maxLat = 85;
   const maxLatRad = (maxLat * Math.PI) / 180;
-  // Mercator with clamping
   const mercY = Math.log(Math.tan(Math.PI / 4 + Math.min(Math.max(latRad, -maxLatRad), maxLatRad) / 2));
   const maxMercY = Math.log(Math.tan(Math.PI / 4 + maxLatRad / 2));
   const y = MAP_H / 2 - (mercY / maxMercY) * (MAP_H / 2);
@@ -585,24 +589,48 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
   const [tooltipPos, setTooltipPos] = useState(null);
   const svgRef = useRef(null);
 
-  // Zoom & pan state
+  // Zoom & pan state — uses transform-based zoom so markers can be inversely scaled
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  // Start with ICN (lat ~37.46) roughly centered vertically
+  const icnMapPos = projectGeo(126.44, 37.46);
+  const initialPanY = MAP_H / 2 - icnMapPos[1]; // shift map so ICN latitude is at vertical center
+  const [pan, setPan] = useState({ x: 0, y: initialPanY * 0.6 });
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  // Convert screen coords to SVG map coords
+  const screenToMap = useCallback((clientX, clientY) => {
+    const svg = svgRef.current;
+    if (!svg) return { mx: MAP_W / 2, my: MAP_H / 2 };
+    const rect = svg.getBoundingClientRect();
+    // Position within the SVG element in pixels [0..1]
+    const px = (clientX - rect.left) / rect.width;
+    const py = (clientY - rect.top) / rect.height;
+    // Convert to map coords, accounting for current zoom & pan
+    const mx = px * MAP_W / zoom - pan.x / zoom + MAP_W / 2 * (1 - 1 / zoom);
+    const my = py * MAP_H / zoom - pan.y / zoom + MAP_H / 2 * (1 - 1 / zoom);
+    return { mx, my };
+  }, [zoom, pan]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * MAP_W;
-    const my = ((e.clientY - rect.top) / rect.height) * MAP_H;
+    const fracX = (e.clientX - rect.left) / rect.width;
+    const fracY = (e.clientY - rect.top) / rect.height;
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     setZoom(prev => {
-      const next = Math.max(1, Math.min(8, prev * factor));
-      const scale = next / prev;
-      setPan(p => ({ x: mx - (mx - p.x) * scale, y: my - (my - p.y) * scale }));
+      const next = Math.max(1, Math.min(12, prev * factor));
+      // Keep the map point under cursor fixed
+      setPan(p => {
+        const mapX = (fracX * MAP_W - MAP_W / 2 - p.x) / prev + MAP_W / 2;
+        const mapY = (fracY * MAP_H - MAP_H / 2 - p.y) / prev + MAP_H / 2;
+        return {
+          x: fracX * MAP_W - MAP_W / 2 - (mapX - MAP_W / 2) * next,
+          y: fracY * MAP_H - MAP_H / 2 - (mapY - MAP_H / 2) * next,
+        };
+      });
       return next;
     });
   }, []);
@@ -619,38 +647,49 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
   const handlePanMove = useCallback((e) => {
     if (!isPanning) return;
     const { x: sx, y: sy, panX, panY, svgW, svgH } = panStart.current;
-    const dx = (e.clientX - sx) / svgW * MAP_W / zoom;
-    const dy = (e.clientY - sy) / svgH * MAP_H / zoom;
+    const dx = (e.clientX - sx) / svgW * MAP_W;
+    const dy = (e.clientY - sy) / svgH * MAP_H;
     setPan({ x: panX + dx, y: panY + dy });
-  }, [isPanning, zoom]);
+  }, [isPanning]);
 
   const handlePanEnd = useCallback(() => { setIsPanning(false); }, []);
 
-  const resetZoom = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+  const resetZoom = useCallback(() => { setZoom(1); setPan({ x: 0, y: initialPanY * 0.6 }); }, [initialPanY]);
 
-  // Double-click to zoom in on non-station areas
+  // Double-click to zoom in centered on mouse pointer
   const handleMapDoubleClick = useCallback((e) => {
     if (e.target.closest('[data-station]')) return;
     const svg = svgRef.current;
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const mx = ((e.clientX - rect.left) / rect.width) * MAP_W;
-    const my = ((e.clientY - rect.top) / rect.height) * MAP_H;
+    // Mouse position as fraction of SVG container
+    const fracX = (e.clientX - rect.left) / rect.width;
+    const fracY = (e.clientY - rect.top) / rect.height;
     setZoom(prev => {
-      const next = Math.min(8, prev * 2);
-      const scale = next / prev;
-      setPan(p => ({ x: mx - (mx - p.x) * scale, y: my - (my - p.y) * scale }));
+      const next = Math.min(12, prev * 2);
+      // The map point under the cursor in map-space coordinates:
+      // mapX = (fracX * MAP_W - MAP_W/2 - panX) / prevZoom + MAP_W/2
+      // We want that same map point to remain under the cursor after zoom:
+      // fracX * MAP_W - MAP_W/2 - newPanX = (mapX - MAP_W/2) * nextZoom
+      // => newPanX = fracX * MAP_W - MAP_W/2 - (mapX - MAP_W/2) * nextZoom
+      setPan(p => {
+        const mapX = (fracX * MAP_W - MAP_W / 2 - p.x) / prev + MAP_W / 2;
+        const mapY = (fracY * MAP_H - MAP_H / 2 - p.y) / prev + MAP_H / 2;
+        return {
+          x: fracX * MAP_W - MAP_W / 2 - (mapX - MAP_W / 2) * next,
+          y: fracY * MAP_H - MAP_H / 2 - (mapY - MAP_H / 2) * next,
+        };
+      });
       return next;
     });
   }, []);
 
-  // Compute SVG viewBox based on zoom/pan
-  const viewBox = useMemo(() => {
-    const w = MAP_W / zoom;
-    const h = MAP_H / zoom;
-    const cx = MAP_W / 2 - pan.x;
-    const cy = MAP_H / 2 - pan.y;
-    return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
+  // Build SVG transform for zoom/pan (keeps viewBox fixed)
+  const mapTransform = useMemo(() => {
+    // Translate to center, scale, translate back + pan offset
+    const cx = MAP_W / 2;
+    const cy = MAP_H / 2;
+    return `translate(${cx + pan.x}, ${cy + pan.y}) scale(${zoom}) translate(${-cx}, ${-cy})`;
   }, [zoom, pan]);
 
   useEffect(() => {
@@ -771,8 +810,8 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
         <div ref={svgRef} style={{ position: 'relative', width: '100%', cursor: isPanning ? 'grabbing' : (zoom > 1 ? 'grab' : 'default'), userSelect: 'none' }}
           onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
           onDoubleClick={handleMapDoubleClick}>
-          <svg viewBox={viewBox} onWheel={handleWheel}
-            style={{ width: '100%', height: 'auto', background: 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)', borderRadius: '0.5rem', display: 'block', userSelect: 'none' }}>
+          <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} onWheel={handleWheel}
+            style={{ width: '100%', height: 'auto', background: 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)', borderRadius: '0.5rem', display: 'block', userSelect: 'none', overflow: 'hidden' }}>
             <defs>
               <radialGradient id="ocean-glow" cx="50%" cy="40%" r="60%">
                 <stop offset="0%" stopColor="#1a2d4a" stopOpacity="0.5" />
@@ -783,10 +822,12 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
               </filter>
             </defs>
 
-            <rect width={MAP_W} height={MAP_H} fill="url(#ocean-glow)" />
+            {/* Zoomable layer — countries, grid, ocean scale with zoom */}
+            <g transform={mapTransform}>
+              <rect width={MAP_W} height={MAP_H} fill="url(#ocean-glow)" />
 
-            {/* Latitude/longitude grid */}
-            {[-60, -30, 0, 30, 60].map(lat => {
+              {/* Latitude/longitude grid */}
+              {[-60, -30, 0, 30, 60].map(lat => {
               const [, y] = projectGeo(0, lat);
               return <line key={`lat${lat}`} x1="0" y1={y} x2={MAP_W} y2={y} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="3,5" opacity="0.2" />;
             })}
@@ -805,34 +846,44 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
               <text x={MAP_W / 2} y={MAP_H / 2} textAnchor="middle" fill={COLORS.text.light} fontSize="14">Loading map data...</text>
             )}
 
-            {/* Station markers — sorted so red renders on top */}
+            </g>{/* end zoomable layer */}
+
+            {/* Station markers — placed OUTSIDE the zoom transform group.
+                Each marker uses its own translate + inverse-scale so it stays
+                at the correct map position but does NOT grow when zoomed. */}
             {[...mappedStations].sort((a, b) => {
               const ord = { '#22c55e': 0, '#f97316': 1, '#ef4444': 2 };
               return (ord[a.riskColor] || 0) - (ord[b.riskColor] || 0);
             }).map(station => {
               const isHovered = hoveredStation === station.rawCode;
               const r = isHovered ? 7 : 5;
+              // Compute the screen-space position of the station after zoom+pan
+              const cx = MAP_W / 2;
+              const cy = MAP_H / 2;
+              const screenX = (station.pos.x - cx) * zoom + cx + pan.x;
+              const screenY = (station.pos.y - cy) * zoom + cy + pan.y;
               return (
                 <g key={station.rawCode} data-station="true"
+                  transform={`translate(${screenX}, ${screenY})`}
                   onMouseEnter={e => handleStationHover(station, e.nativeEvent)}
                   onMouseLeave={() => { setHoveredStation(null); setTooltipPos(null); }}
                   onMouseMove={e => { if (svgRef.current) { const rect = svgRef.current.getBoundingClientRect(); setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top }); }}}
                   onClick={() => isAdmin && onEditStation(station.rawCode)}
                   style={{ cursor: isAdmin ? 'pointer' : 'default' }}
                 >
-                  {/* Pulse */}
-                  <circle cx={station.pos.x} cy={station.pos.y} r="12" fill="none" stroke={station.riskColor} strokeWidth="0.8" opacity="0.25">
+                  {/* Pulse — fixed screen size */}
+                  <circle cx={0} cy={0} r="12" fill="none" stroke={station.riskColor} strokeWidth="0.8" opacity="0.25">
                     <animate attributeName="r" values="6;14;6" dur="3s" repeatCount="indefinite" />
                     <animate attributeName="opacity" values="0.3;0;0.3" dur="3s" repeatCount="indefinite" />
                   </circle>
                   {/* Halo */}
-                  <circle cx={station.pos.x} cy={station.pos.y} r={r + 3} fill={station.riskColor} opacity={isHovered ? 0.18 : 0.08} />
+                  <circle cx={0} cy={0} r={r + 3} fill={station.riskColor} opacity={isHovered ? 0.18 : 0.08} />
                   {/* Dot */}
-                  <circle cx={station.pos.x} cy={station.pos.y} r={r} fill={station.riskColor} stroke="#0a1628" strokeWidth="1.5" filter="url(#marker-shadow)" />
+                  <circle cx={0} cy={0} r={r} fill={station.riskColor} stroke="#0a1628" strokeWidth="1.5" filter="url(#marker-shadow)" />
                   {/* White inner highlight */}
-                  <circle cx={station.pos.x - 1.2} cy={station.pos.y - 1.2} r={r * 0.3} fill="rgba(255,255,255,0.3)" />
+                  <circle cx={-1.2} cy={-1.2} r={r * 0.3} fill="rgba(255,255,255,0.3)" />
                   {/* IATA label */}
-                  <text x={station.pos.x} y={station.pos.y - r - 4} textAnchor="middle" fill="#E8EAED" fontSize={isHovered ? '10' : '7.5'} fontWeight="700" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                  <text x={0} y={-r - 4} textAnchor="middle" fill="#E8EAED" fontSize={isHovered ? '10' : '7.5'} fontWeight="700" fontFamily="system-ui, sans-serif" style={{ pointerEvents: 'none', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
                     {station.iata || extractIATA(station.rawCode) || station.rawCode}
                   </text>
                 </g>
