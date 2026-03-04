@@ -6,7 +6,7 @@ import { useAuth } from '../../../core/AuthContext';
 import DOMPurify from 'dompurify';
 import { useReactToPrint } from 'react-to-print';
 import 'react-quill-new/dist/quill.snow.css';
-import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify, Eye } from 'lucide-react';
+import { ArrowLeft, Printer, CheckCircle, Paperclip, Download, MessageSquare, Send, Users, AlertCircle, Edit, Trash2, Languages, Loader, ChevronDown, X, Columns, AlignJustify, Eye, Smile } from 'lucide-react';
 
 const COLORS = {
   surface: '#132F4C',
@@ -93,6 +93,7 @@ export default function PostDetail({ boardType = 'directive' }) {
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [loading, setLoading] = useState(true);
   const [allBranches, setAllBranches] = useState([]);
   // Post translation state
@@ -248,7 +249,7 @@ CONTENT:
 ${plainText}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
@@ -300,7 +301,7 @@ ${plainText}`;
 "${commentText}"`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
@@ -420,6 +421,17 @@ ${plainText}`;
 
   const isSideBySide = translationLayout === 'sideBySide' && showTranslation && translatedContent;
 
+  // Commonly used emojis for quick insert
+  const EMOJI_LIST = [
+    '\u{1F44D}','\u{1F44E}','\u{2705}','\u{274C}','\u{26A0}','\u{1F6A8}','\u{1F4DD}','\u{1F4E2}','\u{2708}','\u{1F30D}',
+    '\u{1F64F}','\u{1F44B}','\u{1F389}','\u{1F4A1}','\u{2757}','\u{2753}','\u{1F4E6}','\u{1F512}','\u{1F513}','\u{1F55C}',
+    '\u{2764}','\u{1F525}','\u{1F4CA}','\u{1F4C5}','\u{1F4CB}','\u{1F527}','\u{1F4E7}','\u{1F4F1}','\u{1F4BB}','\u{1F44C}',
+  ];
+  const insertEmoji = (emoji) => {
+    setNewComment(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '3rem' }}>
       {/* Action bar */}
@@ -486,17 +498,20 @@ ${plainText}`;
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.3rem', lineHeight: '1.3', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {(() => {
-                  const prefix = post.siteCode || (post.authorRole === 'hq_admin' ? 'TA' : (post.authorName?.match(/^([A-Z]{2,4})/) || ['',''])[1]);
+                  // No TA prefix on directive board
+                  const rawPrefix = post.siteCode || (post.authorRole === 'hq_admin' ? 'TA' : (post.authorName?.match(/^([A-Z]{2,4})/) || ['',''])[1]);
+                  const prefix = (boardType === 'directive' && post.authorRole === 'hq_admin') ? '' : rawPrefix.substring(0, 3);
                   return prefix ? (
                     <span style={{
-                      padding: '0.15rem 0.45rem', borderRadius: '5px', fontSize: '0.72rem', fontWeight: '700',
+                      display: 'inline-block', width: '2.6em', textAlign: 'center',
+                      padding: '0.15rem 0', borderRadius: '5px', fontSize: '0.72rem', fontWeight: '700',
                       background: post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.15)' : 'rgba(96,165,250,0.15)',
                       color: post.authorRole === 'hq_admin' ? '#E94560' : '#60A5FA',
                       border: `1px solid ${post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.3)' : 'rgba(96,165,250,0.3)'}`,
                       letterSpacing: '0.04em', flexShrink: 0,
                     }}>{prefix}</span>
                   ) : null;
-                })()}
+                })()}}
                 {post.title}
               </h1>
               {showTranslation && translatedTitle && (
@@ -790,18 +805,53 @@ ${plainText}`;
           )}
 
           {/* Comment form */}
-          <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <textarea
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Ask a question or leave a comment..."
-              rows="1"
-              style={{
-                flex: 1, padding: '0.6rem 0.8rem', resize: 'none', height: '2.8rem',
-                background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
-                borderRadius: '0.5rem', color: COLORS.text.primary, fontSize: '0.8rem', outline: 'none',
-              }}
-            />
+          <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Ask a question or leave a comment..."
+                rows="1"
+                style={{
+                  width: '100%', padding: '0.6rem 0.8rem', paddingRight: '2.2rem', resize: 'none', height: '2.8rem',
+                  background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
+                  borderRadius: '0.5rem', color: COLORS.text.primary, fontSize: '0.8rem', outline: 'none',
+                }}
+              />
+              {/* Emoji toggle */}
+              <div style={{ position: 'absolute', right: '0.4rem', top: '50%', transform: 'translateY(-50%)' }}>
+                <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  title="Insert emoji"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '0.2rem',
+                    color: showEmojiPicker ? COLORS.blue : COLORS.text.light, display: 'flex', fontSize: '1rem',
+                  }}>
+                  <Smile size={16} />
+                </button>
+              </div>
+              {/* Emoji picker dropdown */}
+              {showEmojiPicker && (
+                <div style={{
+                  position: 'absolute', bottom: '100%', right: 0, marginBottom: '0.35rem',
+                  background: COLORS.surface, border: `1px solid ${COLORS.border}`,
+                  borderRadius: '0.5rem', boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  padding: '0.5rem', width: '220px', zIndex: 50,
+                  display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '0.15rem',
+                }}>
+                  {EMOJI_LIST.map((emoji, i) => (
+                    <button key={i} type="button" onClick={() => insertEmoji(emoji)}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: '1.1rem', padding: '0.15rem', borderRadius: '4px',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >{emoji}</button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button type="submit" disabled={!newComment.trim()} style={{
               padding: '0.6rem 1rem', background: COLORS.accent, color: 'white', border: 'none',
               borderRadius: '0.5rem', cursor: newComment.trim() ? 'pointer' : 'not-allowed',

@@ -277,7 +277,7 @@ SOURCE TEXT:
 ${plainText}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
+        model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
@@ -374,7 +374,7 @@ ${plainText}`;
           <ArrowLeft size={20} />
         </button>
         <h1 style={{ fontSize: '1.25rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>
-          Edit Directive
+          {isComm ? 'Edit Post' : 'Edit Directive'}
         </h1>
       </div>
 

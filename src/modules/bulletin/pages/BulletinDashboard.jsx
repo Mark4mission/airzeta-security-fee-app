@@ -42,12 +42,14 @@ const BOARD_CONFIG = {
   },
 };
 
-// Get site code prefix for display
-function getSitePrefix(authorName, authorRole) {
+// Get site code prefix for display (3 chars max)
+function getSitePrefix(authorName, authorRole, boardType) {
+  // Directive board: no prefix for HQ admin
+  if (boardType === 'directive' && authorRole === 'hq_admin') return '';
   if (authorRole === 'hq_admin') return 'TA';
   if (authorName) {
     const match = authorName.match(/^([A-Z]{2,4})/);
-    if (match) return match[1];
+    if (match) return match[1].substring(0, 3);
     const code = authorName.substring(0, 3).toUpperCase();
     if (code.length >= 2) return code;
   }
@@ -166,7 +168,7 @@ export default function BulletinDashboard({ boardType = 'directive' }) {
               </thead>
               <tbody>
                 {filteredPosts.map((post) => {
-                  const sitePrefix = getSitePrefix(post.authorName, post.authorRole);
+                  const sitePrefix = getSitePrefix(post.authorName, post.authorRole, boardType);
                   return (
                     <tr
                       key={post.id}
@@ -179,12 +181,13 @@ export default function BulletinDashboard({ boardType = 'directive' }) {
                         <div style={{ fontWeight: '600', color: COLORS.text.primary, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           {sitePrefix && (
                             <span style={{
-                              padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.62rem', fontWeight: '700',
+                              display: 'inline-block', width: '2.2em', textAlign: 'center',
+                              padding: '0.1rem 0', borderRadius: '4px', fontSize: '0.62rem', fontWeight: '700',
                               background: post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.15)' : 'rgba(96,165,250,0.15)',
                               color: post.authorRole === 'hq_admin' ? '#E94560' : '#60A5FA',
                               border: `1px solid ${post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.3)' : 'rgba(96,165,250,0.3)'}`,
                               letterSpacing: '0.04em', flexShrink: 0,
-                            }}>{sitePrefix}</span>
+                            }}>{sitePrefix.substring(0, 3)}</span>
                           )}
                           <span>{post.title}</span>
                         </div>
