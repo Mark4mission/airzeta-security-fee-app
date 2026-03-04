@@ -42,7 +42,10 @@ function detectLanguage(text) {
   return 'en';
 }
 
-export default function PostEdit() {
+export default function PostEdit({ boardType = 'directive' }) {
+  const isComm = boardType === 'communication';
+  const collectionName = isComm ? 'communicationPosts' : 'bulletinPosts';
+  const basePath = isComm ? '/communication' : '/bulletin';
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
@@ -123,12 +126,12 @@ export default function PostEdit() {
   ];
 
   useEffect(() => {
-    getDoc(doc(db, 'bulletinPosts', id)).then(snap => {
+    getDoc(doc(db, collectionName, id)).then(snap => {
       if (snap.exists()) {
         setTitle(snap.data().title);
         setContent(snap.data().content);
         setExistingAttachments(snap.data().attachments || []);
-      } else navigate('/bulletin');
+      } else navigate(basePath);
       setIsLoading(false);
     });
   }, [id, navigate]);
@@ -349,8 +352,8 @@ ${plainText}`;
           });
         }
       }
-      await updateDoc(doc(db, 'bulletinPosts', id), { title, content: finalContent, attachments: uploadedAttachments });
-      navigate(`/bulletin/post/${id}`);
+      await updateDoc(doc(db, collectionName, id), { title, content: finalContent, attachments: uploadedAttachments });
+      navigate(`${basePath}/post/${id}`);
     } catch (err) {
       console.error(err);
       setError('Failed to save: ' + err.message);
@@ -364,7 +367,7 @@ ${plainText}`;
     <div style={{ maxWidth: '960px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <button onClick={() => navigate(`/bulletin/post/${id}`)} style={{
+        <button onClick={() => navigate(`${basePath}/post/${id}`)} style={{
           padding: '0.5rem', background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
           borderRadius: '0.5rem', cursor: 'pointer', color: COLORS.text.secondary, display: 'flex',
         }}>
@@ -685,7 +688,7 @@ ${plainText}`;
 
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '1rem', borderTop: `1px solid ${COLORS.border}` }}>
-            <button type="button" onClick={() => navigate(`/bulletin/post/${id}`)}
+            <button type="button" onClick={() => navigate(`${basePath}/post/${id}`)}
               style={{
                 padding: '0.6rem 1.25rem', border: `1px solid ${COLORS.border}`,
                 borderRadius: '0.5rem', background: 'transparent', color: COLORS.text.secondary,
