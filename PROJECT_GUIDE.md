@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.8
-> **Last Updated**: 2026-03-03
+> **Document Version**: 1.9
+> **Last Updated**: 2026-03-04
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -455,6 +455,13 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-04 (Session 11)
+- **Added**: YNT (Yantai, China) airport to AIRPORT_COORDS (lat: 37.66, lng: 120.98) and MINI_AIRPORT_COORDS
+- **Fixed**: Security Fee AdminDashboard KRW total calculation — changed from branch-level total conversion (`totalEstimated * rate`) to **per-item conversion** (`sum of each item.estimatedCost * item-specific rate`). Root cause: the previous method applied a single branch-level exchange rate to the total, which is inaccurate when individual cost items may have different currencies. The per-item approach ensures each item is converted using its own currency's exchange rate, then summed. This fixes the "few thousand KRW" discrepancy between the header total and manual calculation.
+- **Architecture note**: The `monthlyKRWTotals` in AdminDashboard now iterates `cost.items[]` array (available from `getAllSecurityCosts`) instead of using `cost.totalEstimated`. Falls back to branch-level conversion when `items[]` is not available (legacy data).
+- **Updated**: PROJECT_GUIDE.md to v1.9
+- **Build**: 0 errors, 2,543 modules
 
 ### 2026-03-03 (Session 10)
 - **Added**: ANC (Anchorage) airport to AIRPORT_COORDS and MINI_AIRPORT_COORDS (lat: 61.17, lng: -150.00)

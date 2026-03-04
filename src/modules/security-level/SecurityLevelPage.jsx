@@ -144,6 +144,7 @@ const AIRPORT_COORDS = {
   TAE: { lat: 35.89, lng: 128.66, city: 'Daegu' },
   OKA: { lat: 26.20, lng: 127.65, city: 'Okinawa' },
   ANC: { lat: 61.17, lng: -150.00, city: 'Anchorage' },
+  YNT: { lat: 37.66, lng: 120.98, city: 'Yantai' },
 };
 
 // ============================================================
