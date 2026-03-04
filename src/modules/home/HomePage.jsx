@@ -94,8 +94,26 @@ function miniGeoPath(geometry) {
   const pathParts = [];
   function processRing(ring) {
     if (ring.length < 3) return '';
-    const pts = ring.map(c => miniProject(c[0], c[1]));
-    return 'M' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join('L') + 'Z';
+    const parts = [];
+    let prevCoord = null;
+    for (let i = 0; i < ring.length; i++) {
+      const c = ring[i];
+      // Skip segments spanning >90° longitude at nearly same latitude (TopoJSON artifacts)
+      if (prevCoord) {
+        const dlng = Math.abs(c[0] - prevCoord[0]);
+        const dlat = Math.abs(c[1] - prevCoord[1]);
+        if (dlng > 90 && dlat < 2) {
+          const [x, y] = miniProject(c[0], c[1]);
+          parts.push(`M${x.toFixed(1)},${y.toFixed(1)}`);
+          prevCoord = c;
+          continue;
+        }
+      }
+      const [x, y] = miniProject(c[0], c[1]);
+      parts.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
+      prevCoord = c;
+    }
+    return parts.join('') + 'Z';
   }
   if (geometry.type === 'Polygon') {
     geometry.coordinates.forEach(ring => {
@@ -207,15 +225,6 @@ function SecurityLevelMiniMap({ stations }) {
           <filter id="glow-r"><feGaussianBlur stdDeviation="2.5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
         <rect width={MINI_W} height={MINI_H} fill="url(#mg)" />
-        {/* Grid lines */}
-        {[-60, -30, 0, 30, 60].map(lat => {
-          const [, y] = miniProject(0, lat);
-          return <line key={`lat${lat}`} x1="0" y1={y} x2={MINI_W} y2={y} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="2,6" opacity="0.12" />;
-        })}
-        {[-120, -60, 0, 60, 120].map(lng => {
-          const [x] = miniProject(lng, 0);
-          return <line key={`lng${lng}`} x1={x} y1="0" x2={x} y2={MINI_H} stroke="#1E3A5F" strokeWidth="0.3" strokeDasharray="2,6" opacity="0.12" />;
-        })}
         {/* Country outlines from TopoJSON (detailed) */}
         {countryPaths.map(cp => (
           <path key={cp.key} d={cp.d} fill="#172e4a" stroke="#1E4D7A" strokeWidth="0.35" opacity="0.8" />
