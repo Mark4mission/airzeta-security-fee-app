@@ -109,7 +109,8 @@ function ProtectedRoutes() {
         <Route path="/" element={<HomePage />} />
         <Route path="/security-policy" element={<SecurityPolicyPage />} />
         <Route path="/security-fee" element={<SecurityFeePage />} />
-        <Route path="/bulletin/*" element={<BulletinPage />} />
+        <Route path="/bulletin/*" element={<BulletinPage boardType="directive" />} />
+        <Route path="/communication/*" element={<BulletinPage boardType="communication" />} />
         <Route path="/document-library/*" element={<DocumentLibraryPage />} />
         <Route path="/security-level" element={<SecurityLevelPage />} />
         <Route path="/important-links" element={<ImportantLinksPage />} />

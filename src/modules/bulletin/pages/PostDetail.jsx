@@ -83,7 +83,10 @@ function getLocalLangOption() {
   return null;
 }
 
-export default function PostDetail() {
+export default function PostDetail({ boardType = 'directive' }) {
+  const isComm = boardType === 'communication';
+  const collectionName = isComm ? 'communicationPosts' : 'bulletinPosts';
+  const basePath = isComm ? '/communication' : '/bulletin';
   const { id } = useParams();
   const navigate = useNavigate();
   const { currentUser, isAdmin } = useAuth();
@@ -118,7 +121,7 @@ export default function PostDetail() {
 
   useEffect(() => {
     const fetchPost = async () => {
-      const docSnap = await getDoc(doc(db, 'bulletinPosts', id));
+      const docSnap = await getDoc(doc(db, collectionName, id));
       if (docSnap.exists()) {
         const data = { id: docSnap.id, ...docSnap.data() };
         setPost(data);
@@ -127,17 +130,17 @@ export default function PostDetail() {
 
         // Increment view count
         try {
-          await updateDoc(doc(db, 'bulletinPosts', id), { viewCount: increment(1) });
+          await updateDoc(doc(db, collectionName, id), { viewCount: increment(1) });
         } catch (e) {
           // viewCount field may not exist yet, that's ok
           console.debug('[PostDetail] viewCount increment:', e.message);
         }
-      } else navigate('/bulletin');
+      } else navigate(basePath);
       setLoading(false);
     };
     fetchPost();
 
-    const q = query(collection(db, `bulletinPosts/${id}/comments`), orderBy('createdAt', 'asc'));
+    const q = query(collection(db, `${collectionName}/${id}/comments`), orderBy('createdAt', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => setComments(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))));
 
     if (isAdmin) {
@@ -323,14 +326,14 @@ ${plainText}`;
 
   const handleAcknowledge = async () => {
     if (!branchName || post.acknowledgedBy?.includes(branchName)) return;
-    await updateDoc(doc(db, 'bulletinPosts', id), { acknowledgedBy: arrayUnion(branchName) });
+    await updateDoc(doc(db, collectionName, id), { acknowledgedBy: arrayUnion(branchName) });
     setPost(prev => ({ ...prev, acknowledgedBy: [...(prev.acknowledgedBy || []), branchName] }));
   };
 
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
-    await addDoc(collection(db, `bulletinPosts/${id}/comments`), {
+    await addDoc(collection(db, `${collectionName}/${id}/comments`), {
       text: newComment.trim(),
       authorId: currentUser?.uid || 'unknown',
       authorBranch: branchName,
@@ -343,7 +346,7 @@ ${plainText}`;
   const handleDeleteComment = async (commentId) => {
     if (!window.confirm('Delete this comment?')) return;
     try {
-      await deleteDoc(doc(db, `bulletinPosts/${id}/comments`, commentId));
+      await deleteDoc(doc(db, `${collectionName}/${id}/comments`, commentId));
       // Also clear any translation for this comment
       setCommentTranslations(prev => {
         const updated = { ...prev };
@@ -358,8 +361,8 @@ ${plainText}`;
 
   const handleDelete = async () => {
     if (window.confirm("Are you sure you want to delete this directive?")) {
-      await deleteDoc(doc(db, 'bulletinPosts', id));
-      navigate('/bulletin');
+      await deleteDoc(doc(db, collectionName, id));
+      navigate(basePath);
     }
   };
 
@@ -425,7 +428,7 @@ ${plainText}`;
         background: COLORS.surface, padding: '0.75rem 1rem', borderRadius: '0.75rem',
         border: `1px solid ${COLORS.border}`, flexWrap: 'wrap', gap: '0.5rem',
       }}>
-        <button onClick={() => navigate('/bulletin')} style={{
+        <button onClick={() => navigate(basePath)} style={{
           display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'none', border: 'none',
           color: COLORS.text.secondary, cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500',
         }}>
@@ -434,7 +437,7 @@ ${plainText}`;
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {isAuthorOrAdmin && (
             <>
-              <button onClick={() => navigate(`/bulletin/edit/${id}`)} style={{
+              <button onClick={() => navigate(`${basePath}/edit/${id}`)} style={{
                 display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.8rem',
                 background: COLORS.surfaceLight, color: COLORS.text.primary, border: `1px solid ${COLORS.border}`,
                 borderRadius: '0.4rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '500',
@@ -481,7 +484,19 @@ ${plainText}`;
         <div style={{ borderBottom: `1px solid ${COLORS.border}`, padding: '1.5rem', background: COLORS.surfaceLight }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.3rem', lineHeight: '1.3' }}>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: COLORS.text.primary, marginBottom: '0.3rem', lineHeight: '1.3', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {(() => {
+                  const prefix = post.siteCode || (post.authorRole === 'hq_admin' ? 'TA' : (post.authorName?.match(/^([A-Z]{2,4})/) || ['',''])[1]);
+                  return prefix ? (
+                    <span style={{
+                      padding: '0.15rem 0.45rem', borderRadius: '5px', fontSize: '0.72rem', fontWeight: '700',
+                      background: post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.15)' : 'rgba(96,165,250,0.15)',
+                      color: post.authorRole === 'hq_admin' ? '#E94560' : '#60A5FA',
+                      border: `1px solid ${post.authorRole === 'hq_admin' ? 'rgba(233,69,96,0.3)' : 'rgba(96,165,250,0.3)'}`,
+                      letterSpacing: '0.04em', flexShrink: 0,
+                    }}>{prefix}</span>
+                  ) : null;
+                })()}
                 {post.title}
               </h1>
               {showTranslation && translatedTitle && (

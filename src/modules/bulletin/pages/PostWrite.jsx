@@ -43,7 +43,11 @@ function detectLanguage(text) {
   return 'en';
 }
 
-export default function PostWrite() {
+export default function PostWrite({ boardType = 'directive' }) {
+  const isComm = boardType === 'communication';
+  const collectionName = isComm ? 'communicationPosts' : 'bulletinPosts';
+  const basePath = isComm ? '/communication' : '/bulletin';
+  const pageTitle = isComm ? 'New Communication' : 'New Security Directive';
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [files, setFiles] = useState([]);
@@ -386,17 +390,22 @@ ${plainText}`;
       const branchName = currentUser?.branchName || currentUser?.displayName || currentUser?.email || 'Unknown';
       const role = currentUser?.role || 'branch_user';
 
-      await addDoc(collection(db, 'bulletinPosts'), {
+      // Generate site code prefix
+      const siteCode = role === 'hq_admin' ? 'TA' : (branchName.match(/^([A-Z]{2,4})/) || ['', branchName.substring(0, 3).toUpperCase()])[1];
+
+      await addDoc(collection(db, collectionName), {
         title: title.trim(),
         content: finalContent,
         authorId: currentUser?.uid || 'unknown',
         authorName: branchName,
         authorRole: role,
+        siteCode: siteCode,
+        boardType: boardType,
         attachments: uploadedAttachments,
         acknowledgedBy: [],
         createdAt: serverTimestamp(),
       });
-      navigate('/bulletin');
+      navigate(basePath);
     } catch (err) {
       console.error(err);
       setError('Failed to post the directive: ' + err.message);
@@ -416,14 +425,14 @@ ${plainText}`;
     <div style={{ maxWidth: '960px', margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <button onClick={() => navigate('/bulletin')} style={{
+        <button onClick={() => navigate(basePath)} style={{
           padding: '0.5rem', background: COLORS.surfaceLight, border: `1px solid ${COLORS.border}`,
           borderRadius: '0.5rem', cursor: 'pointer', color: COLORS.text.secondary, display: 'flex',
         }}>
           <ArrowLeft size={20} />
         </button>
         <h1 style={{ fontSize: '1.25rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>
-          New Security Directive
+          {pageTitle}
         </h1>
       </div>
 
@@ -783,7 +792,7 @@ ${plainText}`;
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button type="button" onClick={() => navigate('/bulletin')} disabled={isSubmitting}
+              <button type="button" onClick={() => navigate(basePath)} disabled={isSubmitting}
                 style={{
                   padding: '0.6rem 1.25rem', border: `1px solid ${COLORS.border}`,
                   borderRadius: '0.5rem', background: 'transparent', color: COLORS.text.secondary,

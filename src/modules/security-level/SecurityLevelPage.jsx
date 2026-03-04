@@ -585,6 +585,74 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
   const [tooltipPos, setTooltipPos] = useState(null);
   const svgRef = useRef(null);
 
+  // Zoom & pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * MAP_W;
+    const my = ((e.clientY - rect.top) / rect.height) * MAP_H;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    setZoom(prev => {
+      const next = Math.max(1, Math.min(8, prev * factor));
+      const scale = next / prev;
+      setPan(p => ({ x: mx - (mx - p.x) * scale, y: my - (my - p.y) * scale }));
+      return next;
+    });
+  }, []);
+
+  const handlePanStart = useCallback((e) => {
+    if (e.target.closest('[data-station]')) return;
+    setIsPanning(true);
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    panStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, svgW: rect.width, svgH: rect.height };
+  }, [pan]);
+
+  const handlePanMove = useCallback((e) => {
+    if (!isPanning) return;
+    const { x: sx, y: sy, panX, panY, svgW, svgH } = panStart.current;
+    const dx = (e.clientX - sx) / svgW * MAP_W / zoom;
+    const dy = (e.clientY - sy) / svgH * MAP_H / zoom;
+    setPan({ x: panX + dx, y: panY + dy });
+  }, [isPanning, zoom]);
+
+  const handlePanEnd = useCallback(() => { setIsPanning(false); }, []);
+
+  const resetZoom = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, []);
+
+  // Double-click to zoom in on non-station areas
+  const handleMapDoubleClick = useCallback((e) => {
+    if (e.target.closest('[data-station]')) return;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * MAP_W;
+    const my = ((e.clientY - rect.top) / rect.height) * MAP_H;
+    setZoom(prev => {
+      const next = Math.min(8, prev * 2);
+      const scale = next / prev;
+      setPan(p => ({ x: mx - (mx - p.x) * scale, y: my - (my - p.y) * scale }));
+      return next;
+    });
+  }, []);
+
+  // Compute SVG viewBox based on zoom/pan
+  const viewBox = useMemo(() => {
+    const w = MAP_W / zoom;
+    const h = MAP_H / zoom;
+    const cx = MAP_W / 2 - pan.x;
+    const cy = MAP_H / 2 - pan.y;
+    return `${cx - w / 2} ${cy - h / 2} ${w} ${h}`;
+  }, [zoom, pan]);
+
   useEffect(() => {
     // Load map data + Firestore data concurrently
     Promise.all([
@@ -687,8 +755,24 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
 
       {/* World Map */}
       <div style={{ background: COLORS.surface, borderRadius: '0.75rem', border: `1px solid ${COLORS.border}`, padding: '0.75rem', overflow: 'hidden' }}>
-        <div ref={svgRef} style={{ position: 'relative', width: '100%' }}>
-          <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} style={{ width: '100%', height: 'auto', background: 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)', borderRadius: '0.5rem', display: 'block' }}>
+        {/* Zoom controls */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.4rem', gap: '0.3rem', alignItems: 'center' }}>
+          {zoom === 1 && (
+            <span style={{ fontSize: '0.58rem', color: COLORS.text.light, marginRight: 'auto' }}>
+              Double-click or scroll to zoom in on clustered stations
+            </span>
+          )}
+          {zoom > 1 && (
+            <button onClick={resetZoom} style={{ padding: '0.25rem 0.6rem', fontSize: '0.65rem', fontWeight: '600', background: 'rgba(96,165,250,0.15)', color: '#60A5FA', border: '1px solid rgba(96,165,250,0.3)', borderRadius: '0.375rem', cursor: 'pointer' }}>
+              Reset Zoom ({zoom.toFixed(1)}x)
+            </button>
+          )}
+        </div>
+        <div ref={svgRef} style={{ position: 'relative', width: '100%', cursor: isPanning ? 'grabbing' : (zoom > 1 ? 'grab' : 'default'), userSelect: 'none' }}
+          onMouseDown={handlePanStart} onMouseMove={handlePanMove} onMouseUp={handlePanEnd} onMouseLeave={handlePanEnd}
+          onDoubleClick={handleMapDoubleClick}>
+          <svg viewBox={viewBox} onWheel={handleWheel}
+            style={{ width: '100%', height: 'auto', background: 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%)', borderRadius: '0.5rem', display: 'block', userSelect: 'none' }}>
             <defs>
               <radialGradient id="ocean-glow" cx="50%" cy="40%" r="60%">
                 <stop offset="0%" stopColor="#1a2d4a" stopOpacity="0.5" />
@@ -729,7 +813,7 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
               const isHovered = hoveredStation === station.rawCode;
               const r = isHovered ? 7 : 5;
               return (
-                <g key={station.rawCode}
+                <g key={station.rawCode} data-station="true"
                   onMouseEnter={e => handleStationHover(station, e.nativeEvent)}
                   onMouseLeave={() => { setHoveredStation(null); setTooltipPos(null); }}
                   onMouseMove={e => { if (svgRef.current) { const rect = svgRef.current.getBoundingClientRect(); setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top }); }}}

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { 
   Shield, Home, Megaphone, DollarSign, ShieldAlert, Settings as SettingsIcon, 
-  LogOut, ChevronLeft, ChevronRight, Menu, X, Users, FileText, Link2, FolderOpen
+  LogOut, ChevronLeft, ChevronRight, Menu, X, Users, FileText, Link2, FolderOpen,
+  ChevronDown as ChevDown, MessageCircle
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
@@ -28,7 +29,10 @@ const COLORS = {
 const NAV_ITEMS = [
   { path: '/', label: 'Home', icon: Home, roles: ['hq_admin', 'branch_user'] },
   { path: '/security-policy', label: 'Security Policy', icon: FileText, roles: ['hq_admin', 'branch_user'] },
-  { path: '/bulletin', label: 'Security Bulletin', icon: Megaphone, roles: ['hq_admin', 'branch_user'] },
+  { path: '/bulletins', label: 'Security Bulletins', icon: Megaphone, roles: ['hq_admin', 'branch_user'], isGroup: true, children: [
+    { path: '/bulletin', label: 'Security Directive', icon: FileText },
+    { path: '/communication', label: 'Security Communication', icon: MessageCircle },
+  ]},
   { path: '/document-library', label: 'Document Library', icon: FolderOpen, roles: ['hq_admin', 'branch_user'] },
   { path: '/security-fee', label: 'Security Fee', icon: DollarSign, roles: ['hq_admin', 'branch_user'] },
   { path: '/security-level', label: 'Security Level', icon: ShieldAlert, roles: ['hq_admin', 'branch_user'] },
@@ -40,12 +44,16 @@ function PortalLayout({ children }) {
   const { currentUser, handleLogout, isAdmin } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({ '/bulletins': true });
   const location = useLocation();
 
   const userRole = currentUser?.role || 'branch_user';
   const filteredNav = NAV_ITEMS.filter(item => item.roles.includes(userRole));
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const toggleGroup = (groupPath) => {
+    setExpandedGroups(prev => ({ ...prev, [groupPath]: !prev[groupPath] }));
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: COLORS.content.bg }}>
@@ -105,6 +113,72 @@ function PortalLayout({ children }) {
         <nav style={{ flex: 1, padding: '0.75rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {filteredNav.map(item => {
             const Icon = item.icon;
+
+            // Grouped nav item with children
+            if (item.isGroup) {
+              const isGroupActive = item.children?.some(child =>
+                location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+              );
+              const isExpanded = expandedGroups[item.path] || isGroupActive;
+
+              return (
+                <div key={item.path}>
+                  {/* Group header */}
+                  <button
+                    onClick={() => sidebarOpen ? toggleGroup(item.path) : null}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%',
+                      padding: sidebarOpen ? '0.65rem 0.85rem' : '0.65rem',
+                      borderRadius: '0.5rem', border: 'none', cursor: 'pointer',
+                      color: isGroupActive ? COLORS.sidebar.textActive : COLORS.sidebar.text,
+                      background: 'transparent', fontWeight: isGroupActive ? '600' : '500',
+                      fontSize: '0.82rem', transition: 'all 0.15s ease',
+                      justifyContent: sidebarOpen ? 'flex-start' : 'center',
+                      borderLeft: isGroupActive ? `3px solid ${COLORS.sidebar.accent}` : '3px solid transparent',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = COLORS.sidebar.bgHover; e.currentTarget.style.color = COLORS.sidebar.textActive; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = isGroupActive ? COLORS.sidebar.textActive : COLORS.sidebar.text; }}
+                    title={!sidebarOpen ? item.label : undefined}
+                  >
+                    <Icon size={18} style={{ flexShrink: 0 }} />
+                    {sidebarOpen && (
+                      <>
+                        <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>
+                        <ChevDown size={14} style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.6 }} />
+                      </>
+                    )}
+                  </button>
+                  {/* Sub-items */}
+                  {sidebarOpen && isExpanded && item.children?.map(child => {
+                    const ChildIcon = child.icon;
+                    const isChildActive = location.pathname === child.path || location.pathname.startsWith(child.path + '/');
+                    return (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.65rem',
+                          padding: '0.5rem 0.85rem 0.5rem 2.4rem', borderRadius: '0.4rem',
+                          textDecoration: 'none', fontSize: '0.76rem',
+                          color: isChildActive ? COLORS.sidebar.textActive : COLORS.sidebar.text,
+                          background: isChildActive ? COLORS.sidebar.bgActive : 'transparent',
+                          fontWeight: isChildActive ? '600' : '400',
+                          transition: 'all 0.15s ease',
+                          borderLeft: isChildActive ? `2px solid ${COLORS.sidebar.accent}` : '2px solid transparent',
+                        }}
+                        onMouseEnter={e => { if (!isChildActive) { e.currentTarget.style.background = COLORS.sidebar.bgHover; e.currentTarget.style.color = COLORS.sidebar.textActive; }}}
+                        onMouseLeave={e => { if (!isChildActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = isChildActive ? COLORS.sidebar.textActive : COLORS.sidebar.text; }}}
+                      >
+                        <ChildIcon size={14} style={{ flexShrink: 0 }} />
+                        <span>{child.label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            // Regular nav item
             const isActive = location.pathname === item.path || 
               (item.path !== '/' && location.pathname.startsWith(item.path));
             
@@ -269,10 +343,20 @@ function PortalLayout({ children }) {
           {/* Page title from current route */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             {(() => {
-              const activeItem = NAV_ITEMS.find(i => 
-                i.path === location.pathname || 
-                (i.path !== '/' && location.pathname.startsWith(i.path))
-              ) || NAV_ITEMS[0];
+              // Check children of group items first
+              let activeItem = null;
+              for (const item of NAV_ITEMS) {
+                if (item.children) {
+                  const child = item.children.find(c => 
+                    location.pathname === c.path || location.pathname.startsWith(c.path + '/')
+                  );
+                  if (child) { activeItem = child; break; }
+                }
+                if (item.path === location.pathname || (item.path !== '/' && !item.isGroup && location.pathname.startsWith(item.path))) {
+                  activeItem = item; break;
+                }
+              }
+              if (!activeItem) activeItem = NAV_ITEMS[0];
               const Icon = activeItem.icon;
               return (
                 <>

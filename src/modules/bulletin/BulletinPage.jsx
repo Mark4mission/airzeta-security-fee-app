@@ -5,14 +5,16 @@ import PostWrite from './pages/PostWrite';
 import PostDetail from './pages/PostDetail';
 import PostEdit from './pages/PostEdit';
 
-function BulletinPage() {
+function BulletinPage({ boardType = 'directive' }) {
+  const basePath = boardType === 'communication' ? '/communication' : '/bulletin';
+
   return (
     <Routes>
-      <Route index element={<BulletinDashboard />} />
-      <Route path="write" element={<PostWrite />} />
-      <Route path="post/:id" element={<PostDetail />} />
-      <Route path="edit/:id" element={<PostEdit />} />
-      <Route path="*" element={<Navigate to="/bulletin" replace />} />
+      <Route index element={<BulletinDashboard boardType={boardType} />} />
+      <Route path="write" element={<PostWrite boardType={boardType} />} />
+      <Route path="post/:id" element={<PostDetail boardType={boardType} />} />
+      <Route path="edit/:id" element={<PostEdit boardType={boardType} />} />
+      <Route path="*" element={<Navigate to={basePath} replace />} />
     </Routes>
   );
 }
