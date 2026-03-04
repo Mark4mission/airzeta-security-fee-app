@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 1.9
+> **Document Version**: 2.0
 > **Last Updated**: 2026-03-04
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -455,6 +455,23 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-04 (Session 12)
+- **Fixed**: Removed 'TA' prefix from Security Directive board — HQ admin posts no longer show site code prefix in Directive board (only Communication board shows prefixes)
+- **Implemented**: Real drag-and-drop file upload in PostWrite — added dragenter/dragleave/dragover/drop event handlers with visual feedback (border color + icon change on hover)
+- **Fixed**: Sidebar sub-menu collapse bug — clicking the collapse toggle on "Security Bulletins" parent now works even when a child route is active. Added `userToggledGroups` state to track explicit user toggles vs auto-expand behavior
+- **Fixed**: Site code prefix display — changed from variable-width (2-4 chars) to fixed-width (3 chars max), centered alignment (`display: inline-block; width: 2.2em; text-align: center`) for consistent badge appearance
+- **Upgraded**: AI translation model from `gemini-2.5-flash-lite` → `gemini-2.5-flash` across all 3 files (PostWrite, PostDetail, PostEdit) for better translation consistency and quality
+- **Added**: Emoji picker in comments — Smile icon button next to comment input opens a 30-emoji grid popup (10x3) with commonly used emojis (thumbs up/down, check, warning, airplane, lock, etc.)
+- **Improved**: Board-aware labels — Communication board now shows contextual labels ('Title' instead of 'Directive Title', 'New Post', 'Edit Post', 'Publish Post')
+- **Generated**: 4 editable PowerPoint presentations:
+  - `AirZeta_Admin_Guide_KR.pptx` — Korean, detailed admin manual (62KB, 20+ slides)
+  - `AirZeta_Branch_User_Guide_EN.pptx` — English, step-by-step branch user guide (39KB, 9 slides)
+  - `AirZeta_IT_Planner_Guide_KR.pptx` — Korean, technical architecture/AI/security (52KB, 14 slides)
+  - `AirZeta_Executive_Finance_Guide_KR_EN.pptx` — Korean+English, cost analysis with charts (56KB, 12 slides)
+- **Updated**: PROJECT_GUIDE.md to v2.0
+- **Build**: 0 errors, 2,543 modules
+- **Deploy**: GitHub Pages (Published), PR #64 merged
 
 ### 2026-03-04 (Session 11)
 - **Added**: YNT (Yantai, China) airport to AIRPORT_COORDS (lat: 37.66, lng: 120.98) and MINI_AIRPORT_COORDS
