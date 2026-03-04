@@ -458,8 +458,10 @@ npm run lint
 
 ### 2026-03-04 (Session 11)
 - **Added**: YNT (Yantai, China) airport to AIRPORT_COORDS (lat: 37.66, lng: 120.98) and MINI_AIRPORT_COORDS
-- **Fixed**: Security Fee AdminDashboard KRW total calculation — changed from branch-level total conversion (`totalEstimated * rate`) to **per-item conversion** (`sum of each item.estimatedCost * item-specific rate`). Root cause: the previous method applied a single branch-level exchange rate to the total, which is inaccurate when individual cost items may have different currencies. The per-item approach ensures each item is converted using its own currency's exchange rate, then summed. This fixes the "few thousand KRW" discrepancy between the header total and manual calculation.
-- **Architecture note**: The `monthlyKRWTotals` in AdminDashboard now iterates `cost.items[]` array (available from `getAllSecurityCosts`) instead of using `cost.totalEstimated`. Falls back to branch-level conversion when `items[]` is not available (legacy data).
+- **Fixed**: Security Fee AdminDashboard KRW total calculation — changed from branch-level total conversion (`totalEstimated * rate`) to **per-item conversion** (`sum of each item.estimatedCost * item-specific rate`). The per-item approach ensures each item is converted using its own currency's exchange rate, then summed.
+- **Fixed**: Exchange rate Excel parsing precision — `read-excel-file` reads the raw IEEE 754 double from Excel cells, which may contain hidden extra decimal places beyond what Excel displays (e.g., cell shows `1,450.30` but raw value is `1450.3042...`). Added `Math.round(rawRate * 100) / 100` to round rates to 2 decimal places at upload time, matching the user-visible Excel values. This resolves the ~4,500 KRW discrepancy between manual calculation and app display on ~971M KRW totals.
+- **Architecture note**: Excel column mapping: A=비율(원시)/sourceRatio, B=원시통화, C=비율(대상)/targetRatio(unused, always 1 for KRW), D=대상통화, E=직접호가/directQuote, F=간접호가(unused). The `monthlyKRWTotals` in AdminDashboard iterates `cost.items[]` array for per-item currency conversion, falls back to branch-level for legacy data.
+- **Important**: After deploying this fix, the exchange rate file must be **re-uploaded** for affected months to apply the rounding correction to stored rates in Firestore.
 - **Updated**: PROJECT_GUIDE.md to v1.9
 - **Build**: 0 errors, 2,543 modules
 

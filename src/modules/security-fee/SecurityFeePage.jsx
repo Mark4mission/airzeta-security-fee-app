@@ -420,8 +420,15 @@ function SecurityFeePage() {
         const ratio = parseFloat(row[0]) || 1;
         const curr = String(row[1]).trim();
         const target = String(row[3]).trim();
-        const rate = parseFloat(String(row[4]).replace(/,/g, '').trim());
-        if (curr && target === 'KRW' && !isNaN(rate)) rates.push({ currency: curr, rate, ratio });
+        const rawRate = parseFloat(String(row[4]).replace(/,/g, '').trim());
+        if (curr && target === 'KRW' && !isNaN(rawRate)) {
+          // Round rate to 2 decimal places to match the displayed value in Excel.
+          // read-excel-file reads the raw IEEE 754 double from the cell,
+          // which may have hidden extra decimals beyond what Excel displays.
+          // Without rounding, these hidden decimals cause small KRW total discrepancies.
+          const rate = Math.round(rawRate * 100) / 100;
+          rates.push({ currency: curr, rate, ratio });
+        }
       }
       if (rates.length === 0) { setMessage({ type: 'error', text: 'No valid exchange rate data found.' }); return; }
       await saveExchangeRates(rates, file.name, yearMonth);
