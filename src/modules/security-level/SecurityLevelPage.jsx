@@ -172,10 +172,28 @@ function projectGeo(lng, lat) {
 
 function geoPathFromRing(ring) {
   if (!ring || ring.length === 0) return '';
-  const parts = ring.map((coord, i) => {
+  const parts = [];
+  let prevCoord = null;
+  for (let i = 0; i < ring.length; i++) {
+    const coord = ring[i];
+    // Skip segments that span more than 90° longitude at nearly the same latitude
+    // — these are TopoJSON boundary artifacts (e.g., lat 71°N, -16°S, -85°S)
+    // that render as full-width horizontal lines across the map
+    if (prevCoord) {
+      const dlng = Math.abs(coord[0] - prevCoord[0]);
+      const dlat = Math.abs(coord[1] - prevCoord[1]);
+      if (dlng > 90 && dlat < 2) {
+        // Break the path: start a new sub-path at this point instead of drawing a line
+        const [x, y] = projectGeo(coord[0], coord[1]);
+        parts.push(`M${x.toFixed(1)},${y.toFixed(1)}`);
+        prevCoord = coord;
+        continue;
+      }
+    }
     const [x, y] = projectGeo(coord[0], coord[1]);
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-  });
+    parts.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
+    prevCoord = coord;
+  }
   return parts.join(' ') + ' Z';
 }
 
@@ -813,34 +831,20 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
           <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} onWheel={handleWheel}
             style={{ width: '100%', height: 'auto', background: '#0b1929', borderRadius: '0.5rem', display: 'block', userSelect: 'none', overflow: 'hidden' }}>
             <defs>
-              <radialGradient id="ocean-glow" cx="50%" cy="40%" r="65%">
-                <stop offset="0%" stopColor="#112240" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#0b1929" stopOpacity="0" />
-              </radialGradient>
               <filter id="marker-shadow" x="-100%" y="-100%" width="300%" height="300%">
                 <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.5" />
-              </filter>
-              <filter id="land-glow">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="0.5" />
               </filter>
             </defs>
 
             {/* Zoomable layer — countries, ocean scale with zoom */}
             <g transform={mapTransform}>
-              {/* Ocean background — clean solid with subtle center glow */}
-              <rect width={MAP_W} height={MAP_H} fill="#0b1929" />
-              <rect width={MAP_W} height={MAP_H} fill="url(#ocean-glow)" />
+              {/* Ocean background — single solid color, no gradients */}
+              <rect width={MAP_W} height={MAP_H} fill="#0d1f3c" />
 
             {/* Country/continent fills from TopoJSON — clear, high-contrast land masses */}
             {countryPaths.map(cp => (
               <path key={cp.key} d={cp.d} fill="#1a3a5c" stroke="#254d73" strokeWidth="0.5" strokeLinejoin="round" />
             ))}
-
-            {/* Subtle longitude lines only (vertical — no horizontal banding) */}
-            {[-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150].map(lng => {
-              const [x] = projectGeo(lng, 0);
-              return <line key={`lng${lng}`} x1={x} y1="0" x2={x} y2={MAP_H} stroke="#1a3050" strokeWidth="0.25" strokeDasharray="2,8" opacity="0.15" />;
-            })}
 
             {/* Fallback if no geo loaded */}
             {countryPaths.length === 0 && (
