@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { loadSettingsFromFirestore } from '../../firebase/collections';
 import Settings from '../../components/Settings';
+import SecurityDashboard from './SecurityDashboard';
 import { ShieldAlert } from 'lucide-react';
 
 const DEFAULT_SETTINGS = {
@@ -110,6 +111,17 @@ function SettingsPage() {
           onClose={() => setShowModal(false)}
         />
       )}
+
+      {/* Security Dashboard (Admin Only) */}
+      <div style={{
+        marginTop: '2rem',
+        background: '#132F4C',
+        border: '1px solid #1E3A5F',
+        borderRadius: '0.75rem',
+        padding: '1.5rem'
+      }}>
+        <SecurityDashboard />
+      </div>
     </div>
   );
 }

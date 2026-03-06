@@ -22,16 +22,47 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from './config';
 import { COLLECTIONS } from './collections';
+import {
+  checkLoginRateLimit,
+  recordLoginAttempt,
+  logSecurityEvent,
+  SECURITY_EVENTS,
+  updateLoginSecurityMeta,
+  getDeviceFingerprint
+} from './security';
 
 // ============================================================
 // 로그인 / 로그아웃
 // ============================================================
 
-// 🔑 이메일 로그인
+// 🔑 이메일 로그인 (보안 강화: rate limiting + audit logging)
 export const loginUser = async (email, password) => {
+  // Rate limit check
+  const rateCheck = checkLoginRateLimit();
+  if (!rateCheck.allowed) {
+    if (rateCheck.isLocked) {
+      logSecurityEvent(SECURITY_EVENTS.LOGIN_LOCKED, { email, waitSeconds: rateCheck.waitSeconds });
+    }
+    const error = new Error(rateCheck.reason);
+    error.code = 'auth/rate-limited';
+    throw error;
+  }
+
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    
+    // Record successful login
+    recordLoginAttempt(true);
+    
+    // Security audit log
+    logSecurityEvent(SECURITY_EVENTS.LOGIN_SUCCESS, {
+      email: user.email,
+      deviceFingerprint: getDeviceFingerprint()
+    });
+    
+    // Update security metadata
+    updateLoginSecurityMeta(user.uid, true, email);
     
     // Firestore 프로필 확인
     const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
@@ -55,14 +86,28 @@ export const loginUser = async (email, password) => {
     await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
     return { uid: user.uid, ...newProfile };
   } catch (error) {
+    // Record failed attempt (unless it's a rate limit error we threw)
+    if (error.code !== 'auth/rate-limited') {
+      recordLoginAttempt(false);
+      logSecurityEvent(SECURITY_EVENTS.LOGIN_FAILED, {
+        email,
+        errorCode: error.code,
+        deviceFingerprint: getDeviceFingerprint()
+      });
+      updateLoginSecurityMeta(email, false, email); // Use email as identifier for failed attempts
+    }
     console.error('Login error:', error);
     throw error;
   }
 };
 
-// 🚪 로그아웃
+// 🚪 로그아웃 (보안 강화: audit logging)
 export const logoutUser = async () => {
   try {
+    const user = auth.currentUser;
+    logSecurityEvent(SECURITY_EVENTS.LOGOUT, {
+      email: user?.email
+    });
     await signOut(auth);
   } catch (error) {
     console.error('Logout error:', error);
@@ -74,7 +119,7 @@ export const logoutUser = async () => {
 // 회원가입 (셀프 등록)
 // ============================================================
 
-// 🆕 이메일 회원가입 — 계정 생성 + Firestore 프로필 (branchName 미지정)
+// 🆕 이메일 회원가입 — 계정 생성 + Firestore 프로필 (branchName 미지정) + 보안 로깅
 export const registerUser = async (email, password, displayName = '') => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -90,6 +135,14 @@ export const registerUser = async (email, password, displayName = '') => {
     };
     
     await setDoc(doc(db, COLLECTIONS.USERS, user.uid), profile);
+    
+    // Security audit log
+    logSecurityEvent(SECURITY_EVENTS.ACCOUNT_CREATED, {
+      email: user.email,
+      method: 'email',
+      deviceFingerprint: getDeviceFingerprint()
+    });
+    
     console.log('[Auth] 새 이메일 사용자 가입 완료:', email);
     
     return { uid: user.uid, ...profile };
@@ -103,10 +156,11 @@ export const registerUser = async (email, password, displayName = '') => {
 // 비밀번호 관리
 // ============================================================
 
-// 📧 비밀번호 재설정 이메일 발송
+// 📧 비밀번호 재설정 이메일 발송 (보안 강화: audit logging)
 export const resetPassword = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email);
+    logSecurityEvent(SECURITY_EVENTS.PASSWORD_RESET_REQUEST, { email });
     console.log('[Auth] 비밀번호 재설정 이메일 발송:', email);
     return { success: true };
   } catch (error) {
@@ -128,6 +182,7 @@ export const changePassword = async (currentPassword, newPassword) => {
     
     // 새 비밀번호 설정
     await updatePassword(user, newPassword);
+    logSecurityEvent(SECURITY_EVENTS.PASSWORD_CHANGE, { email: user.email });
     console.log('[Auth] 비밀번호 변경 완료');
     return { success: true };
   } catch (error) {
@@ -437,10 +492,19 @@ const handleGoogleUserProfile = async (user) => {
   }
 };
 
-// 🆕 Google 로그인 함수
+// 🆕 Google 로그인 함수 (보안 강화: rate limiting + audit logging)
 export const loginWithGoogle = async () => {
   const currentDomain = window.location.hostname;
   const currentOrigin = window.location.origin;
+  
+  // Rate limit check (applies to Google login too)
+  const rateCheck = checkLoginRateLimit();
+  if (!rateCheck.allowed && rateCheck.isLocked) {
+    logSecurityEvent(SECURITY_EVENTS.LOGIN_LOCKED, { method: 'google' });
+    const error = new Error(rateCheck.reason);
+    error.code = 'auth/rate-limited';
+    throw error;
+  }
   
   console.log('[Google Login] 시작...');
   console.log('[Google Login] 현재 도메인:', currentDomain);
@@ -451,6 +515,15 @@ export const loginWithGoogle = async () => {
     
     const result = await signInWithPopup(auth, provider);
     console.log('[Google Login] signInWithPopup 성공!');
+    
+    // Record successful login
+    recordLoginAttempt(true);
+    logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN, {
+      email: result.user.email,
+      deviceFingerprint: getDeviceFingerprint()
+    });
+    updateLoginSecurityMeta(result.user.uid, true, result.user.email);
+    
     return await handleGoogleUserProfile(result.user);
     
   } catch (popupError) {
@@ -487,6 +560,13 @@ export const loginWithGoogle = async () => {
         'Please allow popups for this site and try again.'
       );
     }
+    
+    // Record failed Google login attempt
+    recordLoginAttempt(false);
+    logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN_FAILED, {
+      errorCode: popupError.code,
+      deviceFingerprint: getDeviceFingerprint()
+    });
     
     throw new Error(
       `Google login failed: ${popupError.message}\n` +

@@ -17,6 +17,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(100px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -33,6 +38,13 @@ textarea:focus {
   outline: none;
   box-shadow: 0 0 0 2px rgba(233, 69, 96, 0.2);
   border-color: #E94560 !important;
+}
+
+/* Light form inputs (Login, BranchSelection) */
+.light-inputs input:focus,
+.light-inputs select:focus {
+  box-shadow: 0 0 0 2px rgba(27, 58, 125, 0.2);
+  border-color: #1B3A7D !important;
 }
 
 /* Button hover effects */
