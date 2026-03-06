@@ -14,7 +14,63 @@ import SecurityPolicyPage from './modules/security-policy/SecurityPolicyPage';
 import ImportantLinksPage from './modules/important-links/ImportantLinksPage';
 import SettingsPage from './modules/settings/SettingsPage';
 import DocumentLibraryPage from './modules/document-library/DocumentLibraryPage';
-import { Shield } from 'lucide-react';
+import { Shield, Clock, X } from 'lucide-react';
+
+// Session timeout warning toast
+function SessionWarningToast() {
+  const { sessionWarning, dismissSessionWarning, handleLogout } = useAuth();
+  
+  if (!sessionWarning) return null;
+  
+  return (
+    <div style={{
+      position: 'fixed', top: '1rem', right: '1rem', zIndex: 10000,
+      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+      color: 'white', padding: '1rem 1.25rem', borderRadius: '0.75rem',
+      boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
+      maxWidth: '380px', width: 'calc(100vw - 2rem)',
+      animation: 'slideIn 0.3s ease-out'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+        <Clock size={22} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: 0, fontWeight: '700', fontSize: '0.9rem' }}>Session Expiring Soon</p>
+          <p style={{ margin: '0.3rem 0 0.75rem 0', fontSize: '0.8rem', opacity: 0.9, lineHeight: '1.4' }}>
+            Your session will expire in 15 minutes due to inactivity. Move your mouse or press a key to stay logged in.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={dismissSessionWarning}
+              style={{
+                padding: '0.35rem 0.75rem', background: 'rgba(255,255,255,0.25)', color: 'white',
+                border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.35rem',
+                fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Stay Logged In
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: '0.35rem 0.75rem', background: 'rgba(0,0,0,0.2)', color: 'white',
+                border: '1px solid rgba(255,255,255,0.2)', borderRadius: '0.35rem',
+                fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Sign Out Now
+            </button>
+          </div>
+        </div>
+        <button
+          onClick={dismissSessionWarning}
+          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', padding: '0.15rem' }}
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // Loading spinner
 function LoadingScreen() {
@@ -105,6 +161,7 @@ function ProtectedRoutes() {
 
   return (
     <PortalLayout>
+      <SessionWarningToast />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/security-policy" element={<SecurityPolicyPage />} />
@@ -126,6 +183,7 @@ function App() {
     <HashRouter>
       <AuthProvider>
         <ProtectedRoutes />
+        <SessionWarningToast />
       </AuthProvider>
     </HashRouter>
   );

@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.1
-> **Last Updated**: 2026-03-04
+> **Document Version**: 2.2
+> **Last Updated**: 2026-03-06
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -76,6 +76,7 @@ VITE_FIREBASE_STORAGE_BUCKET=<project>.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=<sender-id>
 VITE_FIREBASE_APP_ID=<app-id>
 VITE_GEMINI_API_KEY=<Gemini AI API key from aistudio.google.com>
+VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=<reCAPTCHA Enterprise site key (optional, enables App Check)>
 ```
 
 **IMPORTANT**: The `.env` file must be in the project root. It is NOT committed to git.
@@ -99,9 +100,10 @@ webapp/
       PortalLayout.jsx            # Main layout with sidebar navigation
     
     firebase/
-      config.js                   # Firebase app initialization
-      auth.js                     # Auth helper functions
+      config.js                   # Firebase app initialization, exports firebaseApp
+      auth.js                     # Auth helper functions (with security hardening)
       collections.js              # Firestore collection references
+      security.js                 # Security module: App Check, rate limiting, session mgmt, audit logging
     
     components/                   # Legacy/shared components
       AdminDashboard.jsx          # (Legacy) Admin dashboard
@@ -153,6 +155,7 @@ webapp/
       
       settings/
         SettingsPage.jsx          # App settings and user management
+        SecurityDashboard.jsx     # Admin security monitoring panel (NEW v2.2)
 ```
 
 ---
@@ -170,6 +173,8 @@ webapp/
 | `securityPolicies` | Policy documents | (policy content) |
 | `importantLinks` | Important links | url, title, category, order |
 | `documentLibrary` | Document Library (SSOP) | title, description, category, iataCode, downloadPermission, pinned, attachments[], uploaderId, uploaderEmail, uploaderBranch, uploaderRole, downloadCount, downloadLog[], createdAt, updatedAt |
+| `securityAuditLog` | Security event tracking (v2.2) | eventType, timestamp, userId, userEmail, userAgent, language, timezone, screenResolution, appCheckActive, deviceFingerprint |
+| `userSecurity` | Per-user security metadata (v2.2) | lastSuccessfulLogin, lastFailedLogin, failedAttemptsSinceLastLogin, totalLogins, totalFailedLogins, lastUserAgent, lastTimezone |
 
 ---
 
@@ -443,8 +448,89 @@ npm run lint
 
 ---
 
-## 9.5 Security Measures (v1.8)
+## 9.5 Security Measures (v2.2 — Major Security Hardening)
 
+### Authentication Security Layers (NEW)
+The app implements a **multi-layer defense-in-depth** security architecture:
+
+#### Layer 1: Firebase App Check (reCAPTCHA Enterprise)
+- **Purpose**: Validates that requests come from a legitimate app instance (not bots/scripts)
+- **Provider**: reCAPTCHA Enterprise (score-based, invisible to users — no CAPTCHA puzzles)
+- **Configuration**: Set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` in `.env`
+- **Global Fallback**: If reCAPTCHA is unreachable (e.g., China where Google services are blocked), the app gracefully degrades to other security layers. A 3-second connectivity test determines availability.
+- **File**: `src/firebase/security.js` — `initializeSecurityAppCheck()`
+- **Setup Steps**:
+  1. Enable reCAPTCHA Enterprise API in Google Cloud Console
+  2. Create a score-based site key for the web domain
+  3. Register the web app in Firebase Console > App Check
+  4. Add the site key to `.env` as `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`
+
+#### Layer 2: Client-Side Rate Limiting & Brute-Force Protection
+- **Max Attempts**: 5 failed login attempts before temporary lockout
+- **Lockout Duration**: 15 minutes (progressive — each subsequent lockout doubles: 15m → 30m → 60m → max 1 hour)
+- **Minimum Interval**: 1 second between login attempts (prevents rapid-fire attacks)
+- **Applies to**: Both email/password and Google Sign-In
+- **Visual Feedback**: Lockout countdown timer shown on login screen with remaining attempts warning
+- **File**: `src/firebase/security.js` — `checkLoginRateLimit()`, `recordLoginAttempt()`
+
+#### Layer 3: Session Management with Automatic Timeout
+- **Session Timeout**: 8 hours of inactivity → automatic logout
+- **Warning**: Toast notification 15 minutes before timeout ("Session Expiring Soon")
+- **Activity Detection**: Monitors mousedown, keydown, scroll, touchstart events
+- **User Actions**: "Stay Logged In" (dismiss warning) or "Sign Out Now" buttons
+- **File**: `src/firebase/security.js` — `startSessionMonitor()`
+
+#### Layer 4: Security Audit Logging (Firestore)
+- **Collection**: `securityAuditLog` in Firestore
+- **Events Tracked**: 14 event types including login success/failure, lockouts, session timeouts, password changes, suspicious activity, Google login attempts, App Check fallbacks
+- **Data Captured**: userId, email, userAgent, language, timezone, screen resolution, device fingerprint, App Check status
+- **Admin Dashboard**: Settings page shows last 24h summary + expandable event log
+- **File**: `src/firebase/security.js` — `logSecurityEvent()`, `SECURITY_EVENTS`
+
+#### Layer 5: Password Policy Enforcement
+- **Minimum Length**: 8 characters (signup enforced)
+- **Strength Score**: 0-5 scale (must score ≥3 to register)
+- **Requirements**: Mixed case, numbers, special characters (visual feedback during signup)
+- **Common Password Detection**: Blocks "password", "123456", "qwerty", etc.
+- **Visual Meter**: Real-time password strength bar with color coding (red → green)
+- **File**: `src/firebase/security.js` — `evaluatePasswordStrength()`
+
+#### Layer 6: Device Fingerprinting (Privacy-Respectful)
+- **Method**: Lightweight hash of userAgent + language + screen resolution + timezone
+- **NOT used**: Canvas fingerprinting, WebGL fingerprinting (privacy concerns)
+- **Purpose**: Anomaly detection (logged in audit trail, not used for blocking)
+- **File**: `src/firebase/security.js` — `getDeviceFingerprint()`
+
+### Security UI Components (NEW)
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Login lockout timer | `Login.jsx` | Countdown during account lockout |
+| Password strength meter | `Login.jsx` (signup) | Real-time strength bar with color feedback |
+| Password visibility toggle | `Login.jsx` | Eye/EyeOff button on password fields |
+| Session timeout toast | `App.jsx` | Warning 15 min before auto-logout |
+| Security Dashboard | `SettingsPage.jsx` | Admin-only security monitoring panel |
+
+### Firestore Collections (NEW)
+| Collection | Purpose |
+|-----------|---------|
+| `securityAuditLog` | Security event tracking (login, logout, lockout, etc.) |
+| `userSecurity` | Per-user security metadata (last login, failed attempts, etc.) |
+
+### Global User Accessibility
+- **reCAPTCHA Enterprise**: Works in NA, Europe, most of Asia (invisible, no user friction)
+- **China/Restricted Regions**: Automatic fallback — 3-second connectivity test, if blocked → skip App Check, rely on Layers 2-6
+- **Detection Method**: Timezone + language heuristics (not IP-based), plus actual connectivity test
+- **No User Friction**: reCAPTCHA Enterprise is score-based (invisible), no puzzles or checkboxes
+
+### Firebase Identity Platform (Recommended Upgrade)
+Upgrading to Firebase Authentication with Identity Platform enables:
+- **Multi-Factor Authentication (MFA)** — SMS or TOTP second factor
+- **Blocking Functions** — Custom logic to reject signups/logins based on conditions
+- **User Activity Logging** — Server-side login audit trail
+- **Enterprise SAML/OIDC** — SSO integration with corporate identity providers
+- **How to Upgrade**: Firebase Console → Authentication → "Upgrade to Identity Platform" (non-breaking, preserves existing users)
+
+### Pre-Existing Security Measures
 - **XSS Protection**: All `dangerouslySetInnerHTML` usages wrapped with `DOMPurify.sanitize()` (PostDetail, PostEdit, PostWrite)
 - **Firebase Config**: Uses environment variables (`import.meta.env.VITE_FIREBASE_*`), no hardcoded keys
 - **Env Files**: `.env`, `.env.local`, `.env.*.local` in `.gitignore`
@@ -455,6 +541,32 @@ npm run lint
 ---
 
 ## 10. Changelog / Work History
+
+### 2026-03-06 (Session 15 — Security Hardening)
+- **SECURITY**: Implemented multi-layer defense-in-depth security architecture (6 layers)
+- **NEW**: Firebase App Check integration with reCAPTCHA Enterprise (invisible, score-based, zero user friction)
+- **NEW**: Global accessibility — automatic fallback for China/restricted regions where reCAPTCHA is blocked (3-second connectivity test → graceful degradation to other security layers)
+- **NEW**: Client-side rate limiting — 5 failed attempts → progressive lockout (15m → 30m → 60m, max 1hr)
+- **NEW**: Session management — 8-hour inactivity timeout with 15-minute warning toast ("Session Expiring Soon" with Stay/Sign Out buttons)
+- **NEW**: Security audit logging — 14 event types tracked to `securityAuditLog` Firestore collection (login success/failure, lockouts, session timeouts, password changes, suspicious activity, device fingerprint)
+- **NEW**: Password policy enforcement — strength meter (0-5 score, requires ≥3), blocks common passwords, visual feedback bar during signup
+- **NEW**: Login UI enhancements — password visibility toggle (eye/eye-off), lockout countdown timer, remaining attempts warning, security badge in footer
+- **NEW**: Admin Security Dashboard — in Settings page, shows App Check status, rate limiting config, session management status, password policy, global access info, 24h event summary, expandable audit log
+- **NEW**: Per-user security metadata — `userSecurity` collection tracks last successful login, failed attempts, total logins per user
+- **NEW**: Device fingerprinting (privacy-respectful) — lightweight hash of browser properties for anomaly detection
+- **File**: `src/firebase/security.js` — comprehensive security module (20KB)
+- **File**: `src/modules/settings/SecurityDashboard.jsx` — admin security monitoring UI
+- **Modified**: `src/firebase/config.js` — exports `firebaseApp` for App Check init
+- **Modified**: `src/firebase/auth.js` — integrated rate limiting, audit logging, security metadata in loginUser, logoutUser, registerUser, loginWithGoogle, resetPassword, changePassword
+- **Modified**: `src/core/AuthContext.jsx` — App Check init on mount, session monitor lifecycle, security status context
+- **Modified**: `src/components/Login.jsx` — lockout UI, password strength meter, visibility toggle, rate limit feedback
+- **Modified**: `src/App.jsx` — session timeout toast (SessionWarningToast component)
+- **Modified**: `src/App.css` — slideIn animation, light-inputs focus override for login form
+- **Modified**: `src/modules/settings/SettingsPage.jsx` — integrated SecurityDashboard
+- **Env**: New optional `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` (App Check activation)
+- **Updated**: PROJECT_GUIDE.md to v2.2 with comprehensive security documentation (Section 9.5)
+- **Build**: 0 errors, 2,547 modules
+- **Deploy**: GitHub Pages + Vercel
 
 ### 2026-03-04 (Session 13)
 - **Fixed**: World map horizontal banding artifacts — removed latitude grid lines that created prominent horizontal stripes across the map. Removed the CSS linear-gradient background that caused additional banding. Replaced with clean solid ocean color (#0b1929) + subtle radial glow
@@ -655,3 +767,8 @@ Level names containing these keywords auto-detect their color:
 | Document Library access denied | Check Firestore rules for `documentLibrary` collection. Ensure `storage.rules` allows `document_library/` path. |
 | DocumentEdit drag-drop upload not working | Ensure the `<form>` element does NOT have `onDrop`/`onDragOver`/`onDragEnter` handlers — they consume drag events before the inner drop zone. Only the drop zone div should have drag handlers. |
 | Pledge signer data not loading | The Google Sheet must be shared as "Anyone with the link can view". Check browser console for CORS or network errors. |
+| App Check not activating | Ensure `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` is set in `.env`. Check reCAPTCHA Enterprise API is enabled in Google Cloud Console. Verify the site key is registered in Firebase Console > App Check. |
+| App Check failing in China | Expected behavior. The app auto-detects reCAPTCHA unavailability and falls back to other security layers. No action needed. |
+| Login lockout won't clear | Client-side lockout resets on page refresh. Server-side Firebase `auth/too-many-requests` requires waiting (usually 15-60 min). |
+| Security audit logs not appearing | Check Firestore rules allow write to `securityAuditLog` collection. The logging is fire-and-forget (silently fails if blocked). |
+| Session timeout too aggressive | Adjust `SESSION_TIMEOUT_MS` in `src/firebase/security.js` (default 8 hours = 28800000 ms). |

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, LogIn, Loader, ExternalLink, UserPlus, ArrowLeft, Mail } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Shield, LogIn, Loader, ExternalLink, UserPlus, ArrowLeft, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { loginUser, loginWithGoogle, registerUser, resetPassword, initGoogleRedirectResult } from '../firebase/auth';
+import { checkLoginRateLimit, getRemainingAttempts, evaluatePasswordStrength, getStrengthColor } from '../firebase/security';
 
 const COLORS = {
   primary: '#1B3A7D',
@@ -26,6 +27,10 @@ function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isDomainError, setIsDomainError] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState(null);
+  const [lockoutTimer, setLockoutTimer] = useState(0);
 
   useEffect(() => {
     const checkRedirectResult = async () => {
@@ -38,7 +43,31 @@ function Login() {
     checkRedirectResult();
   }, []);
 
-  // 모드 전환 시 폼 초기화
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutTimer <= 0) return;
+    const interval = setInterval(() => {
+      setLockoutTimer(prev => {
+        if (prev <= 1) {
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutTimer]);
+
+  // Password strength evaluation (for signup only)
+  useEffect(() => {
+    if (mode === 'signup' && password) {
+      setPasswordStrength(evaluatePasswordStrength(password));
+    } else {
+      setPasswordStrength(null);
+    }
+  }, [password, mode]);
+
+  // Mode switch with form reset
   const switchMode = (newMode) => {
     setMode(newMode);
     setError('');
@@ -46,23 +75,44 @@ function Login() {
     setPassword('');
     setConfirmPassword('');
     setIsDomainError(false);
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordStrength(null);
   };
 
-  // 이메일 로그인
+  // Email sign in (with rate limiting)
   const handleSignIn = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
     setIsDomainError(false);
+    
+    // Check rate limit before attempting
+    const rateCheck = checkLoginRateLimit();
+    if (!rateCheck.allowed) {
+      setError(rateCheck.reason);
+      if (rateCheck.isLocked) setLockoutTimer(rateCheck.waitSeconds);
+      return;
+    }
+    
     setLoading(true);
 
     try {
       await loginUser(email, password);
-      // onAuthStateChanged가 App.jsx에서 처리
+      // onAuthStateChanged handles the rest
     } catch (err) {
       const code = err.code || '';
-      if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
-        setError('Invalid email or password. Please check and try again.');
+      if (code === 'auth/rate-limited') {
+        const rateInfo = checkLoginRateLimit();
+        setError(err.message);
+        if (rateInfo.isLocked) setLockoutTimer(rateInfo.waitSeconds);
+      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+        const remaining = getRemainingAttempts();
+        const baseMsg = 'Invalid email or password.';
+        setError(remaining <= 2 && remaining > 0
+          ? `${baseMsg} ${remaining} attempt${remaining > 1 ? 's' : ''} remaining before temporary lockout.`
+          : baseMsg
+        );
       } else if (code === 'auth/too-many-requests') {
         setError('Too many failed attempts. Please try again later or reset your password.');
       } else {
@@ -73,7 +123,7 @@ function Login() {
     }
   };
 
-  // 이메일 회원가입
+  // Email sign up (with password strength check)
   const handleSignUp = async (e) => {
     e.preventDefault();
     setError('');
@@ -86,22 +136,22 @@ function Login() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    // Enforce password strength
+    const strength = evaluatePasswordStrength(password);
+    if (!strength.strong) {
+      setError(`Password is too weak (${strength.label}). ${strength.feedback.join('. ')}.`);
       setLoading(false);
       return;
     }
 
     try {
       await registerUser(email, password, displayName);
-      // 가입 성공 → onAuthStateChanged가 자동으로 처리
-      // → App.jsx에서 branchName 없으면 BranchSelection으로 이동
     } catch (err) {
       const code = err.code || '';
       if (code === 'auth/email-already-in-use') {
         setError('This email is already registered. Please sign in instead.');
       } else if (code === 'auth/weak-password') {
-        setError('Password is too weak. Please use at least 6 characters.');
+        setError('Password is too weak. Please use at least 8 characters with mixed case, numbers, and special characters.');
       } else if (code === 'auth/invalid-email') {
         setError('Invalid email address format.');
       } else {
@@ -112,7 +162,7 @@ function Login() {
     }
   };
 
-  // 비밀번호 재설정
+  // Password reset
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     setError('');
@@ -142,11 +192,20 @@ function Login() {
     }
   };
 
-  // Google 로그인
+  // Google login
   const handleGoogleLogin = async () => {
     setError('');
     setSuccessMsg('');
     setIsDomainError(false);
+    
+    // Check rate limit
+    const rateCheck = checkLoginRateLimit();
+    if (!rateCheck.allowed && rateCheck.isLocked) {
+      setError(rateCheck.reason);
+      setLockoutTimer(rateCheck.waitSeconds);
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -156,13 +215,17 @@ function Login() {
       if (msg.includes('domain') || msg.includes('unauthorized') || msg.includes('Cloud Console')) {
         setIsDomainError(true);
       }
+      if (err.code === 'auth/rate-limited') {
+        const rateInfo = checkLoginRateLimit();
+        if (rateInfo.isLocked) setLockoutTimer(rateInfo.waitSeconds);
+      }
       setError(msg || 'Google login failed.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 제목/설명
+  // Title config
   const getTitleConfig = () => {
     switch (mode) {
       case 'signup':
@@ -175,6 +238,22 @@ function Login() {
   };
 
   const titleConfig = getTitleConfig();
+  const isLocked = lockoutTimer > 0;
+
+  // Password visibility toggle style
+  const eyeButtonStyle = {
+    position: 'absolute',
+    right: '0.75rem',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: '#6b7280',
+    padding: '0.25rem',
+    display: 'flex',
+    alignItems: 'center'
+  };
 
   return (
     <div style={{
@@ -193,7 +272,7 @@ function Login() {
         maxWidth: '450px',
         width: '100%'
       }}>
-        {/* 로고 헤더 */}
+        {/* Logo header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{
             width: '80px',
@@ -221,7 +300,7 @@ function Login() {
           </p>
         </div>
 
-        {/* 뒤로가기 (signup, forgot 모드일 때) */}
+        {/* Back button for signup/forgot modes */}
         {mode !== 'signin' && (
           <button
             onClick={() => switchMode('signin')}
@@ -244,7 +323,31 @@ function Login() {
           </button>
         )}
 
-        {/* 성공 메시지 */}
+        {/* Lockout warning banner */}
+        {isLocked && (
+          <div style={{
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            background: '#fef3c7',
+            border: '1px solid #f59e0b',
+            borderRadius: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem'
+          }}>
+            <Clock size={20} color="#d97706" style={{ flexShrink: 0 }} />
+            <div>
+              <p style={{ margin: 0, color: '#92400e', fontSize: '0.85rem', fontWeight: '600' }}>
+                Temporarily Locked
+              </p>
+              <p style={{ margin: '0.15rem 0 0 0', color: '#b45309', fontSize: '0.8rem' }}>
+                Too many failed attempts. Please wait {lockoutTimer}s before trying again.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Success message */}
         {successMsg && (
           <div style={{
             padding: '0.75rem',
@@ -254,14 +357,18 @@ function Login() {
             borderRadius: '0.5rem',
             color: '#065f46',
             fontSize: '0.85rem',
-            lineHeight: '1.5'
+            lineHeight: '1.5',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.5rem'
           }}>
-            {successMsg}
+            <CheckCircle size={18} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <span>{successMsg}</span>
           </div>
         )}
 
-        {/* 에러 메시지 */}
-        {error && (
+        {/* Error message */}
+        {error && !isLocked && (
           <div style={{
             padding: '0.75rem',
             marginBottom: '1rem',
@@ -292,7 +399,7 @@ function Login() {
           </div>
         )}
 
-        {/* ====== SIGN IN 모드 ====== */}
+        {/* ====== SIGN IN ====== */}
         {mode === 'signin' && (
           <>
             <form onSubmit={handleSignIn}>
@@ -307,10 +414,12 @@ function Login() {
                   required
                   placeholder="you@example.com"
                   autoComplete="email"
+                  disabled={isLocked}
                   style={{
                     width: '100%', padding: '0.75rem',
                     border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
-                    background: 'white', color: '#1a1a1a'
+                    background: isLocked ? '#f3f4f6' : 'white', color: '#1a1a1a',
+                    opacity: isLocked ? 0.6 : 1
                   }}
                 />
               </div>
@@ -319,22 +428,34 @@ function Login() {
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#374151' }}>
                   Password
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                  style={{
-                    width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
-                    background: 'white', color: '#1a1a1a'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    disabled={isLocked}
+                    style={{
+                      width: '100%', padding: '0.75rem', paddingRight: '2.75rem',
+                      border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
+                      background: isLocked ? '#f3f4f6' : 'white', color: '#1a1a1a',
+                      opacity: isLocked ? 0.6 : 1
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={eyeButtonStyle}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
-              {/* Forgot Password 링크 */}
+              {/* Forgot Password link */}
               <div style={{ textAlign: 'right', marginBottom: '1.5rem' }}>
                 <button
                   type="button"
@@ -351,47 +472,50 @@ function Login() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || isLocked}
                 style={{
                   width: '100%', padding: '0.875rem',
-                  background: loading ? '#9ca3af' : COLORS.primary,
+                  background: (loading || isLocked) ? '#9ca3af' : COLORS.primary,
                   color: 'white', border: 'none', borderRadius: '0.5rem',
                   fontSize: '1rem', fontWeight: '600',
-                  cursor: loading ? 'not-allowed' : 'pointer',
+                  cursor: (loading || isLocked) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
                   transition: 'background 0.2s'
                 }}
               >
                 {loading ? (
                   <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Signing in...</>
+                ) : isLocked ? (
+                  <><Lock size={20} /> Locked ({lockoutTimer}s)</>
                 ) : (
                   <><LogIn size={20} /> Sign In</>
                 )}
               </button>
             </form>
 
-            {/* 구분선 */}
+            {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', margin: '1.5rem 0', gap: '1rem' }}>
               <div style={{ flex: 1, height: '1px', background: '#d1d5db' }}></div>
               <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</span>
               <div style={{ flex: 1, height: '1px', background: '#d1d5db' }}></div>
             </div>
 
-            {/* Google 로그인 */}
+            {/* Google login */}
             <button
               onClick={handleGoogleLogin}
-              disabled={loading}
+              disabled={loading || isLocked}
               style={{
                 width: '100%', padding: '0.875rem',
-                background: loading ? '#f3f4f6' : 'white',
+                background: (loading || isLocked) ? '#f3f4f6' : 'white',
                 color: '#374151', border: '2px solid #e5e7eb', borderRadius: '0.5rem',
                 fontSize: '1rem', fontWeight: '600',
-                cursor: loading ? 'not-allowed' : 'pointer',
+                cursor: (loading || isLocked) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
-                transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                opacity: isLocked ? 0.6 : 1
               }}
-              onMouseOver={(e) => { if (!loading) { e.currentTarget.style.borderColor = COLORS.primary; e.currentTarget.style.background = '#f9fafb'; }}}
-              onMouseOut={(e) => { if (!loading) { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = 'white'; }}}
+              onMouseOver={(e) => { if (!loading && !isLocked) { e.currentTarget.style.borderColor = COLORS.primary; e.currentTarget.style.background = '#f9fafb'; }}}
+              onMouseOut={(e) => { if (!loading && !isLocked) { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = 'white'; }}}
             >
               {loading ? (
                 <><Loader size={20} style={{ animation: 'spin 1s linear infinite' }} /> Connecting...</>
@@ -408,7 +532,7 @@ function Login() {
               )}
             </button>
 
-            {/* Sign Up 링크 */}
+            {/* Sign Up link */}
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
               <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Don't have an account? </span>
               <button
@@ -425,7 +549,7 @@ function Login() {
           </>
         )}
 
-        {/* ====== SIGN UP 모드 ====== */}
+        {/* ====== SIGN UP ====== */}
         {mode === 'signup' && (
           <>
             <form onSubmit={handleSignUp}>
@@ -464,44 +588,109 @@ function Login() {
                 />
               </div>
 
-              <div style={{ marginBottom: '1.25rem' }}>
+              <div style={{ marginBottom: '0.5rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#374151' }}>
                   Password *
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  placeholder="At least 6 characters"
-                  autoComplete="new-password"
-                  style={{
-                    width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
-                    background: 'white', color: '#1a1a1a'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    placeholder="At least 8 characters"
+                    autoComplete="new-password"
+                    style={{
+                      width: '100%', padding: '0.75rem', paddingRight: '2.75rem',
+                      border: `1px solid ${passwordStrength ? getStrengthColor(passwordStrength.score) : '#d1d5db'}`,
+                      borderRadius: '0.5rem', fontSize: '1rem',
+                      background: 'white', color: '#1a1a1a',
+                      transition: 'border-color 0.2s'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={eyeButtonStyle}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
+
+              {/* Password strength meter */}
+              {passwordStrength && password && (
+                <div style={{ marginBottom: '1rem' }}>
+                  {/* Strength bar */}
+                  <div style={{
+                    height: '4px',
+                    background: '#e5e7eb',
+                    borderRadius: '2px',
+                    overflow: 'hidden',
+                    marginBottom: '0.4rem'
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${(passwordStrength.score / 5) * 100}%`,
+                      background: getStrengthColor(passwordStrength.score),
+                      borderRadius: '2px',
+                      transition: 'width 0.3s, background 0.3s'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{
+                      fontSize: '0.72rem',
+                      fontWeight: '600',
+                      color: getStrengthColor(passwordStrength.score)
+                    }}>
+                      {passwordStrength.label}
+                    </span>
+                    {passwordStrength.feedback.length > 0 && (
+                      <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
+                        {passwordStrength.feedback[0]}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div style={{ marginBottom: '1.75rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', color: '#374151' }}>
                   Confirm Password *
                 </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  placeholder="Re-enter your password"
-                  autoComplete="new-password"
-                  style={{
-                    width: '100%', padding: '0.75rem',
-                    border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '1rem',
-                    background: 'white', color: '#1a1a1a'
-                  }}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    placeholder="Re-enter your password"
+                    autoComplete="new-password"
+                    style={{
+                      width: '100%', padding: '0.75rem', paddingRight: '2.75rem',
+                      border: `1px solid ${confirmPassword && confirmPassword === password ? COLORS.success : confirmPassword ? COLORS.error : '#d1d5db'}`,
+                      borderRadius: '0.5rem', fontSize: '1rem',
+                      background: 'white', color: '#1a1a1a',
+                      transition: 'border-color 0.2s'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={eyeButtonStyle}
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {confirmPassword && confirmPassword !== password && (
+                  <p style={{ fontSize: '0.72rem', color: COLORS.error, marginTop: '0.3rem' }}>
+                    Passwords do not match
+                  </p>
+                )}
               </div>
 
               <button
@@ -525,14 +714,14 @@ function Login() {
               </button>
             </form>
 
-            {/* 구분선 */}
+            {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', margin: '1.5rem 0', gap: '1rem' }}>
               <div style={{ flex: 1, height: '1px', background: '#d1d5db' }}></div>
               <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>OR</span>
               <div style={{ flex: 1, height: '1px', background: '#d1d5db' }}></div>
             </div>
 
-            {/* Google 로그인 */}
+            {/* Google login */}
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
@@ -557,7 +746,7 @@ function Login() {
               Sign up with Google
             </button>
 
-            {/* 이미 계정 있음 */}
+            {/* Already have account */}
             <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
               <span style={{ color: '#6b7280', fontSize: '0.875rem' }}>Already have an account? </span>
               <button
@@ -574,7 +763,7 @@ function Login() {
           </>
         )}
 
-        {/* ====== FORGOT PASSWORD 모드 ====== */}
+        {/* ====== FORGOT PASSWORD ====== */}
         {mode === 'forgot' && (
           <form onSubmit={handleForgotPassword}>
             <div style={{ marginBottom: '1.75rem' }}>
@@ -620,7 +809,7 @@ function Login() {
           </form>
         )}
 
-        {/* 푸터 */}
+        {/* Footer with security badge */}
         <div style={{
           marginTop: '2rem',
           padding: '1rem',
@@ -634,6 +823,12 @@ function Login() {
           <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#6b7280', textAlign: 'center' }}>
             Powered by AIRZETA Security Operations
           </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <Lock size={11} color="#9ca3af" />
+            <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+              Protected by Firebase Authentication & App Check
+            </span>
+          </div>
         </div>
       </div>
     </div>
