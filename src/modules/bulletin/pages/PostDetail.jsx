@@ -511,7 +511,7 @@ ${plainText}`;
                       letterSpacing: '0.04em', flexShrink: 0,
                     }}>{prefix}</span>
                   ) : null;
-                })()}}
+                })()}
                 {post.title}
               </h1>
               {showTranslation && translatedTitle && (

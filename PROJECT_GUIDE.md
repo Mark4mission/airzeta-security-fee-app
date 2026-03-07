@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.2
-> **Last Updated**: 2026-03-06
+> **Document Version**: 2.3
+> **Last Updated**: 2026-03-07
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -104,6 +104,7 @@ webapp/
       auth.js                     # Auth helper functions (with security hardening)
       collections.js              # Firestore collection references
       security.js                 # Security module: App Check, rate limiting, session mgmt, audit logging
+      auditSchedule.js             # Security Audit Schedule Firestore helpers (NEW v2.3)
     
     components/                   # Legacy/shared components
       AdminDashboard.jsx          # (Legacy) Admin dashboard
@@ -153,6 +154,10 @@ webapp/
           DocumentDetail.jsx      # View document, download files, admin download tracking
           DocumentEdit.jsx        # Edit document metadata and attachments
       
+      security-audit/
+        SecurityAuditSchedulePage.jsx  # Audit schedule management (admin-only) (NEW v2.3)
+        AuditScheduleSettings.jsx      # Audit schedule settings panel (NEW v2.3)
+      
       settings/
         SettingsPage.jsx          # App settings and user management
         SecurityDashboard.jsx     # Admin security monitoring panel (NEW v2.2)
@@ -175,6 +180,8 @@ webapp/
 | `documentLibrary` | Document Library (SSOP) | title, description, category, iataCode, downloadPermission, pinned, attachments[], uploaderId, uploaderEmail, uploaderBranch, uploaderRole, downloadCount, downloadLog[], createdAt, updatedAt |
 | `securityAuditLog` | Security event tracking (v2.2) | eventType, timestamp, userId, userEmail, userAgent, language, timezone, screenResolution, appCheckActive, deviceFingerprint |
 | `userSecurity` | Per-user security metadata (v2.2) | lastSuccessfulLogin, lastFailedLogin, failedAttemptsSinceLastLogin, totalLogins, totalFailedLogins, lastUserAgent, lastTimezone |
+| `securityAuditSchedules` | Branch security audit schedules (v2.3) | branchName, auditType, startDate, endDate, auditor, status, frequency, notes, findings, recommendations, createdBy, createdAt, updatedAt |
+| `settings/auditScheduleSettings` | Audit schedule configuration (v2.3) | auditTypes[], auditFrequencies[], defaultAuditors[], notificationDaysBefore, defaultAuditDuration |
 
 ---
 
@@ -241,7 +248,30 @@ webapp/
 - **CSV Parsing**: Custom parser handles quoted fields and commas within field values
 - **Privacy**: No raw personal data is displayed; all names are partially masked
 
-### 6.6 Routing
+### 6.6 Security Audit Schedule Module (NEW - v2.3)
+- **Origin**: Integrated from standalone app (https://branch-security-audit.vercel.app)
+- **Access**: Admin-only (`hq_admin` role). Branch users see "Access Restricted" message.
+- **Route**: `/security-audit` in App.jsx, navigation icon: CalendarDays
+- **Sidebar**: Appears as "Audit Schedule" menu item (visible only to admin users)
+- **Features**:
+  - Dashboard with statistics cards (total, scheduled, in progress, completed, overdue, branches)
+  - Table view with sortable columns, inline status dropdown, edit/delete actions
+  - Calendar view with month navigation, day grid showing scheduled audits with color-coded status
+  - Create/Edit modal with branch selection, audit type, date range, auditor, status, frequency, notes, findings, recommendations
+  - Year/branch/status/search filters
+  - Delete confirmation modal
+- **Firestore Collection**: `securityAuditSchedules`
+- **Status Options**: scheduled (blue), in_progress (yellow), completed (green), cancelled (red), postponed (orange)
+- **Settings Integration**: Audit schedule settings panel added to Settings page (`AuditScheduleSettings` component)
+  - Configurable audit types, frequencies, default auditors
+  - Notification reminder days, default audit duration
+  - Persisted in `settings/auditScheduleSettings` Firestore document
+- **Files**:
+  - `src/modules/security-audit/SecurityAuditSchedulePage.jsx` - Main page component
+  - `src/modules/security-audit/AuditScheduleSettings.jsx` - Settings panel component
+  - `src/firebase/auditSchedule.js` - Firestore CRUD helpers and settings management
+
+### 6.7 Routing
 - Uses `HashRouter` (URLs like `/#/bulletin`, `/#/security-level`)
 - This is required for GitHub Pages compatibility
 
@@ -568,6 +598,18 @@ Upgrading to Firebase Authentication with Identity Platform enables:
 - **Build**: 0 errors, 2,547 modules
 - **Deploy**: GitHub Pages + Vercel
 
+### 2026-03-07 (Session 15 - Security Audit Schedule Integration)
+- **Added**: Security Audit Schedule module (admin-only) integrated from standalone branch-security-audit app
+- **Added**: `SecurityAuditSchedulePage.jsx` with table view, calendar view, CRUD operations, statistics dashboard
+- **Added**: `AuditScheduleSettings.jsx` component integrated into existing Settings page
+- **Added**: `auditSchedule.js` Firestore helper with full CRUD + settings management
+- **Added**: "Audit Schedule" sidebar menu item (admin-only, CalendarDays icon)
+- **Added**: `/security-audit` route in App.jsx
+- **Added**: New Firestore collections: `securityAuditSchedules`, `settings/auditScheduleSettings`
+- **Fixed**: PostDetail.jsx JSX syntax error (extra `}` on line 514)
+- **Updated**: PROJECT_GUIDE.md to v2.3
+- Build: 0 errors, 2550 modules
+
 ### 2026-03-04 (Session 13)
 - **Fixed**: World map horizontal banding artifacts — removed latitude grid lines that created prominent horizontal stripes across the map. Removed the CSS linear-gradient background that caused additional banding. Replaced with clean solid ocean color (#0b1929) + subtle radial glow
 - **Improved**: Country fill contrast — changed from `fill="#172e4a" opacity="0.85"` to `fill="#1a3a5c"` (full opacity) with better border strokes (`#254d73`, 0.5px, round joins) for clearer land mass definition
@@ -772,3 +814,6 @@ Level names containing these keywords auto-detect their color:
 | Login lockout won't clear | Client-side lockout resets on page refresh. Server-side Firebase `auth/too-many-requests` requires waiting (usually 15-60 min). |
 | Security audit logs not appearing | Check Firestore rules allow write to `securityAuditLog` collection. The logging is fire-and-forget (silently fails if blocked). |
 | Session timeout too aggressive | Adjust `SESSION_TIMEOUT_MS` in `src/firebase/security.js` (default 8 hours = 28800000 ms). |
+| Audit Schedule not visible in sidebar | Only visible to `hq_admin` role users. Branch users will not see the menu item. |
+| Audit Schedule settings not saving | Check Firestore rules allow write to `settings` collection for authenticated admins. |
+| Audit schedules not loading | Ensure Firestore rules allow read on `securityAuditSchedules` collection for authenticated users. |

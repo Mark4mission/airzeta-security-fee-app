@@ -3,6 +3,7 @@ import { useAuth } from '../../core/AuthContext';
 import { loadSettingsFromFirestore } from '../../firebase/collections';
 import Settings from '../../components/Settings';
 import SecurityDashboard from './SecurityDashboard';
+import AuditScheduleSettings from '../security-audit/AuditScheduleSettings';
 import { ShieldAlert } from 'lucide-react';
 
 const DEFAULT_SETTINGS = {
@@ -122,6 +123,9 @@ function SettingsPage() {
       }}>
         <SecurityDashboard />
       </div>
+
+      {/* Audit Schedule Settings (Admin Only) */}
+      <AuditScheduleSettings />
     </div>
   );
 }
