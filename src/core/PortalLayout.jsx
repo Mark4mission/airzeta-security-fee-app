@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { 
   Shield, Home, Megaphone, DollarSign, ShieldAlert, Settings as SettingsIcon, 
   LogOut, ChevronLeft, ChevronRight, Menu, X, Users, FileText, Link2, FolderOpen,
-  ChevronDown as ChevDown, MessageCircle
+  ChevronDown as ChevDown, MessageCircle, CalendarDays
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
@@ -37,6 +37,7 @@ const NAV_ITEMS = [
   { path: '/security-fee', label: 'Security Fee', icon: DollarSign, roles: ['hq_admin', 'branch_user'] },
   { path: '/security-level', label: 'Security Level', icon: ShieldAlert, roles: ['hq_admin', 'branch_user'] },
   { path: '/important-links', label: 'Important Links', icon: Link2, roles: ['hq_admin', 'branch_user'] },
+  { path: '/security-audit', label: 'Audit Schedule', icon: CalendarDays, roles: ['hq_admin'] },
   { path: '/settings', label: 'Settings & Users', icon: SettingsIcon, roles: ['hq_admin'] },
 ];
 

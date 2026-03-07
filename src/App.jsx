@@ -13,6 +13,7 @@ import SecurityLevelPage from './modules/security-level/SecurityLevelPage';
 import SecurityPolicyPage from './modules/security-policy/SecurityPolicyPage';
 import ImportantLinksPage from './modules/important-links/ImportantLinksPage';
 import SettingsPage from './modules/settings/SettingsPage';
+import SecurityAuditSchedulePage from './modules/security-audit/SecurityAuditSchedulePage';
 import DocumentLibraryPage from './modules/document-library/DocumentLibraryPage';
 import { Shield, Clock, X } from 'lucide-react';
 
@@ -171,6 +172,7 @@ function ProtectedRoutes() {
         <Route path="/document-library/*" element={<DocumentLibraryPage />} />
         <Route path="/security-level" element={<SecurityLevelPage />} />
         <Route path="/important-links" element={<ImportantLinksPage />} />
+        <Route path="/security-audit" element={<SecurityAuditSchedulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
