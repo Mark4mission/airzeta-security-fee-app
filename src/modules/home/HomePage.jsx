@@ -382,15 +382,18 @@ function HomePage() {
   const [upcomingAudits, setUpcomingAudits] = useState([]);
 
   useEffect(() => {
+    // Guard: only fetch data when user is authenticated
+    if (!currentUser) return;
+
     // Fetch bulletins
     getDocs(query(collection(db, 'bulletinPosts'), orderBy('createdAt', 'desc'), limit(5)))
       .then(snap => setLatestBulletins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(err => console.error('[HomePage] Bulletins:', err));
+      .catch(err => console.warn('[HomePage] Bulletins:', err.message));
 
     // Fetch security levels (for mini map)
     getDocs(collection(db, 'securityLevels'))
       .then(snap => setSecurityLevels(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(err => console.error('[HomePage] SecurityLevels:', err));
+      .catch(err => console.warn('[HomePage] SecurityLevels:', err.message));
 
     // Fetch fee data summary
     const fetchFeeStats = async () => {
@@ -447,7 +450,7 @@ function HomePage() {
           thisMonthLabel: now.toLocaleString('en-US', { month: 'short' }),
         });
       } catch (err) {
-        console.error('[HomePage] FeeStats:', err);
+        console.warn('[HomePage] FeeStats:', err.message);
       }
     };
     fetchFeeStats();
@@ -456,9 +459,9 @@ function HomePage() {
     if (isAdmin) {
       getUpcomingAudits()
         .then(data => setUpcomingAudits(data))
-        .catch(err => console.error('[HomePage] UpcomingAudits:', err));
+        .catch(err => console.warn('[HomePage] UpcomingAudits:', err.message));
     }
-  }, []);
+  }, [currentUser, isAdmin]);
 
   return (
     <div>
