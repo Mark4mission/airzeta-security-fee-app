@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d dist",
+    "deploy:rules": "firebase deploy --only firestore:rules,storage:rules",
+    "deploy:rules:firestore": "firebase deploy --only firestore:rules",
+    "deploy:rules:storage": "firebase deploy --only storage:rules"
   },
   "dependencies": {
     "@google/genai": "^1.43.0",
