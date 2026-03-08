@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.4
+> **Document Version**: 2.5
 > **Last Updated**: 2026-03-08
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -103,7 +103,7 @@ webapp/
       config.js                   # Firebase app initialization, exports firebaseApp
       auth.js                     # Auth helper functions (with security hardening)
       collections.js              # Firestore collection references
-      security.js                 # Security module: App Check, rate limiting, session mgmt, audit logging
+      security.js                 # Security module v2.3: App Check, rate limiting, session mgmt, audit logging (with pre-auth event queue)
       auditSchedule.js             # Security Audit Schedule Firestore helpers (NEW v2.3)
     
     components/                   # Legacy/shared components
@@ -174,14 +174,23 @@ webapp/
 | `bulletinPosts` | Security directives | title, content, authorId, authorName, authorRole, attachments, acknowledgedBy[], viewCount, createdAt |
 | `bulletinPosts/{id}/comments` | Comments on posts | text, authorId, authorBranch, authorRole, createdAt |
 | `securityLevels` | Per-station security config | branchName, levels[], activeLevel, activeSince, guidelines[], history[], **airportCode**, updatedAt, updatedBy |
-| `securityFees` | Fee data | (branch-specific fee records) |
-| `securityPolicies` | Policy documents | (policy content) |
+| `securityCosts` | Security fee data | branchName, targetMonth, items[], submittedAt |
+| `systemConfig` | System-level config (security policy content) | (doc ID = configKey, e.g. `securityPolicy`) |
+| `securityPolicies` | Policy documents (legacy) | (policy content) |
 | `importantLinks` | Important links | url, title, category, order |
 | `documentLibrary` | Document Library (SSOP) | title, description, category, iataCode, downloadPermission, pinned, attachments[], uploaderId, uploaderEmail, uploaderBranch, uploaderRole, downloadCount, downloadLog[], createdAt, updatedAt |
+| `contracts` | Branch contract files (chunk storage) | branchName, year, fileName, fileType, fileSize, totalChunks, uploadedAt |
+| `contracts/{id}/chunks` | Contract file binary data chunks | data (base64 string) |
+| `attachments` | Monthly attachment files (chunk storage) | branchName, yearMonth, fileName, fileType, fileSize, totalChunks, uploadedAt |
+| `attachments/{id}/chunks` | Attachment file binary data chunks | data (base64 string) |
+| `exchangeRates` | Monthly exchange rate tables | rates[], fileName, yearMonth, uploadedAt |
 | `securityAuditLog` | Security event tracking (v2.2) | eventType, timestamp, userId, userEmail, userAgent, language, timezone, screenResolution, appCheckActive, deviceFingerprint |
 | `userSecurity` | Per-user security metadata (v2.2) | lastSuccessfulLogin, lastFailedLogin, failedAttemptsSinceLastLogin, totalLogins, totalFailedLogins, lastUserAgent, lastTimezone |
 | `securityAuditSchedules` | Branch security audit schedules (v2.3) | branchName, auditType, startDate, endDate, auditor, status, frequency, notes, findings, recommendations, createdBy, createdAt, updatedAt |
+| `settings/appSettings` | App-wide settings | costItems[], currencies[], paymentMethods[], updatedAt |
 | `settings/auditScheduleSettings` | Audit schedule configuration (v2.3) | auditTypes[], auditFrequencies[], defaultAuditors[], notificationDaysBefore, defaultAuditDuration |
+| `reports` | Generated reports | (admin reports) |
+| `securityNews` | Security news items | (news content, admin-managed) |
 
 ---
 
@@ -632,6 +641,75 @@ Upgrading to Firebase Authentication with Identity Platform enables:
 - **Updated**: PROJECT_GUIDE.md to v2.3
 - Build: 0 errors, 2550 modules
 
+### 2026-03-08 (Session 17 - Authentication Bug Fixes & Security Hardening v2.3)
+
+#### Bug Fixes (Critical - Authentication Failures)
+- **FIXED**: Email login failure — `updateLoginSecurityMeta(email, false, email)` was passing the user's email address as a Firestore document ID to `userSecurity/{uid}`. Since the user was NOT authenticated (login failed), Firestore security rules correctly rejected the write (`isOwner(userId)` check failed). This caused a silent Firestore permission error that could cascade and block the login flow.
+  - **Root Cause**: On failed email login, the code called `updateLoginSecurityMeta(email, ...)` with `email` as the first argument (uid). The Firestore rule `isOwner(userId)` checks `request.auth.uid == userId`, which fails because (a) the user isn't authenticated after a failed login, and (b) even if they were, an email address is not a valid Firebase UID.
+  - **Fix**: Removed the `updateLoginSecurityMeta()` call from the failed login path entirely. Failed login tracking is now handled purely by client-side rate limiting (which doesn't need Firestore writes).
+  
+- **FIXED**: Google login failure — improved error handling with more specific error codes:
+  - Added `auth/internal-error` and `auth/network-request-failed` handlers with user-friendly messages
+  - Enhanced error messages now include `currentOrigin` for easier domain configuration debugging
+  - Added redirect URI guidance (`/__/auth/handler`) to the `auth/unauthorized-domain` error message
+  - Enhanced console logging with both `popupError.code` and `popupError.message` for better debugging
+  
+- **FIXED**: Account creation failure — registration was being blocked by security audit logging trying to write to Firestore collections that the newly-created user didn't have permission to access yet.
+
+#### Security Module v2.3 (`security.js`)
+- **NEW**: Pre-auth event queue system — security events that occur before the user authenticates (failed login attempts, rate limit lockouts, App Check fallback) are queued in memory and automatically flushed to Firestore after successful authentication via `onAuthStateChanged` listener.
+  - Queue auto-clears after 5 minutes if no successful auth occurs (prevents memory leak)
+  - Queued events include all original metadata (timestamps, device fingerprint, etc.)
+- **FIXED**: `updateLoginSecurityMeta()` now validates inputs:
+  - Skips Firestore write if `auth.currentUser` is null (prevents permission errors)
+  - Rejects uid values that contain `@` (prevents email-as-uid bug)
+  - Only updates failed attempt counters when `currentUser.uid === uid` (owner-only write)
+- **IMPROVED**: `logSecurityEvent()` now checks `auth.currentUser` before attempting Firestore write; queues event if user is not authenticated
+- **IMPORT**: Added `onAuthStateChanged` import from `firebase/auth` for auth flush listener
+
+#### Firestore Rules Update (`firestore.rules`)
+- **ADDED**: 6 missing collection rules:
+  - `systemConfig/{docId}` — used by SecurityPolicyPage (`systemConfig/securityPolicy`), admin-only write
+  - `exchangeRates/{docId}` — monthly rate tables, admin-only write
+  - `contracts/{docId}` + `contracts/{docId}/chunks/{chunkId}` — contract files with chunk sub-collection
+  - `attachments/{docId}` + `attachments/{docId}/chunks/{chunkId}` — monthly attachment files with chunk sub-collection
+- **FIXED**: `securityPolicies` rule retained for backward compatibility; actual collection is `systemConfig`
+- **IMPROVED**: Comprehensive comments documenting each collection's purpose and access patterns
+
+#### Build Optimization (`vite.config.js`)
+- **ADDED**: `build.rollupOptions.output.manualChunks` for code splitting:
+  - `vendor-firebase`: Firebase SDK (393KB → separate chunk, cached independently)
+  - `vendor-react`: React + React DOM + React Router (48KB chunk)
+  - `vendor-ui`: lucide-react icons (21KB chunk)
+- **ADDED**: `build.minify: 'esbuild'` for faster, lower-memory minification
+- **RESULT**: Build succeeds within 1GB RAM environment (was OOM-killed with single chunk)
+
+#### Failure Record & Root Cause Analysis
+| Issue | Error Code | Root Cause | Fix |
+|-------|-----------|------------|-----|
+| Email login fails | Firestore `PERMISSION_DENIED` (silent) | `updateLoginSecurityMeta(email, false, email)` — passed email as Firestore doc ID; user not authenticated | Removed failed-login Firestore write; client-side rate limiting only |
+| Google login fails | `auth/unauthorized-domain` | Deployment domain not in Firebase Auth authorized domains AND not in Google Cloud OAuth origins/redirects | Enhanced error message with both origin + redirect URI instructions |
+| Account creation fails | Firestore `PERMISSION_DENIED` (silent) | `logSecurityEvent()` tried to write to `securityAuditLog` before new user profile was fully set up | Added pre-auth event queue; events flush after auth state confirms |
+| Security logging fails | Firestore `PERMISSION_DENIED` | Pre-login events (lockout, failed attempt) tried Firestore write without `auth.currentUser` | `logSecurityEvent()` now queues pre-auth events in memory |
+| Missing collection rules | Firestore `PERMISSION_DENIED` | `systemConfig`, `exchangeRates`, `contracts`, `attachments` had no rules (catch-all `deny all`) | Added explicit rules for all 6 missing collections + sub-collections |
+| Build OOM killed | Process `Killed` signal | Single 1.4MB JS chunk exceeded 1GB sandbox RAM during minification | Added manual chunks splitting + esbuild minifier |
+
+#### App Check — AI Logic Question
+- **Answer**: App Check for AI Logic (Vertex AI / Gemini) is **NOT needed** for this project because:
+  1. The Gemini AI API calls use the `@google/genai` client SDK with a `VITE_GEMINI_API_KEY`, not Firebase AI/Vertex integration
+  2. App Check protects Firebase-integrated services (Firestore, Auth, Storage, Cloud Functions); the Gemini API is a separate Google Cloud product
+  3. If the project migrates to Firebase AI (`firebase/vertexai`), then AI Logic enforcement should be enabled
+  4. Current Gemini usage (translation) has low abuse risk — API key quota limits provide sufficient protection
+
+#### Files Modified
+- `src/firebase/security.js` — v2.3: pre-auth event queue, safe `updateLoginSecurityMeta`, `onAuthStateChanged` import
+- `src/firebase/auth.js` — removed broken `updateLoginSecurityMeta(email, false, email)` call; enhanced Google login error messages
+- `firestore.rules` — added 6 missing collections + sub-collections
+- `vite.config.js` — added manual chunks + esbuild minifier
+- `PROJECT_GUIDE.md` — v2.5: comprehensive technical specs, failure records, updated Firestore collections table
+- Build: **0 errors**, 2550 modules, ~14s
+- Console: **0 errors** (only expected App Check fallback warning in sandbox)
+
 ### 2026-03-08 (Session 16 - Security Rules, App Check & Audit Schedule Enhancement)
 - **Added**: Firebase security rules files (`firestore.rules`, `storage.rules`, `firebase.json`)
   - Replaced open `allow read, write: if true` with proper auth-based rules
@@ -868,3 +946,10 @@ Level names containing these keywords auto-detect their color:
 | Audit Schedule not visible in sidebar | Only visible to `hq_admin` role users. Branch users will not see the menu item. |
 | Audit Schedule settings not saving | Check Firestore rules allow write to `settings` collection for authenticated admins. |
 | Audit schedules not loading | Ensure Firestore rules allow read on `securityAuditSchedules` collection for authenticated users. |
+| Google login `auth/unauthorized-domain` | Add your deployment domain to: (1) Firebase Console > Auth > Settings > Authorized domains, AND (2) Google Cloud Console > APIs & Services > Credentials > OAuth 2.0 Client ID > Authorized JavaScript origins + redirect URIs. Wait 5-10 min after saving. |
+| Email login silent failure | Check browser console for Firestore `PERMISSION_DENIED`. Ensure `securityAuditLog` rules allow `create: if isSignedIn()`. If the error occurs pre-auth, it's expected and handled by the event queue. |
+| Account creation fails silently | The `registerUser()` flow creates Firebase Auth user, then writes to Firestore `users` collection. If Firestore rules block the write, the user exists in Auth but has no profile. Check `users/{userId}` create rule requires `isOwner(userId)`. |
+| Exchange rates not saving | Ensure `exchangeRates` collection has Firestore rules. Previously this collection was missing from rules (fixed in v2.5). |
+| Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
+| Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
+| Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |

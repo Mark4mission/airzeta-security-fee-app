@@ -14,5 +14,19 @@ export default defineConfig({
       '.sandbox.novita.ai',
       'localhost',
     ],
+  },
+  build: {
+    // Use esbuild for faster minification (less memory than terser)
+    minify: 'esbuild',
+    // Split large chunks to reduce memory pressure during build
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage', 'firebase/app-check'],
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-ui': ['lucide-react'],
+        }
+      }
+    }
   }
 })

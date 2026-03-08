@@ -1,12 +1,12 @@
 /**
- * AirZeta Security Portal - Security Hardening Module (v2.2)
+ * AirZeta Security Portal - Security Hardening Module (v2.3)
  * 
  * Implements multi-layer security:
  * 1. Firebase App Check (reCAPTCHA Enterprise) with global fallback
  * 2. Client-side rate limiting for login attempts
  * 3. Brute-force protection with progressive lockout
  * 4. Session management with automatic timeout
- * 5. Security audit logging to Firestore
+ * 5. Security audit logging to Firestore (auth-aware, queued for pre-auth events)
  * 6. Device/environment fingerprinting
  * 7. Suspicious activity detection
  * 
@@ -14,11 +14,18 @@
  * - reCAPTCHA Enterprise works in NA, Europe, Asia (excl. China)
  * - For China/restricted regions: graceful fallback to other security layers
  * - No user-facing friction (reCAPTCHA Enterprise is invisible/score-based)
+ * 
+ * v2.3 Changes:
+ * - Fixed: Security logging no longer fails silently for pre-auth events
+ * - Fixed: updateLoginSecurityMeta skips Firestore write when user is not authenticated
+ * - Added: Pending security events queue, flushed after successful auth
+ * - Improved: Graceful error handling throughout auth flow
  */
 
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } from 'firebase/app-check';
 import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp, increment, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db, auth } from './config';
+import { onAuthStateChanged } from 'firebase/auth';
 
 // ============================================================
 // Configuration Constants
@@ -380,8 +387,49 @@ export const getSessionInfo = () => {
 
 const SECURITY_LOG_COLLECTION = 'securityAuditLog';
 
+// Queue for security events that occur before authentication
+// These are flushed to Firestore after the user successfully authenticates
+let pendingSecurityEvents = [];
+let authFlushListenerSet = false;
+
+/**
+ * Set up a one-time auth state listener to flush pending security events
+ * after the user successfully authenticates
+ */
+const ensureAuthFlushListener = () => {
+  if (authFlushListenerSet) return;
+  authFlushListenerSet = true;
+  
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user && pendingSecurityEvents.length > 0) {
+      console.log(`[Security] Flushing ${pendingSecurityEvents.length} pending security events after auth`);
+      const events = [...pendingSecurityEvents];
+      pendingSecurityEvents = [];
+      
+      for (const event of events) {
+        try {
+          event.userId = event.userId || user.uid;
+          event.userEmail = event.userEmail || user.email;
+          await addDoc(collection(db, SECURITY_LOG_COLLECTION), event);
+        } catch (err) {
+          console.warn('[Security] Failed to flush pending event:', err.message);
+        }
+      }
+    }
+  });
+  
+  // Auto-cleanup after 5 minutes to prevent memory leak
+  setTimeout(() => {
+    unsubscribe();
+    pendingSecurityEvents = []; // Clear any unflushed events
+  }, 5 * 60 * 1000);
+};
+
 /**
  * Log a security event to Firestore
+ * If the user is not authenticated (pre-login events like failed attempts),
+ * events are queued and flushed after successful authentication.
+ * 
  * @param {string} eventType - Type of security event
  * @param {Object} details - Event details
  */
@@ -401,6 +449,14 @@ export const logSecurityEvent = async (eventType, details = {}) => {
       appCheckActive: appCheckAvailable,
       ...details
     };
+    
+    // If user is not authenticated, queue the event for later
+    if (!user) {
+      pendingSecurityEvents.push(logEntry);
+      ensureAuthFlushListener();
+      console.log(`[Security] Queued pre-auth event: ${eventType} (will flush after login)`);
+      return;
+    }
     
     await addDoc(collection(db, SECURITY_LOG_COLLECTION), logEntry);
   } catch (error) {
@@ -433,12 +489,32 @@ export const SECURITY_EVENTS = {
 // ============================================================
 
 /**
- * Update user security metadata on login
+ * Update user security metadata on login.
+ * IMPORTANT: Only writes to Firestore if the user is authenticated.
+ * For failed login attempts where the user is NOT authenticated,
+ * tracking is handled client-side only (rate limiting).
+ * 
+ * @param {string} uid - Firebase UID (must be a real UID, not an email)
+ * @param {boolean} success - Whether the login was successful
+ * @param {string} email - User email for logging purposes
  */
 export const updateLoginSecurityMeta = async (uid, success, email = '') => {
   try {
+    // Guard: Only write to Firestore if the user is currently authenticated
+    // This prevents permission errors for failed login attempts
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      console.log('[Security] Skipping Firestore security meta update (user not authenticated)');
+      return;
+    }
+    
+    // Guard: uid must be a valid Firebase UID (not an email address)
+    if (!uid || uid.includes('@')) {
+      console.warn('[Security] Invalid uid for security meta update, skipping:', uid?.substring(0, 3) + '...');
+      return;
+    }
+    
     const userSecRef = doc(db, 'userSecurity', uid);
-    const userSecDoc = await getDoc(userSecRef);
     
     if (success) {
       await setDoc(userSecRef, {
@@ -451,23 +527,28 @@ export const updateLoginSecurityMeta = async (uid, success, email = '') => {
         updatedAt: serverTimestamp()
       }, { merge: true });
     } else {
-      const currentData = userSecDoc.exists() ? userSecDoc.data() : {};
-      const failedCount = (currentData.failedAttemptsSinceLastLogin || 0) + 1;
-      
-      await setDoc(userSecRef, {
-        lastFailedLogin: serverTimestamp(),
-        failedAttemptsSinceLastLogin: failedCount,
-        totalFailedLogins: increment(1),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      
-      // Log if suspicious (many failed attempts)
-      if (failedCount >= 3) {
-        await logSecurityEvent(SECURITY_EVENTS.SUSPICIOUS_ACTIVITY, {
-          email,
-          failedCount,
-          detail: `${failedCount} consecutive failed login attempts`
-        });
+      // For failed attempts, only update if we can read current data
+      // (user must be the document owner or admin per security rules)
+      if (currentUser.uid === uid) {
+        const userSecDoc = await getDoc(userSecRef);
+        const currentData = userSecDoc.exists() ? userSecDoc.data() : {};
+        const failedCount = (currentData.failedAttemptsSinceLastLogin || 0) + 1;
+        
+        await setDoc(userSecRef, {
+          lastFailedLogin: serverTimestamp(),
+          failedAttemptsSinceLastLogin: failedCount,
+          totalFailedLogins: increment(1),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+        
+        // Log if suspicious (many failed attempts)
+        if (failedCount >= 3) {
+          await logSecurityEvent(SECURITY_EVENTS.SUSPICIOUS_ACTIVITY, {
+            email,
+            failedCount,
+            detail: `${failedCount} consecutive failed login attempts`
+          });
+        }
       }
     }
   } catch (error) {
