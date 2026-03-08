@@ -163,13 +163,14 @@ function Login() {
       } else if (isAppCheckRelatedError(code, msg)) {
         setIsAppCheckError(true);
         setError(buildAppCheckErrorMessage());
-      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+      } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
         const remaining = getRemainingAttempts();
         const baseMsg = 'Invalid email or password.';
-        setError(remaining <= 2 && remaining > 0
-          ? `${baseMsg} ${remaining} attempt${remaining > 1 ? 's' : ''} remaining before temporary lockout.`
-          : baseMsg
-        );
+        if (remaining <= 2 && remaining > 0) {
+          setError(`${baseMsg} ${remaining} attempt${remaining > 1 ? 's' : ''} remaining before temporary lockout.`);
+        } else {
+          setError(`${baseMsg} If you forgot your password, use "Forgot password?" below.`);
+        }
       } else if (code === 'auth/too-many-requests') {
         setError('Too many failed attempts. Please try again later or reset your password.');
       } else {
