@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.5
+> **Document Version**: 2.7
 > **Last Updated**: 2026-03-08
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -1026,6 +1026,60 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-08 (Session 21 - Audit Schedule Bug Fixes v3.2)
+
+#### Bug Fixes (6 issues from user testing)
+
+1. **FIXED: Auditor edit not persisting to table**
+   - **Symptom**: Adding auditors in modal worked visually, but table still showed only previous auditor (e.g., 'TAZ')
+   - **Root Cause**: Form submit passed raw `form` object without explicitly syncing the backward-compatible `auditor` string field. Firestore may have had stale `auditor` value overriding `auditors` array on some reads.
+   - **Fix**: `handleSubmit` now creates `submitData` with explicit `auditors: form.auditors || []` and `auditor: (form.auditors || []).join(', ')` before calling `onSave()`
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AuditFormModal.handleSubmit`
+
+2. **FIXED: File upload never finishes / drag-and-drop non-functional**
+   - **Symptom**: Upload spinner appeared but never completed; drag-and-drop had no effect
+   - **Root Cause**: `FileReader.onload` callback used `async/await` inside a non-async `onload` handler. Errors from `uploadAuditScheduleFile()` weren't caught by the outer try/catch, so `setUploading(false)` was never called on failure. The file input also didn't reset after upload, preventing re-upload of the same file.
+   - **Fix**: Rewrote upload to use `Promise`-based FileReader + `try/finally` for guaranteed `setUploading(false)`. Added drag-and-drop handlers (`onDragOver`, `onDragLeave`, `onDrop`) to the file attachment area. Added visual drag feedback (blue dashed border). File input resets after each upload.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AuditFormModal.handleFileUpload`
+
+3. **FIXED: Korean input orphaned last character (IME composition)**
+   - **Symptom**: Typing Korean in Settings fields (audit types, frequencies, auditors, station names) and pressing Enter submitted the text with the last character appearing separately or missing
+   - **Root Cause**: `onKeyDown` for Enter didn't check `e.nativeEvent?.isComposing`. During Korean IME composition, Enter key finalizes the composing character AND triggers `onKeyDown`, causing premature submission before the character is fully composed.
+   - **Fix**: Added `!e.nativeEvent?.isComposing` guard to ALL `onKeyDown` Enter handlers in both `SecurityAuditSchedulePage.jsx` (auditor input) and `AuditScheduleSettings.jsx` (4 input fields: audit types, frequencies, auditors, station category inputs). Added `onCompositionEnd` handler on auditor input for reliable value sync.
+   - **Files**: `SecurityAuditSchedulePage.jsx`, `AuditScheduleSettings.jsx`
+
+4. **FIXED: Table view text too dark / hard to read**
+   - **Symptom**: Table cells in table view had very dark text that was hard to read
+   - **Root Cause**: `cellStyle` had no explicit color, inheriting the page default `#1E293B`. While readable, the monotone darkness made columns hard to scan. Header row used `COLORS.text.secondary` which was `#64748B` — too light for headers.
+   - **Fix**: Set `cellStyle.color` to `#334155` (darker slate). Explicitly set station name to `#1E293B` (darkest), audit type and dates to `#475569` (medium), notes to `#64748B` (lighter). Header column color changed to `#475569` for better hierarchy.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `ScheduleTable`, `cellStyle`
+
+5. **FIXED: Status dropdown cut off when few rows**
+   - **Symptom**: In table view with only 1-3 rows, clicking the status dropdown caused the menu to appear below the row and get clipped by the table container
+   - **Root Cause**: Dropdown always opened downward (`top: '100%'`) regardless of available viewport space
+   - **Fix**: Added `useRef` on the button and viewport space calculation on toggle. If space below button is less than 220px, the dropdown flips upward (`bottom: '100%'`). Uses `window.innerHeight - rect.bottom` measurement.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `StatusDropdown`
+
+6. **FIXED: Dashboard chart not appearing**
+   - **Symptom**: Analytics dashboard area was blank, no charts shown
+   - **Root Cause**: `AnalyticsDashboard` had `if (!stats || stats.total === 0) return null` — returned nothing when there were zero audits for the selected year. Users couldn't tell if the feature existed.
+   - **Fix**: Changed to show an empty-state placeholder card with icon and message ("No audit data for {year} — Create your first audit schedule to see analytics") when `stats.total === 0`. Charts still render normally when data exists. Also renamed inner `BarChart` component to `MiniBarChart` to avoid shadowing `BarChart3` import from lucide-react.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard`
+
+#### Lessons Learned
+- **Korean IME**: Always check `e.nativeEvent?.isComposing` or `e.nativeEvent.isComposing` before processing Enter key in React `onKeyDown` handlers. This applies to all CJK (Chinese, Japanese, Korean) input methods.
+- **FileReader async**: Never use `async/await` inside `FileReader.onload` without proper error handling — the outer try/catch won't catch async errors. Convert to Promise-based pattern instead.
+- **Dropdown positioning**: Always check viewport bounds before positioning dropdowns. CSS `overflow: hidden` on parent containers clips absolutely-positioned children.
+- **Empty state UX**: Dashboard components should show meaningful placeholders when data is empty, not return null silently. Users need visual confirmation that the feature exists.
+
+#### Files Modified
+- `src/modules/security-audit/SecurityAuditSchedulePage.jsx` — v3.2: all 6 fixes above
+- `src/modules/security-audit/AuditScheduleSettings.jsx` — Korean IME composition guards on all 4 inputs
+- `PROJECT_GUIDE.md` — Session 21 changelog
+- Build: **0 errors**, 2550 modules, ~12.7s
 
 ---
 

@@ -173,7 +173,7 @@ function AuditScheduleSettings() {
               <input
                 type="text" value={newAuditType} onChange={e => setNewAuditType(e.target.value)}
                 placeholder="Add audit type..."
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addToList('auditTypes', newAuditType, setNewAuditType))}
+                onKeyDown={e => e.key === 'Enter' && !e.nativeEvent?.isComposing && (e.preventDefault(), addToList('auditTypes', newAuditType, setNewAuditType))}
                 style={smallInputStyle}
               />
               <button onClick={() => addToList('auditTypes', newAuditType, setNewAuditType)} style={addBtnStyle}>
@@ -202,7 +202,7 @@ function AuditScheduleSettings() {
               <input
                 type="text" value={newFrequency} onChange={e => setNewFrequency(e.target.value)}
                 placeholder="Add frequency..."
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addToList('auditFrequencies', newFrequency, setNewFrequency))}
+                onKeyDown={e => e.key === 'Enter' && !e.nativeEvent?.isComposing && (e.preventDefault(), addToList('auditFrequencies', newFrequency, setNewFrequency))}
                 style={smallInputStyle}
               />
               <button onClick={() => addToList('auditFrequencies', newFrequency, setNewFrequency)} style={addBtnStyle}>
@@ -234,7 +234,7 @@ function AuditScheduleSettings() {
               <input
                 type="text" value={newAuditor} onChange={e => setNewAuditor(e.target.value)}
                 placeholder="Add auditor name..."
-                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addToList('defaultAuditors', newAuditor, setNewAuditor))}
+                onKeyDown={e => e.key === 'Enter' && !e.nativeEvent?.isComposing && (e.preventDefault(), addToList('defaultAuditors', newAuditor, setNewAuditor))}
                 style={smallInputStyle}
               />
               <button onClick={() => addToList('defaultAuditors', newAuditor, setNewAuditor)} style={addBtnStyle}>
@@ -291,7 +291,7 @@ function AuditScheduleSettings() {
                       onChange={e => setNewStation(prev => ({ ...prev, [cat.key]: e.target.value }))}
                       placeholder={cat.placeholder}
                       onKeyDown={e => {
-                        if (e.key === 'Enter') {
+                        if (e.key === 'Enter' && !e.nativeEvent?.isComposing) {
                           e.preventDefault();
                           const val = (newStation[cat.key] || '').trim();
                           if (!val) return;
