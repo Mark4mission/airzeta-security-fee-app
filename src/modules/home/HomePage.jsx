@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2 } from 'lucide-react';
+import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2, CalendarDays, User, AlertTriangle } from 'lucide-react';
 import * as topojson from 'topojson-client';
 import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db } from '../../firebase/config';
+import { getUpcomingAudits } from '../../firebase/auditSchedule';
 
 const COLORS = {
   card: '#132F4C',
@@ -378,6 +379,7 @@ function HomePage() {
   const [latestBulletins, setLatestBulletins] = useState([]);
   const [securityLevels, setSecurityLevels] = useState([]);
   const [feeStats, setFeeStats] = useState({ lastMonthActual: 0, thisMonthEst: 0, totalBranches: 0, chartData: [] });
+  const [upcomingAudits, setUpcomingAudits] = useState([]);
 
   useEffect(() => {
     // Fetch bulletins
@@ -449,6 +451,13 @@ function HomePage() {
       }
     };
     fetchFeeStats();
+
+    // Fetch upcoming audits (admin only)
+    if (isAdmin) {
+      getUpcomingAudits()
+        .then(data => setUpcomingAudits(data))
+        .catch(err => console.error('[HomePage] UpcomingAudits:', err));
+    }
   }, []);
 
   return (
@@ -479,6 +488,11 @@ function HomePage() {
           <TimeZoneInfo />
         </div>
       </div>
+
+      {/* Upcoming Security Audit Schedule Card (Admin only) */}
+      {isAdmin && upcomingAudits.length > 0 && (
+        <UpcomingAuditCard audits={upcomingAudits} navigate={navigate} />
+      )}
 
       {/* Module Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -633,6 +647,196 @@ function HomePage() {
 
       {/* Security Pledge */}
       <SecurityPledgeCard />
+    </div>
+  );
+}
+
+// ============================================================
+// UPCOMING AUDIT SCHEDULE CARD (for Home Dashboard)
+// ============================================================
+function UpcomingAuditCard({ audits, navigate }) {
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const thisMonthLabel = now.toLocaleString('en-US', { month: 'long' });
+  const nextMonthLabel = nextMonthDate.toLocaleString('en-US', { month: 'long' });
+
+  const thisMonthAudits = audits.filter(a => (a.startDate || '').substring(0, 7) === thisMonthKey);
+  const nextMonthAudits = audits.filter(a => (a.startDate || '').substring(0, 7) === nextMonthKey);
+  const todayStr = now.toISOString().split('T')[0];
+
+  const STATUS_COLORS = {
+    scheduled: { color: '#3B82F6', bg: '#EFF6FF', border: '#BFDBFE' },
+    in_progress: { color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
+    completed: { color: '#16A34A', bg: '#F0FDF4', border: '#BBF7D0' },
+    postponed: { color: '#EA580C', bg: '#FFF7ED', border: '#FED7AA' },
+  };
+
+  const renderAuditRow = (audit, i) => {
+    const sc = STATUS_COLORS[audit.status] || STATUS_COLORS.scheduled;
+    const isOverdue = audit.status === 'scheduled' && (audit.endDate || audit.startDate || '') < todayStr;
+    return (
+      <div key={audit.id || i} style={{
+        display: 'flex', alignItems: 'center', gap: '0.5rem',
+        padding: '0.4rem 0.5rem', borderRadius: '0.4rem',
+        background: isOverdue ? 'rgba(220,38,38,0.06)' : 'transparent',
+        borderLeft: `3px solid ${isOverdue ? '#DC2626' : sc.color}`,
+        marginBottom: '0.2rem', transition: 'background 0.15s'
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.06)'}
+        onMouseLeave={e => e.currentTarget.style.background = isOverdue ? 'rgba(220,38,38,0.06)' : 'transparent'}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <MapPin size={10} color="#3B82F6" style={{ flexShrink: 0 }} />
+            <span style={{ fontSize: '0.72rem', fontWeight: '600', color: '#E8EAED', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {audit.branchName}
+            </span>
+            {isOverdue && <AlertTriangle size={10} color="#DC2626" style={{ flexShrink: 0 }} />}
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.1rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.58rem', fontFamily: 'monospace', color: '#8B99A8' }}>
+              {audit.startDate ? audit.startDate.substring(5) : '—'}
+              {audit.endDate ? ' ~ ' + audit.endDate.substring(5) : ''}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.15rem', flexShrink: 0 }}>
+          {audit.auditor && (
+            <span style={{ fontSize: '0.58rem', color: '#8B99A8', display: 'flex', alignItems: 'center', gap: '0.15rem' }}>
+              <User size={8} />
+              {audit.auditor.length > 10 ? audit.auditor.substring(0, 10) + '...' : audit.auditor}
+            </span>
+          )}
+          <span style={{
+            padding: '0.1rem 0.3rem', borderRadius: '0.2rem',
+            background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`,
+            fontSize: '0.5rem', fontWeight: '700', textTransform: 'capitalize'
+          }}>
+            {audit.status === 'in_progress' ? 'In Progress' : audit.status}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #132F4C 0%, #1A3A5C 100%)',
+      borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.5rem',
+      border: `1px solid ${COLORS.cardBorder}`, position: 'relative', overflow: 'hidden'
+    }}>
+      <div style={{ position: 'absolute', right: '-20px', bottom: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(233,69,96,0.05)', pointerEvents: 'none' }} />
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            width: '30px', height: '30px', borderRadius: '8px',
+            background: 'linear-gradient(135deg, #E94560 0%, #c23150 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <CalendarDays size={16} color="white" />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '700', color: '#E8EAED' }}>
+              Upcoming Security Inspections
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.62rem', color: '#8B99A8' }}>
+              {thisMonthLabel} & {nextMonthLabel} {now.getFullYear()} Schedule
+            </p>
+          </div>
+        </div>
+        <button onClick={() => navigate('/security-audit')} style={{
+          display: 'flex', alignItems: 'center', gap: '0.25rem',
+          padding: '0.35rem 0.65rem', borderRadius: '0.4rem',
+          background: 'rgba(233,69,96,0.12)', border: '1px solid rgba(233,69,96,0.3)',
+          color: '#E94560', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer',
+          textDecoration: 'none'
+        }}>
+          View All <ArrowRight size={12} />
+        </button>
+      </div>
+
+      {/* Two-column: This Month | Next Month */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        {/* This Month */}
+        <div style={{
+          background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
+          border: '1px solid rgba(30,58,95,0.5)', padding: '0.6rem'
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            marginBottom: '0.4rem', paddingBottom: '0.35rem',
+            borderBottom: '1px solid rgba(30,58,95,0.5)'
+          }}>
+            <Calendar size={12} color="#60A5FA" />
+            <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#60A5FA' }}>
+              {thisMonthLabel}
+            </span>
+            <span style={{
+              marginLeft: 'auto', padding: '0.1rem 0.35rem', borderRadius: '0.2rem',
+              background: 'rgba(59,130,246,0.15)', color: '#60A5FA',
+              fontSize: '0.58rem', fontWeight: '700'
+            }}>
+              {thisMonthAudits.length}
+            </span>
+          </div>
+          {thisMonthAudits.length === 0 ? (
+            <p style={{ fontSize: '0.65rem', color: '#5F6B7A', textAlign: 'center', padding: '0.5rem 0', margin: 0 }}>
+              No inspections scheduled
+            </p>
+          ) : (
+            <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+              {thisMonthAudits.slice(0, 6).map(renderAuditRow)}
+              {thisMonthAudits.length > 6 && (
+                <p style={{ fontSize: '0.58rem', color: '#5F6B7A', textAlign: 'center', margin: '0.3rem 0 0' }}>
+                  +{thisMonthAudits.length - 6} more
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Next Month */}
+        <div style={{
+          background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
+          border: '1px solid rgba(30,58,95,0.5)', padding: '0.6rem'
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            marginBottom: '0.4rem', paddingBottom: '0.35rem',
+            borderBottom: '1px solid rgba(30,58,95,0.5)'
+          }}>
+            <Calendar size={12} color="#34D399" />
+            <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#34D399' }}>
+              {nextMonthLabel}
+            </span>
+            <span style={{
+              marginLeft: 'auto', padding: '0.1rem 0.35rem', borderRadius: '0.2rem',
+              background: 'rgba(16,185,129,0.15)', color: '#34D399',
+              fontSize: '0.58rem', fontWeight: '700'
+            }}>
+              {nextMonthAudits.length}
+            </span>
+          </div>
+          {nextMonthAudits.length === 0 ? (
+            <p style={{ fontSize: '0.65rem', color: '#5F6B7A', textAlign: 'center', padding: '0.5rem 0', margin: 0 }}>
+              No inspections scheduled
+            </p>
+          ) : (
+            <div style={{ maxHeight: '180px', overflowY: 'auto' }}>
+              {nextMonthAudits.slice(0, 6).map(renderAuditRow)}
+              {nextMonthAudits.length > 6 && (
+                <p style={{ fontSize: '0.58rem', color: '#5F6B7A', textAlign: 'center', margin: '0.3rem 0 0' }}>
+                  +{nextMonthAudits.length - 6} more
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
