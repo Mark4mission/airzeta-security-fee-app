@@ -15,7 +15,8 @@ service cloud.firestore {
     }
 
     // ─── Users Collection ───────────────────────────────────────
-    // Admins can read/write all users; users can read their own doc
+    // All signed-in users can read (needed for admin checks, user lists)
+    // Users can create their own profile; update/delete by owner or admin
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isOwner(userId);
@@ -56,8 +57,15 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
-    // ─── Security Policies ──────────────────────────────────────
+    // ─── Security Policies (legacy collection name) ─────────────
     match /securityPolicies/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── System Config (Security Policy content) ────────────────
+    // Used by SecurityPolicyPage for systemConfig/securityPolicy doc
+    match /systemConfig/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
@@ -81,14 +89,49 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ─── Settings (App Settings, Audit Settings, Exchange Rates) ─
+    // ─── Settings (App Settings, Audit Settings) ────────────────
     match /settings/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
+    // ─── Exchange Rates (monthly rate tables) ───────────────────
+    match /exchangeRates/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Contracts (branch contract files with chunk storage) ───
+    match /contracts/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+
+      // Chunk sub-collection for large file storage
+      match /chunks/{chunkId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ─── Attachments (monthly attachment files with chunk storage)
+    match /attachments/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+
+      // Chunk sub-collection for large file storage
+      match /chunks/{chunkId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
+      }
+    }
+
     // ─── Security Audit Log ─────────────────────────────────────
-    // Anyone signed in can create log entries; only admins can read
+    // Signed-in users can create log entries; only admins can read
+    // Logs are immutable (no update/delete)
     match /securityAuditLog/{logId} {
       allow create: if isSignedIn();
       allow read: if isAdmin();
@@ -96,6 +139,7 @@ service cloud.firestore {
     }
 
     // ─── User Security Metadata ─────────────────────────────────
+    // Owner can read/write their own; admin can read all
     match /userSecurity/{userId} {
       allow read: if isAdmin() || isOwner(userId);
       allow write: if isSignedIn() && isOwner(userId);

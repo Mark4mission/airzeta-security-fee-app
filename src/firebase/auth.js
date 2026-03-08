@@ -94,7 +94,9 @@ export const loginUser = async (email, password) => {
         errorCode: error.code,
         deviceFingerprint: getDeviceFingerprint()
       });
-      updateLoginSecurityMeta(email, false, email); // Use email as identifier for failed attempts
+      // Note: Do NOT call updateLoginSecurityMeta here because the user
+      // is not authenticated (login failed), so Firestore writes would be
+      // rejected by security rules. Client-side rate limiting handles this.
     }
     console.error('Login error:', error);
     throw error;
@@ -508,6 +510,7 @@ export const loginWithGoogle = async () => {
   
   console.log('[Google Login] 시작...');
   console.log('[Google Login] 현재 도메인:', currentDomain);
+  console.log('[Google Login] 현재 Origin:', currentOrigin);
   
   try {
     const provider = new GoogleAuthProvider();
@@ -527,7 +530,7 @@ export const loginWithGoogle = async () => {
     return await handleGoogleUserProfile(result.user);
     
   } catch (popupError) {
-    console.warn('[Google Login] signInWithPopup 실패:', popupError.code);
+    console.warn('[Google Login] signInWithPopup 실패:', popupError.code, popupError.message);
     
     if (popupError.code === 'auth/popup-closed-by-user' || 
         popupError.code === 'auth/cancelled-popup-request') {
@@ -538,8 +541,9 @@ export const loginWithGoogle = async () => {
         popupError.code === 'auth/invalid-continue-uri') {
       throw new Error(
         `Google login requires domain authorization.\n\n` +
-        `Current domain: ${currentDomain}\n\n` +
-        `Please configure both:\n\n` +
+        `Current domain: ${currentDomain}\n` +
+        `Current origin: ${currentOrigin}\n\n` +
+        `Please configure BOTH of these:\n\n` +
         `[Step 1] Firebase Console:\n` +
         `  → Authentication > Settings > Authorized domains\n` +
         `  → Add "${currentDomain}"\n\n` +
@@ -547,10 +551,12 @@ export const loginWithGoogle = async () => {
         `  1. Go to console.cloud.google.com\n` +
         `  2. Select project "airzeta-security-system"\n` +
         `  3. APIs & Services > Credentials\n` +
-        `  4. Edit OAuth 2.0 Client ID\n` +
+        `  4. Edit OAuth 2.0 Client ID (Web client)\n` +
         `  5. Add to "Authorized JavaScript origins":\n` +
         `     ${currentOrigin}\n` +
-        `  6. Save and wait 5-10 minutes`
+        `  6. Add to "Authorized redirect URIs":\n` +
+        `     https://airzeta-security-system.firebaseapp.com/__/auth/handler\n` +
+        `  7. Save and wait 5-10 minutes`
       );
     }
     
@@ -560,11 +566,21 @@ export const loginWithGoogle = async () => {
         'Please allow popups for this site and try again.'
       );
     }
+
+    if (popupError.code === 'auth/internal-error' || 
+        popupError.code === 'auth/network-request-failed') {
+      throw new Error(
+        'Network error during Google login.\n\n' +
+        'Please check your internet connection and try again.\n' +
+        'If the problem persists, try refreshing the page.'
+      );
+    }
     
-    // Record failed Google login attempt
+    // Record failed Google login attempt (client-side rate limiting only)
     recordLoginAttempt(false);
     logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN_FAILED, {
       errorCode: popupError.code,
+      errorMessage: popupError.message,
       deviceFingerprint: getDeviceFingerprint()
     });
     
