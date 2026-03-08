@@ -1,14 +1,14 @@
 /**
- * Security Audit Schedule Page (Admin-Only Module) — v3
+ * Security Audit Schedule Page (Admin-Only Module) — v3.2
  * 
- * v3 Enhancements:
- * 1. Multi-auditor selection (tag-based multi-choice)
- * 2. Calendar tooltip on hover (station, auditors, notes, status)
- * 3. Analytics dashboard with charts + print functionality
- * 4. Auditor color-coding (dark-tone palette)
- * 5. "Branch" → "Station" label unification
- * 6. Station categories (overseas, domestic, partner, internal)
- * 7. File upload/download per individual schedule
+ * v3.2 Fixes:
+ * - Auditor multi-edit now persists correctly (explicit auditor+auditors sync on save)
+ * - File upload: fixed async error handling, added drag-and-drop, reset input after upload
+ * - Korean IME composition handling (prevents orphaned last character on Enter)
+ * - Table text readability improved (lighter text colors, better contrast)
+ * - Status dropdown: flips upward when near bottom of viewport
+ * - Dashboard charts: fixed empty-state handling, shows placeholder when no data
+ * - All original v3 features retained
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -493,7 +493,7 @@ function SecurityAuditSchedulePage() {
 const selectStyle = { padding: '0.4rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.75rem', outline: 'none' };
 const btnPrimary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: COLORS.accent, border: 'none', borderRadius: '0.5rem', color: 'white', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 8px rgba(233,69,96,0.25)' };
 const btnSecondary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.secondary, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer' };
-const cellStyle = { padding: '0.6rem 0.75rem', fontSize: '0.78rem', verticalAlign: 'middle' };
+const cellStyle = { padding: '0.6rem 0.75rem', fontSize: '0.78rem', verticalAlign: 'middle', color: '#334155' };
 const actionBtnStyle = { padding: '0.3rem', background: COLORS.surfaceAlt, border: `1px solid ${COLORS.border}`, borderRadius: '0.3rem', color: COLORS.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const labelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '600', color: COLORS.text.secondary, marginBottom: '0.3rem' };
 const inputStyle = { padding: '0.5rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' };
@@ -569,10 +569,11 @@ function HoverTooltip({ schedule, allAuditors, style }) {
 // ============================================================
 
 function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
-  if (!stats || stats.total === 0) return null;
+  if (!stats) return null;
+  // Show dashboard even with 0 total to indicate empty state
 
   // Mini bar chart helper
-  const BarChart = ({ data, maxVal, colorFn }) => (
+  const MiniBarChart = ({ data, maxVal, colorFn }) => (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '60px' }}>
       {Object.entries(data).slice(0, 12).map(([key, val]) => {
         const h = maxVal > 0 ? (val / maxVal) * 100 : 0;
@@ -603,6 +604,16 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
   ].filter(s => s.val > 0);
 
   const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+
+  if (stats.total === 0) {
+    return (
+      <div style={{ marginBottom: '1.25rem', padding: '1.5rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.75rem', textAlign: 'center' }}>
+        <BarChart3 size={32} color={COLORS.text.light} style={{ marginBottom: '0.5rem' }} />
+        <p style={{ margin: 0, fontSize: '0.85rem', color: COLORS.text.secondary, fontWeight: '600' }}>No audit data for {selectedYear}</p>
+        <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: COLORS.text.light }}>Create your first audit schedule to see analytics</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginBottom: '1.25rem' }}>
@@ -663,7 +674,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
             <TrendingUp size={13} color={COLORS.blue} />
             <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>Monthly Distribution</span>
           </div>
-          <BarChart data={(() => {
+          <MiniBarChart data={(() => {
             const d = {};
             MONTHS.forEach((m, i) => {
               const key = `${selectedYear}-${String(i + 1).padStart(2, '0')}`;
@@ -679,7 +690,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
             <FileText size={13} color={COLORS.purple} />
             <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>By Audit Type</span>
           </div>
-          <BarChart data={stats.byAuditType} maxVal={maxType} colorFn={() => COLORS.purple} />
+          <MiniBarChart data={stats.byAuditType} maxVal={maxType} colorFn={() => COLORS.purple} />
         </div>
 
         {/* By Auditor */}
@@ -689,7 +700,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
               <Users size={13} color={COLORS.cyan} />
               <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>By Auditor</span>
             </div>
-            <BarChart data={stats.byAuditor} maxVal={maxAuditor} colorFn={(name) => getAuditorColor(name, allAuditors).bg} />
+            <MiniBarChart data={stats.byAuditor} maxVal={maxAuditor} colorFn={(name) => getAuditorColor(name, allAuditors).bg} />
           </div>
         )}
       </div>
@@ -942,7 +953,7 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
               {columns.map(col => (
-                <th key={col.key} onClick={() => !col.noSort && onSort(col.key)} style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.72rem', fontWeight: '700', color: COLORS.text.secondary, borderBottom: `2px solid ${COLORS.border}`, cursor: col.noSort ? 'default' : 'pointer', width: col.width }}>
+                <th key={col.key} onClick={() => !col.noSort && onSort(col.key)} style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.72rem', fontWeight: '700', color: '#475569', borderBottom: `2px solid ${COLORS.border}`, cursor: col.noSort ? 'default' : 'pointer', width: col.width }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     {col.label}
                     {!col.noSort && sortField === col.key && <ArrowUpDown size={11} color={COLORS.accent} />}
@@ -958,10 +969,10 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
                 <tr key={schedule.id || idx} style={{ borderBottom: `1px solid ${COLORS.borderLight}`, background: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
                   onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC'}>
-                  <td style={cellStyle}><div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><MapPin size={12} color={COLORS.blue} /><span style={{ fontWeight: '600' }}>{schedule.branchName || '-'}</span></div></td>
-                  <td style={cellStyle}>{schedule.auditType || 'General'}</td>
-                  <td style={cellStyle}><span style={{ fontFamily: 'monospace' }}>{schedule.startDate || '-'}</span></td>
-                  <td style={cellStyle}><span style={{ fontFamily: 'monospace' }}>{schedule.endDate || '-'}</span></td>
+                  <td style={cellStyle}><div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><MapPin size={12} color={COLORS.blue} /><span style={{ fontWeight: '600', color: '#1E293B' }}>{schedule.branchName || '-'}</span></div></td>
+                  <td style={{ ...cellStyle, color: '#475569' }}>{schedule.auditType || 'General'}</td>
+                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#475569' }}>{schedule.startDate || '-'}</span></td>
+                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#475569' }}>{schedule.endDate || '-'}</span></td>
                   <td style={cellStyle}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
                       {(schedule.auditors || []).map(a => <AuditorTag key={a} name={a} allAuditors={allAuditors} />)}
@@ -970,7 +981,7 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
                     </div>
                   </td>
                   <td style={cellStyle}><StatusDropdown currentStatus={schedule.status} onChange={(s) => onStatusChange(schedule.id, s)} /></td>
-                  <td style={cellStyle}><span style={{ color: COLORS.text.secondary, fontSize: '0.72rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{schedule.notes || '-'}</span></td>
+                  <td style={cellStyle}><span style={{ color: '#64748B', fontSize: '0.72rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{schedule.notes || '-'}</span></td>
                   <td style={cellStyle}>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
                       <button onClick={() => onEdit(schedule)} title="Edit" style={actionBtnStyle}><Edit3 size={13} /></button>
@@ -993,18 +1004,29 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
 
 function StatusDropdown({ currentStatus, onChange }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef(null);
+  const [dropUp, setDropUp] = useState(false);
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG.scheduled;
   const StatusIcon = statusCfg.icon;
 
+  const handleToggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setDropUp(spaceBelow < 220);
+    }
+    setOpen(!open);
+  };
+
   return (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.5rem', borderRadius: '0.35rem', background: statusCfg.bg, border: `1px solid ${statusCfg.border}`, color: statusCfg.color, fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer' }}>
+      <button ref={btnRef} onClick={handleToggle} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.25rem 0.5rem', borderRadius: '0.35rem', background: statusCfg.bg, border: `1px solid ${statusCfg.border}`, color: statusCfg.color, fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer' }}>
         <StatusIcon size={12} /> {statusCfg.label} <ChevronDown size={10} />
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 500 }} />
-          <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 501, marginTop: '0.2rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', minWidth: '140px' }}>
+          <div style={{ position: 'absolute', [dropUp ? 'bottom' : 'top']: '100%', left: 0, zIndex: 501, [dropUp ? 'marginBottom' : 'marginTop']: '0.2rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden', minWidth: '140px' }}>
             {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
               const Icon = cfg.icon;
               return (
@@ -1170,7 +1192,13 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
     if (!form.branchName || !form.startDate) return;
     setSaving(true);
     try {
-      await onSave(form);
+      // Ensure auditors array and backward-compat auditor string are synced
+      const submitData = {
+        ...form,
+        auditors: form.auditors || [],
+        auditor: (form.auditors || []).join(', ')
+      };
+      await onSave(submitData);
     } finally {
       setSaving(false);
     }
@@ -1204,10 +1232,11 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
     return grouped;
   }, [allStations]);
 
-  // File upload handler
-  const handleFileUpload = async (e) => {
+  // File upload handler - supports both input change and drag-and-drop
+  const handleFileUpload = async (fileToUpload) => {
     if (!isEdit || !schedule?.id) return;
-    const file = e.target.files?.[0];
+    // Accept File object directly or from event
+    const file = fileToUpload instanceof File ? fileToUpload : fileToUpload?.target?.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
       alert('File size must be under 5MB');
@@ -1215,18 +1244,32 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
     }
     setUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = reader.result.split(',')[1];
-        const result = await uploadAuditScheduleFile(schedule.id, file.name, base64, file.type, file.size);
-        setFiles(prev => [...prev, { id: result.id, fileName: file.name, fileType: file.type, fileSize: file.size }]);
-        setUploading(false);
-      };
-      reader.readAsDataURL(file);
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadAuditScheduleFile(schedule.id, file.name, base64, file.type, file.size);
+      setFiles(prev => [...prev, { id: result.id, fileName: file.name, fileType: file.type, fileSize: file.size }]);
     } catch (err) {
       console.error('Upload error:', err);
+      alert('File upload failed. Please try again.');
+    } finally {
       setUploading(false);
+      // Reset file input so same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  // Drag-and-drop handlers for file area
+  const [dragOver, setDragOver] = useState(false);
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setDragOver(false); };
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation(); setDragOver(false);
+    const droppedFile = e.dataTransfer?.files?.[0];
+    if (droppedFile) handleFileUpload(droppedFile);
   };
 
   const handleFileDownload = async (fileItem) => {
@@ -1313,7 +1356,8 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
               <div style={{ position: 'relative' }}>
                 <input type="text" value={auditorInput} onChange={e => { setAuditorInput(e.target.value); setShowAuditorDropdown(true); }}
                   onFocus={() => setShowAuditorDropdown(true)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addAuditor(auditorInput); } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent?.isComposing) { e.preventDefault(); addAuditor(auditorInput); } }}
+                  onCompositionEnd={e => { setAuditorInput(e.target.value); }}
                   placeholder="Type name and press Enter, or select from list..."
                   style={{ ...inputStyle, width: '100%' }} />
                 {showAuditorDropdown && (auditorInput || filteredSuggestions.length > 0) && (
@@ -1374,7 +1418,16 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
 
           {/* File Attachments (edit mode only) */}
           {isEdit && (
-            <div style={{ marginTop: '1rem', padding: '0.75rem', background: COLORS.surfaceAlt, borderRadius: '0.5rem', border: `1px solid ${COLORS.border}` }}>
+            <div
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              style={{
+                marginTop: '1rem', padding: '0.75rem',
+                background: dragOver ? '#EFF6FF' : COLORS.surfaceAlt,
+                borderRadius: '0.5rem',
+                border: dragOver ? `2px dashed ${COLORS.blue}` : `1px solid ${COLORS.border}`,
+                transition: 'all 0.2s'
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <label style={{ ...labelStyle, margin: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Paperclip size={14} /> Attachments
@@ -1382,15 +1435,20 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading}
                   style={{ ...btnSecondary, fontSize: '0.7rem', padding: '0.3rem 0.6rem' }}>
                   {uploading ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={12} />}
-                  Upload
+                  {uploading ? 'Uploading...' : 'Upload'}
                 </button>
-                <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload}
+                <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => handleFileUpload(e)}
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip" />
               </div>
+              {dragOver && (
+                <div style={{ padding: '0.75rem', textAlign: 'center', color: COLORS.blue, fontSize: '0.78rem', fontWeight: '600' }}>
+                  Drop file here to upload
+                </div>
+              )}
               {loadingFiles ? (
                 <div style={{ padding: '0.5rem', textAlign: 'center' }}><Loader size={14} style={{ animation: 'spin 1s linear infinite', color: COLORS.text.light }} /></div>
-              ) : files.length === 0 ? (
-                <p style={{ margin: 0, fontSize: '0.72rem', color: COLORS.text.light }}>No files attached. Upload checklists, documents, or photos.</p>
+              ) : files.length === 0 && !dragOver ? (
+                <p style={{ margin: 0, fontSize: '0.72rem', color: COLORS.text.light }}>No files attached. Upload or drag & drop checklists, documents, or photos.</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                   {files.map(f => (
