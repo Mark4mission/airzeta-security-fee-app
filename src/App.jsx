@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, Component } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import './App.css';
 import { AuthProvider, useAuth } from './core/AuthContext';
@@ -71,6 +71,66 @@ function SessionWarningToast() {
       </div>
     </div>
   );
+}
+
+// ============================================================
+// Error Boundary — catches render errors so the app doesn't go blank
+// ============================================================
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary] Caught render error:', error, info?.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(135deg, #0B1929 0%, #0D2137 100%)', padding: '2rem'
+        }}>
+          <div style={{
+            background: '#132F4C', padding: '2.5rem', borderRadius: '1rem',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.5)', maxWidth: '520px', width: '100%',
+            textAlign: 'center', border: '1px solid #1E3A5F'
+          }}>
+            <div style={{
+              width: '64px', height: '64px', margin: '0 auto 1.25rem',
+              background: 'rgba(239,68,68,0.15)', borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '2px solid rgba(239,68,68,0.3)'
+            }}>
+              <Shield size={32} color="#EF4444" />
+            </div>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: '700', color: '#E8EAED', marginBottom: '0.5rem' }}>
+              Something went wrong
+            </h2>
+            <p style={{ color: '#8B99A8', fontSize: '0.82rem', marginBottom: '1rem', lineHeight: '1.6' }}>
+              An unexpected error occurred. Please refresh the page.
+            </p>
+            <p style={{ color: '#5F6B7A', fontSize: '0.7rem', fontFamily: 'monospace', marginBottom: '1.5rem',
+              padding: '0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.35rem',
+              maxHeight: '80px', overflow: 'auto', wordBreak: 'break-all' }}>
+              {this.state.error?.message || 'Unknown error'}
+            </p>
+            <button onClick={() => window.location.reload()} style={{
+              padding: '0.7rem 1.5rem', background: '#E94560', color: 'white',
+              border: 'none', borderRadius: '0.5rem', fontSize: '0.9rem',
+              fontWeight: '600', cursor: 'pointer'
+            }}>
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 // Loading spinner
@@ -182,12 +242,14 @@ function ProtectedRoutes() {
 
 function App() {
   return (
-    <HashRouter>
-      <AuthProvider>
-        <ProtectedRoutes />
-        <SessionWarningToast />
-      </AuthProvider>
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <AuthProvider>
+          <ProtectedRoutes />
+          <SessionWarningToast />
+        </AuthProvider>
+      </HashRouter>
+    </ErrorBoundary>
   );
 }
 

@@ -13,7 +13,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   CalendarDays, Plus, X, Save, Loader, Settings, Users,
-  Clock, Bell, ChevronDown, ChevronUp, Edit3, Trash2, CheckCircle
+  Clock, Bell, ChevronDown, ChevronUp, Edit3, Trash2, CheckCircle,
+  Building2, MapPin
 } from 'lucide-react';
 import { loadAuditSettings, saveAuditSettings, DEFAULT_AUDIT_SETTINGS } from '../../firebase/auditSchedule';
 
@@ -40,6 +41,7 @@ function AuditScheduleSettings() {
   const [newAuditType, setNewAuditType] = useState('');
   const [newFrequency, setNewFrequency] = useState('');
   const [newAuditor, setNewAuditor] = useState('');
+  const [newStation, setNewStation] = useState({ partner: '', domestic: '', internal: '' });
 
   useEffect(() => {
     const load = async () => {
@@ -239,6 +241,88 @@ function AuditScheduleSettings() {
                 <Plus size={13} />
               </button>
             </div>
+          </div>
+
+          {/* Station Categories */}
+          <div style={{ marginTop: '1rem' }}>
+            <h4 style={sectionTitleStyle}>
+              <Building2 size={14} color={COLORS.blue} />
+              Station Categories
+            </h4>
+            <p style={{ fontSize: '0.68rem', color: COLORS.text.light, marginBottom: '0.6rem' }}>
+              Manage stations beyond overseas branches. Add partners, domestic branches, and internal check items.
+            </p>
+            {[
+              { key: 'partner', label: '🤝 협력업체 (Partners)', placeholder: 'Add partner name...' },
+              { key: 'domestic', label: '🏢 국내지점 (Domestic Branches)', placeholder: 'Add domestic branch...' },
+              { key: 'internal', label: '🔍 사내점검 (Internal Checks)', placeholder: 'Add internal check item...' },
+            ].map(cat => {
+              const stationList = settings.stationCategories?.[cat.key]?.stations || [];
+              return (
+                <div key={cat.key} style={{ marginBottom: '0.75rem', padding: '0.5rem 0.6rem', background: COLORS.surfaceLight, borderRadius: '0.4rem', border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '700', color: COLORS.text.primary, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <MapPin size={11} color={COLORS.accent} />
+                    {cat.label}
+                    <span style={{ fontSize: '0.6rem', fontWeight: '500', color: COLORS.text.light, marginLeft: 'auto' }}>{stationList.length} station(s)</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                    {stationList.map((station, i) => (
+                      <span key={i} style={tagStyle}>
+                        {station}
+                        <button onClick={() => {
+                          const updated = { ...settings.stationCategories };
+                          const stations = [...(updated[cat.key]?.stations || [])];
+                          stations.splice(i, 1);
+                          updated[cat.key] = { ...updated[cat.key], stations };
+                          updateSetting('stationCategories', updated);
+                        }} style={tagRemoveBtnStyle}>
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                    {stationList.length === 0 && (
+                      <span style={{ fontSize: '0.68rem', color: COLORS.text.light }}>No stations added</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <input
+                      type="text"
+                      value={newStation[cat.key] || ''}
+                      onChange={e => setNewStation(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                      placeholder={cat.placeholder}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = (newStation[cat.key] || '').trim();
+                          if (!val) return;
+                          const updated = { ...settings.stationCategories };
+                          const stations = [...(updated[cat.key]?.stations || [])];
+                          if (stations.includes(val)) return;
+                          stations.push(val);
+                          updated[cat.key] = { ...updated[cat.key], stations };
+                          updateSetting('stationCategories', updated);
+                          setNewStation(prev => ({ ...prev, [cat.key]: '' }));
+                        }
+                      }}
+                      style={smallInputStyle}
+                    />
+                    <button onClick={() => {
+                      const val = (newStation[cat.key] || '').trim();
+                      if (!val) return;
+                      const updated = { ...settings.stationCategories };
+                      const stations = [...(updated[cat.key]?.stations || [])];
+                      if (stations.includes(val)) return;
+                      stations.push(val);
+                      updated[cat.key] = { ...updated[cat.key], stations };
+                      updateSetting('stationCategories', updated);
+                      setNewStation(prev => ({ ...prev, [cat.key]: '' }));
+                    }} style={addBtnStyle}>
+                      <Plus size={13} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Notification Settings */}
