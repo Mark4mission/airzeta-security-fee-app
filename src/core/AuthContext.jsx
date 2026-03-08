@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { listenToAuthChanges, logoutUser, isAdmin, isPendingAdmin } from '../firebase/auth';
-import { firebaseApp } from '../firebase/config';
+import { firebaseApp, getAppCheckInfo } from '../firebase/config';
 import {
   initializeSecurityAppCheck,
   startSessionMonitor,
@@ -18,26 +18,50 @@ export function AuthProvider({ children }) {
   const [sessionWarning, setSessionWarning] = useState(false);
   const [securityStatus, setSecurityStatus] = useState({
     appCheckActive: false,
+    appCheckFailed: false,
+    appCheckError: null,
     sessionMonitorActive: false,
     initialized: false
   });
 
-  // Initialize App Check on mount
+  // Initialize App Check status on mount
+  // NOTE: App Check is already initialized in config.js at module load time.
+  // This awaits token validation and sets status accordingly.
   useEffect(() => {
     const initSecurity = async () => {
       try {
+        // This awaits token validation internally
         await initializeSecurityAppCheck(firebaseApp);
+        const info = getAppCheckInfo();
+        const isActive = info.status === 'active';
+        const isFailed = info.status === 'failed';
+        
         setSecurityStatus(prev => ({
           ...prev,
-          appCheckActive: isAppCheckActive(),
+          appCheckActive: isActive,
+          appCheckFailed: isFailed,
+          appCheckError: info.error,
           initialized: true
         }));
-        console.log('[Security] App Check status:', isAppCheckActive() ? 'Active' : 'Inactive (fallback mode)');
+        
+        if (isActive) {
+          console.log('[AuthContext] App Check: Active');
+        } else if (isFailed) {
+          console.error('[AuthContext] App Check: FAILED - auth operations may fail');
+        } else {
+          console.log('[AuthContext] App Check: Disabled');
+        }
       } catch (error) {
-        console.warn('[Security] Security initialization warning:', error.message);
-        setSecurityStatus(prev => ({ ...prev, initialized: true }));
+        console.warn('[AuthContext] Security initialization warning:', error.message);
+        setSecurityStatus(prev => ({ 
+          ...prev, 
+          initialized: true,
+          appCheckFailed: true,
+          appCheckError: error.message 
+        }));
       }
     };
+    
     initSecurity();
   }, []);
 

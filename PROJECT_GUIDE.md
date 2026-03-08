@@ -641,6 +641,79 @@ Upgrading to Firebase Authentication with Identity Platform enables:
 - **Updated**: PROJECT_GUIDE.md to v2.3
 - Build: 0 errors, 2550 modules
 
+### 2026-03-08 (Session 18 - App Check Token Fix & Auth Flow Diagnosis v2.5)
+
+#### CRITICAL Root Cause Discovery
+- **ROOT CAUSE**: The `auth/firebase-app-check-token-is-invalid` error on ALL auth flows (email login, Google login, account creation) was caused by using a **reCAPTCHA v2/v3 site key** (`6LeJXIMs...`) instead of a **reCAPTCHA Enterprise key** in `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`.
+  - reCAPTCHA v2/v3 keys start with "6L" and are ~40 characters long
+  - reCAPTCHA Enterprise keys are created in GCP > reCAPTCHA Enterprise console and have a different format
+  - `initializeAppCheck()` with `ReCaptchaEnterpriseProvider` accepts ANY key string without validation
+  - Token generation then FAILS because the key is the wrong type: `AppCheck: ReCAPTCHA error. (appCheck/recaptcha-error)`
+  - With App Check enforcement ON in Firebase Console, ALL auth API calls (signIn, signUp, Google) are rejected server-side with `auth/firebase-app-check-token-is-invalid`
+  - This failure is **server-side** — no amount of client code can work around it
+
+#### Required Admin Actions (Firebase/GCP Console)
+To fully resolve auth failures, the admin must do ONE of:
+
+**Option A (Recommended): Create correct reCAPTCHA Enterprise key**
+1. Go to Google Cloud Console > reCAPTCHA Enterprise > Create Key
+2. Select type "Website", add domains: `airzeta-security-fee-app.vercel.app`, `localhost`
+3. Register the key in Firebase Console > App Check > reCAPTCHA Enterprise provider
+4. Update `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` in `.env` and Vercel environment variables
+5. Redeploy
+
+**Option B (Quick fix): Disable App Check enforcement for Authentication**
+1. Go to Firebase Console > App Check
+2. Find "Authentication" in the APIs list
+3. Click the toggle to **unenforce** (disable) App Check for Authentication
+4. Auth will work immediately without App Check token validation
+
+#### Code Improvements (config.js v2.5)
+- **NEW**: Token validation on startup — `config.js` now calls `getToken()` immediately after `initializeAppCheck()` to detect invalid keys before any user interaction
+- **NEW**: `appCheckReady` Promise — resolves when token validation completes, exposing `'active'` | `'failed'` | `'disabled'` status
+- **NEW**: `getAppCheckInfo()` helper — returns current status, error, site key prefix
+- **NEW**: v2/v3 key format detection — warns if key starts with "6L" (likely wrong type)
+- **NEW**: Rich diagnostic console logging showing exact root cause and fix instructions
+
+#### Code Improvements (security.js v2.5)
+- **CHANGED**: `initializeSecurityAppCheck()` is now `async` — awaits `appCheckReady` before setting status
+- **NEW**: `waitForAppCheckReady()` — returns status with `isActive` and `isFailed` flags
+- **REMOVED**: Redundant `verifyAppCheckToken()` — validation now happens in config.js only
+- **IMPROVED**: Eliminated duplicate logging between config.js and security.js
+
+#### Code Improvements (Login.jsx)
+- **NEW**: App Check warning banner — shown on mount if token validation failed
+- **NEW**: `isAppCheckError` state — separate styling for App Check errors vs domain errors
+- **NEW**: `buildAppCheckErrorMessage()` — actionable error with step-by-step fix instructions
+- **NEW**: `isAppCheckRelatedError()` — detects App Check errors in all 3 auth flows
+- **NEW**: Direct links to reCAPTCHA Enterprise Console and Firebase App Check Console
+- **IMPROVED**: Error banner for App Check errors is red with AlertTriangle icon
+
+#### Code Improvements (AuthContext.jsx)
+- **CHANGED**: Uses async `initializeSecurityAppCheck()` with await
+- **NEW**: `appCheckFailed` and `appCheckError` in `securityStatus` state
+- **IMPROVED**: Cleaner logging without duplicate messages
+
+#### Code Improvements (auth.js)
+- **IMPROVED**: Google login error handler now catches App Check errors in `auth/internal-error`
+- **NEW**: Detects App Check issues in generic error messages and re-throws with correct error code
+
+#### Failure Record
+| Issue | Error | Root Cause | Fix |
+|-------|-------|------------|-----|
+| All auth fails | `auth/firebase-app-check-token-is-invalid` | reCAPTCHA v2/v3 key used instead of Enterprise key | Admin must create Enterprise key OR disable enforcement |
+| Token validation | `appCheck/recaptcha-error` | Wrong key type passed to `ReCaptchaEnterpriseProvider` | Code now detects & reports; admin fixes key |
+| Google login | `auth/internal-error` → "Network error" | App Check invalid token before popup opens | Code now catches & shows App Check error |
+
+#### Files Modified
+- `src/firebase/config.js` — v2.5: token validation Promise, `getAppCheckInfo()`, v2/v3 key detection
+- `src/firebase/security.js` — v2.5: async `initializeSecurityAppCheck()`, `waitForAppCheckReady()`
+- `src/core/AuthContext.jsx` — async init, `appCheckFailed`/`appCheckError` state
+- `src/components/Login.jsx` — App Check warning banner, actionable error messages, console links
+- `src/firebase/auth.js` — Google login App Check error detection
+- `PROJECT_GUIDE.md` — v2.5: session 18 changelog, admin action items
+- Build: **0 errors**, 2550 modules, ~13s
+
 ### 2026-03-08 (Session 17 - Authentication Bug Fixes & Security Hardening v2.3)
 
 #### Bug Fixes (Critical - Authentication Failures)

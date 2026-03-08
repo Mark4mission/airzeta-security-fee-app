@@ -1,8 +1,8 @@
 /**
- * AirZeta Security Portal - Security Hardening Module (v2.3)
+ * AirZeta Security Portal - Security Hardening Module (v2.5)
  * 
  * Implements multi-layer security:
- * 1. Firebase App Check (reCAPTCHA Enterprise) with global fallback
+ * 1. Firebase App Check (reCAPTCHA Enterprise) — with token validation
  * 2. Client-side rate limiting for login attempts
  * 3. Brute-force protection with progressive lockout
  * 4. Session management with automatic timeout
@@ -10,21 +10,22 @@
  * 6. Device/environment fingerprinting
  * 7. Suspicious activity detection
  * 
- * Global Accessibility:
- * - reCAPTCHA Enterprise works in NA, Europe, Asia (excl. China)
- * - For China/restricted regions: graceful fallback to other security layers
- * - No user-facing friction (reCAPTCHA Enterprise is invisible/score-based)
+ * CRITICAL: If App Check enforcement is enabled in Firebase Console,
+ * App Check MUST be initialized BEFORE any Firebase Auth calls.
+ * App Check is initialized in config.js at module load time.
+ * Token validation runs async; appCheckReady promise resolves when done.
  * 
- * v2.3 Changes:
- * - Fixed: Security logging no longer fails silently for pre-auth events
- * - Fixed: updateLoginSecurityMeta skips Firestore write when user is not authenticated
- * - Added: Pending security events queue, flushed after successful auth
- * - Improved: Graceful error handling throughout auth flow
+ * v2.5 Changes:
+ * - FIXED: Added token validation in config.js to detect wrong key type (v2/v3 vs Enterprise)
+ * - FIXED: Auth calls now await appCheckReady before proceeding
+ * - FIXED: Login.jsx shows actionable error when App Check token fails
+ * - Root cause: reCAPTCHA v2/v3 key was used instead of reCAPTCHA Enterprise key
+ * - App Check init succeeds but token generation fails → auth/firebase-app-check-token-is-invalid
  */
 
-import { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } from 'firebase/app-check';
+import { getToken } from 'firebase/app-check';
 import { doc, setDoc, getDoc, updateDoc, collection, addDoc, serverTimestamp, increment, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import { db, auth } from './config';
+import { db, auth, appCheckInstance as configAppCheckInstance, appCheckReady, getAppCheckInfo } from './config';
 import { onAuthStateChanged } from 'firebase/auth';
 
 // ============================================================
@@ -49,83 +50,53 @@ const MIN_PASSWORD_STRENGTH = 3; // out of 5
 const APP_CHECK_REFRESH_MS = 50 * 60 * 1000;
 
 // reCAPTCHA Enterprise Site Key (to be configured in Firebase Console)
-// This is a public key, safe to include in client code
 const RECAPTCHA_ENTERPRISE_SITE_KEY = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY || '';
 
 // ============================================================
-// App Check Initialization (with global fallback)
+// App Check Status (initialized in config.js at module load time)
 // ============================================================
 
-let appCheckInstance = null;
-let appCheckInitialized = false;
-let appCheckAvailable = false;
+let appCheckInstance = configAppCheckInstance;
+let appCheckAvailable = false; // will be set after token validation
 
 /**
- * Initialize Firebase App Check with reCAPTCHA Enterprise
- * Gracefully handles regions where reCAPTCHA is blocked (e.g., China)
+ * Initialize Firebase App Check status.
  * 
- * @param {Object} firebaseApp - The Firebase app instance
- * @returns {Object|null} App Check instance or null if unavailable
+ * NOTE: The actual initializeAppCheck() call now happens in config.js
+ * at module load time, BEFORE getAuth(). This function just syncs status.
+ * 
+ * @param {Object} firebaseApp - The Firebase app instance (unused, kept for API compat)
+ * @returns {Object|null} App Check instance or null
  */
 export const initializeSecurityAppCheck = async (firebaseApp) => {
-  if (appCheckInitialized) return appCheckInstance;
-  appCheckInitialized = true;
+  appCheckInstance = configAppCheckInstance;
 
-  // If no site key configured, skip App Check (development mode)
-  if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
-    console.warn('[Security] App Check: No reCAPTCHA Enterprise site key configured. Skipping App Check initialization.');
-    console.info('[Security] To enable App Check, set VITE_RECAPTCHA_ENTERPRISE_SITE_KEY in .env');
-    return null;
-  }
-
-  try {
-    // Test reCAPTCHA availability first (for China/restricted regions)
-    const recaptchaReachable = await testRecaptchaAvailability();
-    
-    if (!recaptchaReachable) {
-      console.warn('[Security] App Check: reCAPTCHA Enterprise is not reachable (likely blocked region). Using fallback security layers.');
-      logSecurityEvent('app_check_fallback', {
-        reason: 'recaptcha_unreachable',
-        userAgent: navigator.userAgent,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      });
-      return null;
+  if (!appCheckInstance) {
+    const info = getAppCheckInfo();
+    if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
+      console.warn('[Security] App Check: No site key configured. App Check disabled.');
+    } else {
+      console.error('[Security] App Check: Instance not available despite site key being set!');
     }
-
-    // Initialize App Check with reCAPTCHA Enterprise provider
-    appCheckInstance = initializeAppCheck(firebaseApp, {
-      provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
-      isTokenAutoRefreshEnabled: true
-    });
-    
-    appCheckAvailable = true;
-    console.log('[Security] App Check: Successfully initialized with reCAPTCHA Enterprise');
-    
-    return appCheckInstance;
-  } catch (error) {
-    console.warn('[Security] App Check: Initialization failed, using fallback security layers:', error.message);
-    logSecurityEvent('app_check_init_failed', {
-      error: error.message,
-      code: error.code
-    });
     return null;
   }
-};
 
-/**
- * Test if reCAPTCHA Enterprise services are reachable
- * This prevents blocking the app for users in China and other restricted regions
- */
-const testRecaptchaAvailability = () => {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => resolve(false), 3000); // 3 second timeout
-    
-    // Test connectivity to reCAPTCHA domain
-    const img = new Image();
-    img.onload = () => { clearTimeout(timeout); resolve(true); };
-    img.onerror = () => { clearTimeout(timeout); resolve(false); };
-    img.src = `https://www.recaptcha.net/recaptcha/enterprise.js?render=${RECAPTCHA_ENTERPRISE_SITE_KEY}&_=${Date.now()}`;
-  });
+  // Wait for token validation to complete
+  const status = await appCheckReady;
+  appCheckAvailable = (status === 'active');
+  
+  const info = getAppCheckInfo();
+  if (appCheckAvailable) {
+    console.log('[Security] App Check: Active (token validated)');
+  } else {
+    console.error('[Security] App Check: Token validation FAILED!');
+    console.error('[Security] Status:', info.status, '| Error:', info.error);
+    console.error('[Security] If App Check enforcement is ON in Firebase Console,');
+    console.error('[Security] ALL auth operations will fail with auth/firebase-app-check-token-is-invalid');
+    console.error('[Security] FIX: Create a reCAPTCHA Enterprise key (not v2/v3) in GCP Console');
+  }
+  
+  return appCheckInstance;
 };
 
 /**
@@ -144,9 +115,22 @@ export const getAppCheckToken = async () => {
 };
 
 /**
- * Check if App Check is active
+ * Check if App Check is active (token validated successfully)
  */
 export const isAppCheckActive = () => appCheckAvailable;
+
+/**
+ * Wait for App Check to be ready and return status details
+ */
+export const waitForAppCheckReady = async () => {
+  const status = await appCheckReady;
+  return {
+    status,
+    info: getAppCheckInfo(),
+    isActive: status === 'active',
+    isFailed: status === 'failed'
+  };
+};
 
 // ============================================================
 // Rate Limiting & Brute Force Protection
