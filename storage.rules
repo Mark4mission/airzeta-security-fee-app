@@ -1,0 +1,44 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: check if the user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // ─── Document Library Files ──────────────────────────────────
+    // Authenticated users can read; only authenticated users can upload
+    match /document_library/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.size < 100 * 1024 * 1024;  // 100 MB limit
+    }
+
+    // ─── Bulletin Attachments ────────────────────────────────────
+    match /bulletin_attachments/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.size < 50 * 1024 * 1024;  // 50 MB limit
+    }
+
+    // ─── Contract Files ──────────────────────────────────────────
+    match /contracts/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // ─── General Uploads ─────────────────────────────────────────
+    match /uploads/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // ─── Deny all other paths ────────────────────────────────────
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

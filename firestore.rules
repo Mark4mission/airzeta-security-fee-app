@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'hq_admin';
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ─── Users Collection ───────────────────────────────────────
+    // Admins can read/write all users; users can read their own doc
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update, delete: if isAdmin() || isOwner(userId);
+    }
+
+    // ─── Branch Codes ───────────────────────────────────────────
+    match /branchCodes/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Security Costs ─────────────────────────────────────────
+    match /securityCosts/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Bulletin Posts + Comments ──────────────────────────────
+    match /bulletinPosts/{postId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isAdmin() || 
+          (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
+    // ─── Security Levels ────────────────────────────────────────
+    match /securityLevels/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // ─── Security Policies ──────────────────────────────────────
+    match /securityPolicies/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Important Links ────────────────────────────────────────
+    match /importantLinks/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Document Library ───────────────────────────────────────
+    match /documentLibrary/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Security Audit Schedules ───────────────────────────────
+    match /securityAuditSchedules/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Settings (App Settings, Audit Settings, Exchange Rates) ─
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Security Audit Log ─────────────────────────────────────
+    // Anyone signed in can create log entries; only admins can read
+    match /securityAuditLog/{logId} {
+      allow create: if isSignedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false; // Immutable logs
+    }
+
+    // ─── User Security Metadata ─────────────────────────────────
+    match /userSecurity/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    // ─── Reports ────────────────────────────────────────────────
+    match /reports/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Security News ──────────────────────────────────────────
+    match /securityNews/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ─── Deny all other paths ───────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

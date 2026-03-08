@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.3
-> **Last Updated**: 2026-03-07
+> **Document Version**: 2.4
+> **Last Updated**: 2026-03-08
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -248,18 +248,26 @@ webapp/
 - **CSV Parsing**: Custom parser handles quoted fields and commas within field values
 - **Privacy**: No raw personal data is displayed; all names are partially masked
 
-### 6.6 Security Audit Schedule Module (NEW - v2.3)
+### 6.6 Security Audit Schedule Module (NEW - v2.3, Enhanced v2.4)
 - **Origin**: Integrated from standalone app (https://branch-security-audit.vercel.app)
 - **Access**: Admin-only (`hq_admin` role). Branch users see "Access Restricted" message.
 - **Route**: `/security-audit` in App.jsx, navigation icon: CalendarDays
 - **Sidebar**: Appears as "Audit Schedule" menu item (visible only to admin users)
+- **Theme**: Light background with dark text for improved readability (differs from portal's dark theme)
 - **Features**:
   - Dashboard with statistics cards (total, scheduled, in progress, completed, overdue, branches)
-  - Table view with sortable columns, inline status dropdown, edit/delete actions
+  - **Annual Schedule Table** (v2.4): 12-month Gantt-style view grouped by branch with color-coded status cells, legend, today's month highlighted
+  - Table view with sortable columns, inline status dropdown, edit/delete actions, zebra-striped rows
   - Calendar view with month navigation, day grid showing scheduled audits with color-coded status
+  - **Inspector View** (v2.4): Cards grouped by auditor with upcoming/completed/overdue stats, schedule list with branch, dates, status
   - Create/Edit modal with branch selection, audit type, date range, auditor, status, frequency, notes, findings, recommendations
-  - Year/branch/status/search filters
+  - Year/branch/status/search filters with 4 view mode toggles (Annual, Table, Calendar, Inspector)
   - Delete confirmation modal
+- **HomePage Integration** (v2.4): Upcoming Security Inspections card on Home dashboard (admin-only)
+  - Two-column layout: this month & next month
+  - Shows branch name, date range, auditor, status for each audit
+  - Overdue audits highlighted with red border and alert icon
+  - "View All" button navigates to `/security-audit`
 - **Firestore Collection**: `securityAuditSchedules`
 - **Status Options**: scheduled (blue), in_progress (yellow), completed (green), cancelled (red), postponed (orange)
 - **Settings Integration**: Audit schedule settings panel added to Settings page (`AuditScheduleSettings` component)
@@ -267,9 +275,9 @@ webapp/
   - Notification reminder days, default audit duration
   - Persisted in `settings/auditScheduleSettings` Firestore document
 - **Files**:
-  - `src/modules/security-audit/SecurityAuditSchedulePage.jsx` - Main page component
+  - `src/modules/security-audit/SecurityAuditSchedulePage.jsx` - Main page component (4 views)
   - `src/modules/security-audit/AuditScheduleSettings.jsx` - Settings panel component
-  - `src/firebase/auditSchedule.js` - Firestore CRUD helpers and settings management
+  - `src/firebase/auditSchedule.js` - Firestore CRUD helpers, settings, and `getUpcomingAudits()` for HomePage
 
 ### 6.7 Routing
 - Uses `HashRouter` (URLs like `/#/bulletin`, `/#/security-level`)
@@ -540,6 +548,20 @@ The app implements a **multi-layer defense-in-depth** security architecture:
 | Session timeout toast | `App.jsx` | Warning 15 min before auto-logout |
 | Security Dashboard | `SettingsPage.jsx` | Admin-only security monitoring panel |
 
+### Firestore & Storage Security Rules (NEW - v2.4)
+Production-ready security rules are now included in the project root:
+- **`firestore.rules`**: Auth-based rules for all Firestore collections
+  - All read/write requires `request.auth != null`
+  - Admin-only write for: `branchCodes`, `securityPolicies`, `importantLinks`, `securityAuditSchedules`, `settings`, `reports`, `securityNews`
+  - Security audit logs are immutable (create only, no update/delete)
+  - Users can only modify their own `userSecurity` documents
+- **`storage.rules`**: Auth-based rules with file size limits
+  - `document_library/`: 100 MB per file
+  - `bulletin_attachments/`, `contracts/`, `uploads/`: 50 MB per file
+- **`firebase.json`**: Points to the rules files for deployment
+- **Deployment**: Run `firebase deploy --only firestore:rules,storage:rules` (requires Firebase CLI)
+- **Note**: Current Firebase Console still shows `allow read, write: if true` — deploy these rules to enforce authentication
+
 ### Firestore Collections (NEW)
 | Collection | Purpose |
 |-----------|---------|
@@ -608,6 +630,35 @@ Upgrading to Firebase Authentication with Identity Platform enables:
 - **Added**: New Firestore collections: `securityAuditSchedules`, `settings/auditScheduleSettings`
 - **Fixed**: PostDetail.jsx JSX syntax error (extra `}` on line 514)
 - **Updated**: PROJECT_GUIDE.md to v2.3
+- Build: 0 errors, 2550 modules
+
+### 2026-03-08 (Session 16 - Security Rules, App Check & Audit Schedule Enhancement)
+- **Added**: Firebase security rules files (`firestore.rules`, `storage.rules`, `firebase.json`)
+  - Replaced open `allow read, write: if true` with proper auth-based rules
+  - All collections require `request.auth != null` for read/write
+  - Admin-only write for settings, audit schedules, policies, links
+  - Immutable security audit logs (no update/delete)
+  - Storage rules with file size limits (100MB documents, 50MB attachments)
+- **Verified**: App Check initialization with sitekey `6LeJXIMsAAAAADFkE1nIoxWx0Pp7TYeRjodH2osb`
+  - `.env` already has `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY` configured
+  - `security.js` properly initializes `ReCaptchaEnterpriseProvider` with fallback for restricted regions
+  - `AuthContext.jsx` calls `initializeSecurityAppCheck(firebaseApp)` on mount
+  - Console confirms correct behavior: Active in supported regions, graceful fallback otherwise
+- **Enhanced**: SecurityAuditSchedulePage with comprehensive improvements
+  - NEW: Annual Schedule Table (12-month Gantt-style view grouped by branch)
+  - NEW: Inspector View (cards grouped by auditor with schedule lists & stats)
+  - NEW: Light background theme with dark text for improved readability
+  - NEW: 4 view modes: Annual, Table, Calendar, Inspector
+  - IMPROVED: Status badges with color-coded backgrounds and borders
+  - IMPROVED: Statistics dashboard with light colored cards
+  - IMPROVED: All modals updated to light theme with backdrop blur
+- **Added**: Upcoming Security Inspection card on HomePage dashboard (admin-only)
+  - Shows this month's and next month's audit schedules
+  - Two-column layout with branch names, dates, inspectors, status
+  - Overdue indicator with red highlight
+  - "View All" button navigating to `/security-audit`
+- **Added**: `getUpcomingAudits()` helper in `auditSchedule.js` for HomePage
+- **Updated**: PROJECT_GUIDE.md to v2.4
 - Build: 0 errors, 2550 modules
 
 ### 2026-03-04 (Session 13)

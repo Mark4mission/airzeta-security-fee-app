@@ -294,6 +294,43 @@ export const loadAuditSettings = async () => {
  * @param {Object} settings - Settings to save
  * @returns {Promise<Object>}
  */
+/**
+ * Get upcoming audit schedules for the current and next month
+ * Used by the HomePage dashboard card
+ * @returns {Promise<Array>} Upcoming audit entries sorted by startDate
+ */
+export const getUpcomingAudits = async () => {
+  try {
+    await ensureAuth();
+    const now = new Date();
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+
+    const snapshot = await getDocs(collection(db, AUDIT_SCHEDULES_COLLECTION));
+    const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Filter to this month & next month, non-cancelled
+    const upcoming = all.filter(s => {
+      const startDate = s.startDate || s.auditDate || '';
+      const monthKey = startDate.substring(0, 7);
+      return (monthKey === thisMonth || monthKey === nextMonth) && s.status !== 'cancelled';
+    });
+
+    // Sort by startDate ascending
+    upcoming.sort((a, b) => {
+      const aDate = a.startDate || a.auditDate || '';
+      const bDate = b.startDate || b.auditDate || '';
+      return aDate.localeCompare(bDate);
+    });
+
+    return upcoming;
+  } catch (error) {
+    console.error('[AuditSchedule] Get upcoming error:', error);
+    return [];
+  }
+};
+
 export const saveAuditSettings = async (settings) => {
   try {
     await ensureAuth();
