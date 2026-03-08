@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.7
+> **Document Version**: 2.8
 > **Last Updated**: 2026-03-08
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -1026,6 +1026,43 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-08 (Session 22 - Audit Schedule Enhancements v3.3)
+
+#### New Features
+
+1. **Findings & Recommendations Count Fields**
+   - **What**: When audit status is `completed` or `in_progress`, the form modal now shows numeric count inputs (`findingsCount`, `recommendationsCount`) alongside the existing text areas for findings/recommendations.
+   - **UI**: Yellow-tinted card for Findings (시정조치) with count input + textarea; Cyan-tinted card for Recommendations (개선권고) with count input + textarea. Labels are bilingual (Korean + English).
+   - **Dashboard**: Two new summary cards added — "Findings" (orange) and "Recommendations" (cyan) showing year-total counts aggregated from all schedules' `findingsCount` and `recommendationsCount` fields.
+   - **Table View**: New "결과" (Results) column between Status and Notes columns. Displays "시정 N" (orange) and "권고 N" (cyan) when counts > 0, or "—" when no results.
+   - **Print**: Results column included in printed PDF layout.
+   - **Firestore**: `findingsCount` and `recommendationsCount` are integer fields saved to each `securityAuditSchedules` document.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AuditFormModal`, `ScheduleTable`, `AnalyticsDashboard`, `handlePrint`
+
+2. **Dashboard Summary Card Hover Popovers**
+   - **What**: Hovering over any of the 8 dashboard summary cards now shows a dark tooltip/popover with a detailed list of the relevant items (up to 8 entries per card).
+   - **Cards affected**: Total Audits, Scheduled, In Progress, Completed, Overdue, Stations, Findings, Recommendations.
+   - **Behavior**: Popover appears below the card on mouseEnter, disappears on mouseLeave. Shows station name + date for status-based cards, station name + count for Findings/Recommendations, station: count for Stations card.
+   - **Hook safety**: `useMemo` for `cardDetails` placed before the `if (!stats) return null` guard to comply with React Rules of Hooks.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard`
+
+3. **Improved File Upload Error Handling**
+   - **What**: File upload errors now show inline red error banners instead of `alert()` dialogs. Specific error messages for Firestore permission-denied, network offline, and generic failures.
+   - **New state**: `uploadError` string displayed in the file attachments section.
+   - **Edge case**: If the schedule hasn't been saved yet (new schedule), an explicit message tells the user to save first and then re-open to attach files.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AuditFormModal.handleFileUpload`
+
+#### Technical Notes
+- Dashboard grid changed from `minmax(130px, 1fr)` to `minmax(115px, 1fr)` to accommodate 8 cards.
+- `AnalyticsDashboard` now receives `schedules` prop alongside `stats` to compute findingsCount/recommendationsCount totals client-side.
+- `cardDetails` uses `useMemo` with `[schedules, stats]` dependency array for performance.
+
+#### Files Modified
+- `src/modules/security-audit/SecurityAuditSchedulePage.jsx` — v3.3: findings/recommendations counts, card hover popovers, file upload error UX
+- `PROJECT_GUIDE.md` — Session 22 changelog (v2.8)
 
 ---
 

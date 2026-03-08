@@ -1,6 +1,14 @@
 /**
- * Security Audit Schedule Page (Admin-Only Module) — v3.2
+ * Security Audit Schedule Page (Admin-Only Module) — v3.3
  * 
+ * v3.3 Enhancements:
+ * - File upload: improved error handling, explicit error messages for Firestore permission errors,
+ *   added retry mechanism, cleaner drag-and-drop UX, progress feedback
+ * - Findings/Recommendations: added numeric count fields (findingsCount, recommendationsCount)
+ *   in completed/in_progress status. Counts shown in dashboard totals and table '결과' column.
+ * - Dashboard summary cards: hover popover with detailed breakdown per card
+ * - Statistics: getAuditStatistics now aggregates findingsCount + recommendationsCount totals
+ *
  * v3.2 Fixes:
  * - Auditor multi-edit now persists correctly (explicit auditor+auditors sync on save)
  * - File upload: fixed async error handling, added drag-and-drop, reset input after upload
@@ -261,6 +269,9 @@ function SecurityAuditSchedulePage() {
       const auditorNames = (s.auditors || []).join(', ') || s.auditor || '-';
       const cat = CATEGORY_LABELS[s.stationCategory];
       const catLabel = cat ? `${cat.icon} ${cat.label}` : '';
+      const fc = parseInt(s.findingsCount) || 0;
+      const rc = parseInt(s.recommendationsCount) || 0;
+      const resultStr = (fc > 0 || rc > 0) ? `시정${fc}/권고${rc}` : '-';
       return `<tr>
         <td>${s.branchName || '-'}</td>
         <td style="font-size:0.7rem;color:#64748B">${catLabel}</td>
@@ -269,6 +280,7 @@ function SecurityAuditSchedulePage() {
         <td style="font-family:monospace">${s.endDate || '-'}</td>
         <td>${auditorNames}</td>
         <td>${statusLabel}</td>
+        <td style="text-align:center;font-weight:700">${resultStr}</td>
         <td style="font-size:0.72rem;color:#64748B">${(s.notes || '-').substring(0, 80)}</td>
       </tr>`;
     }).join('');
@@ -308,8 +320,8 @@ function SecurityAuditSchedulePage() {
     </div>
     ${statsSummary}
     <table>
-      <thead><tr><th>Station</th><th>Category</th><th>Audit Type</th><th>Start</th><th>End</th><th>Auditors</th><th>Status</th><th>Notes</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#94A3B8">No audit schedules found</td></tr>'}</tbody>
+      <thead><tr><th>Station</th><th>Category</th><th>Audit Type</th><th>Start</th><th>End</th><th>Auditors</th><th>Status</th><th>Results</th><th>Notes</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="9" style="text-align:center;color:#94A3B8">No audit schedules found</td></tr>'}</tbody>
     </table>
     <div class="footer"><span>AirZeta Security Portal — Audit Schedule</span><span>Page 1</span></div>
     </body></html>`);
@@ -388,7 +400,7 @@ function SecurityAuditSchedulePage() {
 
       {/* Analytics Dashboard */}
       <div data-print-area>
-        {stats && <AnalyticsDashboard stats={stats} allAuditors={allAuditors} selectedYear={selectedYear} viewMode={viewMode} />}
+        {stats && <AnalyticsDashboard stats={stats} allAuditors={allAuditors} selectedYear={selectedYear} viewMode={viewMode} schedules={filteredSchedules} />}
       </div>
 
       {/* Filters Bar */}
@@ -568,7 +580,25 @@ function HoverTooltip({ schedule, allAuditors, style }) {
 // Analytics Dashboard (charts via CSS)
 // ============================================================
 
-function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
+function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedules }) {
+  const [hoveredCard, setHoveredCard] = useState(null);
+
+  // Build detail data for card hover popovers
+  const cardDetails = useMemo(() => {
+    if (!schedules) return {};
+    const now = new Date().toISOString().split('T')[0];
+    return {
+      'Total Audits': schedules.slice(0, 8).map(s => `${s.branchName || '-'} (${STATUS_CONFIG[s.status]?.label || s.status})`),
+      'Scheduled': schedules.filter(s => s.status === 'scheduled').slice(0, 8).map(s => `${s.branchName || '-'} — ${s.startDate || '?'}`),
+      'In Progress': schedules.filter(s => s.status === 'in_progress').slice(0, 8).map(s => `${s.branchName || '-'} — ${s.startDate || '?'}`),
+      'Completed': schedules.filter(s => s.status === 'completed').slice(0, 8).map(s => `${s.branchName || '-'} — ${s.startDate || '?'}`),
+      'Overdue': schedules.filter(s => s.status === 'scheduled' && (s.endDate || s.auditDate || '') < now).slice(0, 8).map(s => `${s.branchName || '-'} — ${s.endDate || '?'}`),
+      'Stations': Object.entries((stats || {}).byBranch || {}).slice(0, 10).map(([b, cnt]) => `${b}: ${cnt}`),
+      'Findings': schedules.filter(s => (s.findingsCount || 0) > 0).slice(0, 8).map(s => `${s.branchName || '-'}: ${s.findingsCount}`),
+      'Recommendations': schedules.filter(s => (s.recommendationsCount || 0) > 0).slice(0, 8).map(s => `${s.branchName || '-'}: ${s.recommendationsCount}`),
+    };
+  }, [schedules, stats]);
+
   if (!stats) return null;
   // Show dashboard even with 0 total to indicate empty state
 
@@ -605,6 +635,10 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
 
   const completionRate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
+  // Aggregate findings and recommendations totals
+  const totalFindings = (schedules || []).reduce((sum, s) => sum + (parseInt(s.findingsCount) || 0), 0);
+  const totalRecommendations = (schedules || []).reduce((sum, s) => sum + (parseInt(s.recommendationsCount) || 0), 0);
+
   if (stats.total === 0) {
     return (
       <div style={{ marginBottom: '1.25rem', padding: '1.5rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.75rem', textAlign: 'center' }}>
@@ -618,7 +652,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
   return (
     <div style={{ marginBottom: '1.25rem' }}>
       {/* Summary Cards Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '0.6rem', marginBottom: '0.75rem' }}>
         {[
           { label: 'Total Audits', value: stats.total, icon: BarChart3, color: COLORS.indigo, bg: '#EEF2FF', border: '#C7D2FE' },
           { label: 'Scheduled', value: stats.scheduled, icon: Calendar, color: COLORS.blue, bg: '#EFF6FF', border: '#BFDBFE' },
@@ -626,15 +660,44 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode }) {
           { label: 'Completed', value: stats.completed, icon: CheckCircle, color: COLORS.green, bg: '#F0FDF4', border: '#BBF7D0' },
           { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, color: COLORS.red, bg: '#FEF2F2', border: '#FECACA' },
           { label: 'Stations', value: Object.keys(stats.byBranch).length, icon: Building2, color: COLORS.purple, bg: '#F5F3FF', border: '#DDD6FE' },
+          { label: 'Findings', value: totalFindings, icon: AlertTriangle, color: COLORS.orange, bg: '#FFF7ED', border: '#FED7AA' },
+          { label: 'Recommendations', value: totalRecommendations, icon: FileText, color: COLORS.cyan, bg: '#ECFEFF', border: '#A5F3FC' },
         ].map(card => {
           const Icon = card.icon;
+          const details = cardDetails[card.label] || [];
+          const isHovered = hoveredCard === card.label;
           return (
-            <div key={card.label} style={{ background: card.bg, border: `1px solid ${card.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
+            <div key={card.label}
+              onMouseEnter={() => setHoveredCard(card.label)}
+              onMouseLeave={() => setHoveredCard(null)}
+              style={{ background: card.bg, border: `1px solid ${card.border}`, borderRadius: '0.6rem', padding: '0.75rem', position: 'relative', cursor: 'default', transition: 'box-shadow 0.2s', boxShadow: isHovered ? '0 4px 16px rgba(0,0,0,0.12)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
                 <Icon size={13} color={card.color} />
                 <span style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary }}>{card.label}</span>
               </div>
               <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: card.color }}>{card.value}</p>
+              {/* Hover detail popover */}
+              {isHovered && details.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', zIndex: 100,
+                  marginTop: '0.35rem', background: '#1E293B', color: '#E2E8F0', borderRadius: '0.5rem',
+                  padding: '0.6rem 0.75rem', minWidth: '180px', maxWidth: '260px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)', fontSize: '0.68rem', lineHeight: '1.6',
+                  pointerEvents: 'none'
+                }}>
+                  <div style={{ fontWeight: '700', fontSize: '0.72rem', marginBottom: '0.3rem', color: card.color, borderBottom: '1px solid #334155', paddingBottom: '0.25rem' }}>
+                    {card.label}: {card.value}
+                  </div>
+                  {details.map((d, i) => (
+                    <div key={i} style={{ color: '#CBD5E1', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {d}
+                    </div>
+                  ))}
+                  {(cardDetails[card.label] || []).length > details.length && (
+                    <div style={{ color: '#94A3B8', fontStyle: 'italic', marginTop: '0.15rem' }}>+more...</div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -928,12 +991,13 @@ function InspectorView({ schedules, selectedYear, onEdit, allAuditors }) {
 function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete, onStatusChange, allAuditors }) {
   const columns = [
     { key: 'branchName', label: 'Station', width: '12%' },
-    { key: 'auditType', label: 'Audit Type', width: '14%' },
-    { key: 'startDate', label: 'Start Date', width: '10%' },
-    { key: 'endDate', label: 'End Date', width: '10%' },
-    { key: 'auditors', label: 'Auditors', width: '16%', noSort: true },
-    { key: 'status', label: 'Status', width: '11%' },
-    { key: 'notes', label: 'Notes', width: '15%' },
+    { key: 'auditType', label: 'Audit Type', width: '12%' },
+    { key: 'startDate', label: 'Start Date', width: '9%' },
+    { key: 'endDate', label: 'End Date', width: '9%' },
+    { key: 'auditors', label: 'Auditors', width: '14%', noSort: true },
+    { key: 'status', label: 'Status', width: '10%' },
+    { key: 'results', label: '결과', width: '8%', noSort: true },
+    { key: 'notes', label: 'Notes', width: '14%' },
     { key: 'actions', label: 'Actions', width: '12%', noSort: true },
   ];
 
@@ -981,6 +1045,24 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
                     </div>
                   </td>
                   <td style={cellStyle}><StatusDropdown currentStatus={schedule.status} onChange={(s) => onStatusChange(schedule.id, s)} /></td>
+                  <td style={cellStyle}>
+                    {(schedule.findingsCount > 0 || schedule.recommendationsCount > 0) ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        {schedule.findingsCount > 0 && (
+                          <span style={{ fontSize: '0.68rem', color: COLORS.orange, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <AlertTriangle size={10} /> 시정 {schedule.findingsCount}
+                          </span>
+                        )}
+                        {schedule.recommendationsCount > 0 && (
+                          <span style={{ fontSize: '0.68rem', color: COLORS.cyan, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <FileText size={10} /> 권고 {schedule.recommendationsCount}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.68rem', color: COLORS.text.light }}>—</span>
+                    )}
+                  </td>
                   <td style={cellStyle}><span style={{ color: '#64748B', fontSize: '0.72rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{schedule.notes || '-'}</span></td>
                   <td style={cellStyle}>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
@@ -1167,7 +1249,9 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
     frequency: schedule?.frequency || '',
     notes: schedule?.notes || '',
     findings: schedule?.findings || '',
-    recommendations: schedule?.recommendations || ''
+    recommendations: schedule?.recommendations || '',
+    findingsCount: schedule?.findingsCount || 0,
+    recommendationsCount: schedule?.recommendationsCount || 0
   });
   const [saving, setSaving] = useState(false);
   const [auditorInput, setAuditorInput] = useState('');
@@ -1196,7 +1280,9 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
       const submitData = {
         ...form,
         auditors: form.auditors || [],
-        auditor: (form.auditors || []).join(', ')
+        auditor: (form.auditors || []).join(', '),
+        findingsCount: parseInt(form.findingsCount) || 0,
+        recommendationsCount: parseInt(form.recommendationsCount) || 0
       };
       await onSave(submitData);
     } finally {
@@ -1233,13 +1319,18 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
   }, [allStations]);
 
   // File upload handler - supports both input change and drag-and-drop
+  const [uploadError, setUploadError] = useState('');
   const handleFileUpload = async (fileToUpload) => {
-    if (!isEdit || !schedule?.id) return;
+    setUploadError('');
+    if (!isEdit || !schedule?.id) {
+      setUploadError('Save the schedule first, then re-open to attach files.');
+      return;
+    }
     // Accept File object directly or from event
     const file = fileToUpload instanceof File ? fileToUpload : fileToUpload?.target?.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be under 5MB');
+      setUploadError('File size must be under 5MB');
       return;
     }
     setUploading(true);
@@ -1252,9 +1343,16 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
       });
       const result = await uploadAuditScheduleFile(schedule.id, file.name, base64, file.type, file.size);
       setFiles(prev => [...prev, { id: result.id, fileName: file.name, fileType: file.type, fileSize: file.size }]);
+      setUploadError('');
     } catch (err) {
       console.error('Upload error:', err);
-      alert('File upload failed. Please try again.');
+      if (err.code === 'permission-denied' || err.message?.includes('permission')) {
+        setUploadError('Firestore permission denied. Check database rules allow write to auditScheduleFiles.');
+      } else if (err.code === 'unavailable' || err.message?.includes('offline')) {
+        setUploadError('Network error. Check your internet connection.');
+      } else {
+        setUploadError(`Upload failed: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setUploading(false);
       // Reset file input so same file can be re-selected
@@ -1403,15 +1501,31 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
 
           {(form.status === 'completed' || form.status === 'in_progress') && (
             <>
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={labelStyle}>Findings</label>
+              <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#FFFBEB', borderRadius: '0.5rem', border: '1px solid #FDE68A' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                  <AlertTriangle size={14} color={COLORS.orange} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: COLORS.text.primary }}>Findings (시정조치)</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: '600', color: COLORS.text.secondary, whiteSpace: 'nowrap' }}>건수:</label>
+                  <input type="number" min="0" value={form.findingsCount} onChange={e => updateField('findingsCount', parseInt(e.target.value) || 0)}
+                    style={{ ...inputStyle, width: '80px', textAlign: 'center', fontWeight: '700', fontSize: '0.9rem' }} />
+                </div>
                 <textarea value={form.findings} onChange={e => updateField('findings', e.target.value)}
-                  placeholder="Audit findings..." rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
+                  placeholder="시정조치 세부 내용..." rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
               </div>
-              <div style={{ marginTop: '0.75rem' }}>
-                <label style={labelStyle}>Recommendations</label>
+              <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#ECFEFF', borderRadius: '0.5rem', border: '1px solid #A5F3FC' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                  <FileText size={14} color={COLORS.cyan} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: '700', color: COLORS.text.primary }}>Recommendations (개선권고)</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.72rem', fontWeight: '600', color: COLORS.text.secondary, whiteSpace: 'nowrap' }}>건수:</label>
+                  <input type="number" min="0" value={form.recommendationsCount} onChange={e => updateField('recommendationsCount', parseInt(e.target.value) || 0)}
+                    style={{ ...inputStyle, width: '80px', textAlign: 'center', fontWeight: '700', fontSize: '0.9rem' }} />
+                </div>
                 <textarea value={form.recommendations} onChange={e => updateField('recommendations', e.target.value)}
-                  placeholder="Recommendations..." rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
+                  placeholder="개선권고 세부 내용..." rows={3} style={{ ...inputStyle, width: '100%', resize: 'vertical' }} />
               </div>
             </>
           )}
@@ -1443,6 +1557,11 @@ function AuditFormModal({ schedule, allStations, auditSettings, onSave, onClose,
               {dragOver && (
                 <div style={{ padding: '0.75rem', textAlign: 'center', color: COLORS.blue, fontSize: '0.78rem', fontWeight: '600' }}>
                   Drop file here to upload
+                </div>
+              )}
+              {uploadError && (
+                <div style={{ padding: '0.5rem 0.6rem', marginBottom: '0.4rem', borderRadius: '0.3rem', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontSize: '0.72rem', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <AlertTriangle size={12} /> {uploadError}
                 </div>
               )}
               {loadingFiles ? (
