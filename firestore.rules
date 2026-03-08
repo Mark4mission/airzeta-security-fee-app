@@ -157,6 +157,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ─── Audit Schedule Files (per-schedule attachments with chunks)
+    match /auditScheduleFiles/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn();
+        allow delete: if isAdmin();
+      }
+    }
+
     // ─── Deny all other paths ───────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

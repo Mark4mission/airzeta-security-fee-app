@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../core/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2, CalendarDays, User, AlertTriangle } from 'lucide-react';
+import { DollarSign, Megaphone, ShieldAlert, Shield, ArrowRight, Clock, FileText, Globe2, Link2, QrCode, ExternalLink, X, MapPin, TrendingUp, Users, CheckCircle2, Calendar, CalendarDays, User, AlertTriangle } from 'lucide-react';
 import * as topojson from 'topojson-client';
 import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
