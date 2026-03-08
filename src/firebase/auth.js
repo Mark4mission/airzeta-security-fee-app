@@ -569,11 +569,31 @@ export const loginWithGoogle = async () => {
 
     if (popupError.code === 'auth/internal-error' || 
         popupError.code === 'auth/network-request-failed') {
+      // Check if it might be an App Check issue
+      const isAppCheckIssue = popupError.message?.includes('app-check') || 
+                              popupError.message?.includes('App Check');
+      if (isAppCheckIssue) {
+        const appCheckErr = new Error(
+          'App Check token is invalid. Google login requires a valid App Check token when enforcement is ON.'
+        );
+        appCheckErr.code = 'auth/firebase-app-check-token-is-invalid';
+        throw appCheckErr;
+      }
+      
       throw new Error(
         'Network error during Google login.\n\n' +
         'Please check your internet connection and try again.\n' +
         'If the problem persists, try refreshing the page.'
       );
+    }
+    
+    // Check for App Check token errors
+    if (popupError.code === 'auth/firebase-app-check-token-is-invalid' ||
+        popupError.message?.includes('app-check-token') ||
+        popupError.message?.includes('App Check')) {
+      const appCheckErr = new Error(popupError.message);
+      appCheckErr.code = 'auth/firebase-app-check-token-is-invalid';
+      throw appCheckErr;
     }
     
     // Record failed Google login attempt (client-side rate limiting only)

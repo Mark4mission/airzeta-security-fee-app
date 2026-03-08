@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, LogIn, Loader, ExternalLink, UserPlus, ArrowLeft, Mail, Lock, Eye, EyeOff, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { loginUser, loginWithGoogle, registerUser, resetPassword, initGoogleRedirectResult } from '../firebase/auth';
-import { checkLoginRateLimit, getRemainingAttempts, evaluatePasswordStrength, getStrengthColor } from '../firebase/security';
+import { checkLoginRateLimit, getRemainingAttempts, evaluatePasswordStrength, getStrengthColor, waitForAppCheckReady } from '../firebase/security';
+import { getAppCheckInfo } from '../firebase/config';
 
 const COLORS = {
   primary: '#1B3A7D',
@@ -27,10 +28,12 @@ function Login() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isDomainError, setIsDomainError] = useState(false);
+  const [isAppCheckError, setIsAppCheckError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(null);
   const [lockoutTimer, setLockoutTimer] = useState(0);
+  const [appCheckWarning, setAppCheckWarning] = useState(null);
 
   useEffect(() => {
     const checkRedirectResult = async () => {
@@ -41,6 +44,25 @@ function Login() {
       }
     };
     checkRedirectResult();
+    
+    // Check App Check status on mount
+    const checkAppCheck = async () => {
+      try {
+        const result = await waitForAppCheckReady();
+        if (result.isFailed) {
+          const info = getAppCheckInfo();
+          setAppCheckWarning({
+            message: 'App Check token validation failed. Authentication may not work.',
+            detail: info.error || 'Unknown error',
+            siteKey: info.siteKeyPrefix
+          });
+          console.warn('[Login] App Check failed:', info.error);
+        }
+      } catch (e) {
+        console.warn('[Login] App Check check error:', e);
+      }
+    };
+    checkAppCheck();
   }, []);
 
   // Lockout countdown timer
@@ -75,9 +97,42 @@ function Login() {
     setPassword('');
     setConfirmPassword('');
     setIsDomainError(false);
+    setIsAppCheckError(false);
     setShowPassword(false);
     setShowConfirmPassword(false);
     setPasswordStrength(null);
+  };
+
+  // Helper: Build App Check error message
+  const buildAppCheckErrorMessage = () => {
+    const info = getAppCheckInfo();
+    return (
+      `Firebase App Check token is invalid.\n\n` +
+      `This means App Check enforcement is ON in Firebase Console, but the reCAPTCHA token cannot be validated.\n\n` +
+      `Root Cause: The reCAPTCHA site key may be a v2/v3 key instead of a reCAPTCHA Enterprise key.\n` +
+      `Current key prefix: ${info.siteKeyPrefix}\n\n` +
+      `To fix this (Admin required):\n\n` +
+      `[Option 1] Create correct reCAPTCHA Enterprise key:\n` +
+      `  1. Go to Google Cloud Console > reCAPTCHA Enterprise\n` +
+      `  2. Create a NEW site key (type: "Website")\n` +
+      `  3. Add your domains (${window.location.hostname})\n` +
+      `  4. Copy the new key to .env as VITE_RECAPTCHA_ENTERPRISE_SITE_KEY\n` +
+      `  5. Register the key in Firebase Console > App Check\n` +
+      `  6. Redeploy the application\n\n` +
+      `[Option 2] Temporarily disable App Check enforcement:\n` +
+      `  1. Go to Firebase Console > App Check\n` +
+      `  2. Click on "Authentication" under Enforce\n` +
+      `  3. Toggle enforcement OFF\n` +
+      `  4. This allows auth to work without valid App Check tokens`
+    );
+  };
+
+  // Helper: Check if error is App Check related
+  const isAppCheckRelatedError = (code, msg) => {
+    return code === 'auth/firebase-app-check-token-is-invalid' ||
+           msg?.includes('app-check-token') ||
+           msg?.includes('App Check') ||
+           msg?.includes('app check');
   };
 
   // Email sign in (with rate limiting)
@@ -102,10 +157,14 @@ function Login() {
       // onAuthStateChanged handles the rest
     } catch (err) {
       const code = err.code || '';
+      const msg = err.message || '';
       if (code === 'auth/rate-limited') {
         const rateInfo = checkLoginRateLimit();
         setError(err.message);
         if (rateInfo.isLocked) setLockoutTimer(rateInfo.waitSeconds);
+      } else if (isAppCheckRelatedError(code, msg)) {
+        setIsAppCheckError(true);
+        setError(buildAppCheckErrorMessage());
       } else if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
         const remaining = getRemainingAttempts();
         const baseMsg = 'Invalid email or password.';
@@ -116,7 +175,7 @@ function Login() {
       } else if (code === 'auth/too-many-requests') {
         setError('Too many failed attempts. Please try again later or reset your password.');
       } else {
-        setError(err.message || 'Login failed.');
+        setError(msg || 'Login failed.');
       }
     } finally {
       setLoading(false);
@@ -148,14 +207,18 @@ function Login() {
       await registerUser(email, password, displayName);
     } catch (err) {
       const code = err.code || '';
-      if (code === 'auth/email-already-in-use') {
+      const msg = err.message || '';
+      if (isAppCheckRelatedError(code, msg)) {
+        setIsAppCheckError(true);
+        setError(buildAppCheckErrorMessage());
+      } else if (code === 'auth/email-already-in-use') {
         setError('This email is already registered. Please sign in instead.');
       } else if (code === 'auth/weak-password') {
         setError('Password is too weak. Please use at least 8 characters with mixed case, numbers, and special characters.');
       } else if (code === 'auth/invalid-email') {
         setError('Invalid email address format.');
       } else {
-        setError(err.message || 'Registration failed.');
+        setError(msg || 'Registration failed.');
       }
     } finally {
       setLoading(false);
@@ -211,15 +274,21 @@ function Login() {
     try {
       await loginWithGoogle();
     } catch (err) {
+      const code = err.code || '';
       const msg = err.message || '';
-      if (msg.includes('domain') || msg.includes('unauthorized') || msg.includes('Cloud Console')) {
+      if (isAppCheckRelatedError(code, msg)) {
+        setIsAppCheckError(true);
+        setError(buildAppCheckErrorMessage());
+      } else if (msg.includes('domain') || msg.includes('unauthorized') || msg.includes('Cloud Console')) {
         setIsDomainError(true);
+        setError(msg || 'Google login failed.');
+      } else {
+        if (code === 'auth/rate-limited') {
+          const rateInfo = checkLoginRateLimit();
+          if (rateInfo.isLocked) setLockoutTimer(rateInfo.waitSeconds);
+        }
+        setError(msg || 'Google login failed.');
       }
-      if (err.code === 'auth/rate-limited') {
-        const rateInfo = checkLoginRateLimit();
-        if (rateInfo.isLocked) setLockoutTimer(rateInfo.waitSeconds);
-      }
-      setError(msg || 'Google login failed.');
     } finally {
       setLoading(false);
     }
@@ -323,6 +392,35 @@ function Login() {
           </button>
         )}
 
+        {/* App Check warning banner (shown when token validation fails) */}
+        {appCheckWarning && !error && (
+          <div style={{
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            background: '#fff7ed',
+            border: '1px solid #fb923c',
+            borderRadius: '0.5rem',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.75rem'
+          }}>
+            <AlertTriangle size={20} color="#ea580c" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <div>
+              <p style={{ margin: 0, color: '#9a3412', fontSize: '0.82rem', fontWeight: '600' }}>
+                App Check Configuration Issue
+              </p>
+              <p style={{ margin: '0.25rem 0 0 0', color: '#c2410c', fontSize: '0.75rem', lineHeight: '1.4' }}>
+                {appCheckWarning.message}
+                {appCheckWarning.detail && (
+                  <span style={{ display: 'block', marginTop: '0.2rem', fontSize: '0.7rem', color: '#9a3412' }}>
+                    Detail: {appCheckWarning.detail}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Lockout warning banner */}
         {isLocked && (
           <div style={{
@@ -372,28 +470,48 @@ function Login() {
           <div style={{
             padding: '0.75rem',
             marginBottom: '1rem',
-            background: isDomainError ? '#fef3c7' : '#fee2e2',
-            border: `1px solid ${isDomainError ? '#f59e0b' : '#ef4444'}`,
+            background: isAppCheckError ? '#fef2f2' : isDomainError ? '#fef3c7' : '#fee2e2',
+            border: `1px solid ${isAppCheckError ? '#dc2626' : isDomainError ? '#f59e0b' : '#ef4444'}`,
             borderRadius: '0.5rem',
-            color: isDomainError ? '#92400e' : '#991b1b',
+            color: isAppCheckError ? '#7f1d1d' : isDomainError ? '#92400e' : '#991b1b',
             fontSize: '0.8rem',
             whiteSpace: 'pre-line',
-            maxHeight: '280px',
+            maxHeight: '350px',
             overflowY: 'auto',
             lineHeight: '1.5'
           }}>
+            {isAppCheckError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontWeight: '700', fontSize: '0.85rem' }}>
+                <AlertTriangle size={18} />
+                App Check Token Invalid
+              </div>
+            )}
             {error}
-            {isDomainError && (
-              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #fbbf24' }}>
-                <a href={GCP_CREDENTIALS_URL} target="_blank" rel="noopener noreferrer"
+            {(isDomainError || isAppCheckError) && (
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: `1px solid ${isAppCheckError ? '#fca5a5' : '#fbbf24'}` }}>
+                <a href="https://console.cloud.google.com/security/recaptcha?project=airzeta-security-system" target="_blank" rel="noopener noreferrer"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#1d4ed8', fontWeight: '600', textDecoration: 'underline', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                  <ExternalLink size={14} /> Google Cloud Console (OAuth)
+                  <ExternalLink size={14} /> reCAPTCHA Enterprise Console
                 </a>
                 <br />
-                <a href={FIREBASE_AUTH_DOMAINS_URL} target="_blank" rel="noopener noreferrer"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#1d4ed8', fontWeight: '600', textDecoration: 'underline', fontSize: '0.8rem' }}>
-                  <ExternalLink size={14} /> Firebase Console (Authorized Domains)
+                <a href="https://console.firebase.google.com/project/airzeta-security-system/appcheck" target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#1d4ed8', fontWeight: '600', textDecoration: 'underline', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                  <ExternalLink size={14} /> Firebase App Check Console
                 </a>
+                {isDomainError && (
+                  <>
+                    <br />
+                    <a href={GCP_CREDENTIALS_URL} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#1d4ed8', fontWeight: '600', textDecoration: 'underline', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                      <ExternalLink size={14} /> Google Cloud Console (OAuth)
+                    </a>
+                    <br />
+                    <a href={FIREBASE_AUTH_DOMAINS_URL} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#1d4ed8', fontWeight: '600', textDecoration: 'underline', fontSize: '0.8rem' }}>
+                      <ExternalLink size={14} /> Firebase Console (Authorized Domains)
+                    </a>
+                  </>
+                )}
               </div>
             )}
           </div>
