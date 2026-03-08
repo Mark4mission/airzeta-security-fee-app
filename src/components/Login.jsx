@@ -108,22 +108,20 @@ function Login() {
     const info = getAppCheckInfo();
     return (
       `Firebase App Check token is invalid.\n\n` +
-      `This means App Check enforcement is ON in Firebase Console, but the reCAPTCHA token cannot be validated.\n\n` +
-      `Root Cause: The reCAPTCHA site key may be a v2/v3 key instead of a reCAPTCHA Enterprise key.\n` +
-      `Current key prefix: ${info.siteKeyPrefix}\n\n` +
+      `This means App Check enforcement is ON in Firebase Console, but the reCAPTCHA Enterprise token cannot be validated for this domain.\n\n` +
+      `Current key prefix: ${info.siteKeyPrefix}\n` +
+      `Current domain: ${window.location.hostname}\n\n` +
       `To fix this (Admin required):\n\n` +
-      `[Option 1] Create correct reCAPTCHA Enterprise key:\n` +
+      `[Option 1] Verify reCAPTCHA Enterprise key configuration:\n` +
       `  1. Go to Google Cloud Console > reCAPTCHA Enterprise\n` +
-      `  2. Create a NEW site key (type: "Website")\n` +
-      `  3. Add your domains (${window.location.hostname})\n` +
-      `  4. Copy the new key to .env as VITE_RECAPTCHA_ENTERPRISE_SITE_KEY\n` +
-      `  5. Register the key in Firebase Console > App Check\n` +
-      `  6. Redeploy the application\n\n` +
+      `  2. Edit the site key and confirm it is a "Website" type key\n` +
+      `  3. Add domain "${window.location.hostname}" to the allowed domains\n` +
+      `  4. Ensure reCAPTCHA Enterprise API is enabled\n` +
+      `  5. Register the key in Firebase Console > App Check\n\n` +
       `[Option 2] Temporarily disable App Check enforcement:\n` +
       `  1. Go to Firebase Console > App Check\n` +
       `  2. Click on "Authentication" under Enforce\n` +
-      `  3. Toggle enforcement OFF\n` +
-      `  4. This allows auth to work without valid App Check tokens`
+      `  3. Toggle enforcement OFF`
     );
   };
 

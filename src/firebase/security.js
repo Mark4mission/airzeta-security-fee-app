@@ -1,5 +1,5 @@
 /**
- * AirZeta Security Portal - Security Hardening Module (v2.5)
+ * AirZeta Security Portal - Security Hardening Module (v2.6)
  * 
  * Implements multi-layer security:
  * 1. Firebase App Check (reCAPTCHA Enterprise) — with token validation
@@ -15,12 +15,12 @@
  * App Check is initialized in config.js at module load time.
  * Token validation runs async; appCheckReady promise resolves when done.
  * 
- * v2.5 Changes:
- * - FIXED: Added token validation in config.js to detect wrong key type (v2/v3 vs Enterprise)
- * - FIXED: Auth calls now await appCheckReady before proceeding
- * - FIXED: Login.jsx shows actionable error when App Check token fails
- * - Root cause: reCAPTCHA v2/v3 key was used instead of reCAPTCHA Enterprise key
- * - App Check init succeeds but token generation fails → auth/firebase-app-check-token-is-invalid
+ * v2.6 Changes:
+ * - FIXED: Removed misleading "v2/v3 key" format warnings (Enterprise keys also start with 6L)
+ * - IMPROVED: Cleaner App Check error diagnostics focused on domain authorization
+ * - IMPROVED: config.js documents reCAPTCHA Enterprise + Firebase App Check token flow
+ * - NOTE: GCP Console "키 설정 완료: 토큰 요청 (미완료)" resolves automatically
+ *   when Firebase App Check successfully obtains a token on production domain
  */
 
 import { getToken } from 'firebase/app-check';
@@ -89,11 +89,10 @@ export const initializeSecurityAppCheck = async (firebaseApp) => {
   if (appCheckAvailable) {
     console.log('[Security] App Check: Active (token validated)');
   } else {
-    console.error('[Security] App Check: Token validation FAILED!');
+    console.error('[Security] App Check: Token validation FAILED');
     console.error('[Security] Status:', info.status, '| Error:', info.error);
-    console.error('[Security] If App Check enforcement is ON in Firebase Console,');
-    console.error('[Security] ALL auth operations will fail with auth/firebase-app-check-token-is-invalid');
-    console.error('[Security] FIX: Create a reCAPTCHA Enterprise key (not v2/v3) in GCP Console');
+    console.error('[Security] If App Check enforcement is ON, auth operations may fail');
+    console.error('[Security] Check: domain allowlist, reCAPTCHA Enterprise API, Firebase App Check registration');
   }
   
   return appCheckInstance;

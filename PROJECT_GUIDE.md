@@ -1026,3 +1026,35 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-08 (Session 20 - reCAPTCHA Enterprise Key Fix & App Check Stabilization v2.6)
+
+#### Changes Made
+1. **reCAPTCHA Enterprise key updated**: Replaced old key `6LeJXIMs...` with new key `6LdAk4Ms...` created in GCP Console
+2. **Removed misleading "v2/v3 key" warnings**: reCAPTCHA Enterprise website keys also start with `6L` prefix — the key format alone does NOT indicate v2/v3 vs Enterprise
+3. **config.js**: Cleaned up App Check initialization with accurate comments documenting the full token flow
+4. **security.js v2.6**: Updated error messages to focus on domain authorization instead of key format
+5. **Login.jsx**: Improved App Check error message with domain-specific guidance
+
+#### Key Insight: "키 설정 완료: 토큰 요청" (미완료) Status
+- This GCP Console status means the reCAPTCHA Enterprise key has been created but no token has been successfully requested yet
+- Firebase App Check automatically handles this: `initializeAppCheck()` → `ReCaptchaEnterpriseProvider` → `grecaptcha.enterprise.execute()` → token → Firebase server creates assessment
+- The "미완료" status changes to "완료" after the first successful assessment on a production domain
+- Sandbox domain failures are expected (domain not in allowlist) — this resolves after Vercel deployment
+
+#### Admin Checklist for Production
+1. **Deploy Firestore rules**: Current production rules are STILL `allow read, write: if true` (since 2026-02-17)
+   - Firebase Console > Firestore > Rules > Paste from `firestore.rules` file
+   - OR: `firebase login && npm run deploy:rules`
+2. **Vercel env var**: Set `VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=6LdAk4MsAAAAAINmouJCEQlJiAIONWFGnJlY9qPA`
+3. **GCP Console**: Verify reCAPTCHA Enterprise key has `airzeta-security-fee-app.vercel.app` in allowed domains
+4. **Firebase Console**: Verify App Check > reCAPTCHA Enterprise key is registered
+5. **Firebase Console**: Verify App Check enforcement setting for Authentication
+
+#### Modified Files
+- `src/firebase/config.js` — Cleaner App Check init, removed false v2/v3 warnings
+- `src/firebase/security.js` — v2.6, improved error messages
+- `src/components/Login.jsx` — Better App Check error guidance
+- `PROJECT_GUIDE.md` — Session 20 notes
