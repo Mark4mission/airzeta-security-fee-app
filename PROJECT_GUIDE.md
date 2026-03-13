@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.8
-> **Last Updated**: 2026-03-08
+> **Document Version**: 2.9
+> **Last Updated**: 2026-03-13
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -1026,6 +1026,55 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-13 (Session 23 - Dashboard Charts & Home Page Enhancements)
+
+#### Audit Schedule Dashboard Upgrades (SecurityAuditSchedulePage.jsx v3.4)
+
+1. **Multi-segment Completion Rate Donut**
+   - **What**: The Completion Rate chart was upgraded from a simple progress circle to a multi-segment donut showing all status categories (Scheduled, In Progress, Completed, Cancelled, Postponed) with proportional arc segments.
+   - **Implementation**: Uses SVG `strokeDasharray` and `strokeDashoffset` to draw proportional arcs for each status. The center still shows the completion percentage. A legend beside the donut lists each status with count and percentage.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard`
+
+2. **Stacked Monthly Distribution Bar Chart**
+   - **What**: The Monthly Distribution chart was upgraded from simple single-color bars to stacked bars showing status breakdown per month.
+   - **New component**: `StackedBarChart` renders 12 monthly bars, each subdivided by status (using vertical column-reverse stacking). Legend at bottom shows active statuses.
+   - **Data**: `monthlyStatusData` (useMemo) computes per-month status counts from schedules filtered by `startDate`.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard.StackedBarChart`
+
+3. **By Audit Type — Short Korean Labels + Status Stacking**
+   - **What**: Audit type bar chart labels now use abbreviated Korean translations to prevent truncation (e.g., "Regular Security Audit" → "정기점검", "Special Inspection" → "특별점검"). Bars are also stacked by status.
+   - **Label map**: `AUDIT_TYPE_SHORT` dictionary with 6 common audit types. Fallback: truncate to 5 chars + ".."
+   - **Data**: `auditTypeStatusData` (useMemo) groups schedules by `auditType` with per-status breakdown.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard`
+
+#### Home Page Enhancements (HomePage.jsx)
+
+4. **Security Level Change Notifications**
+   - **What**: Below the mini world map on the Security Level card, the most recent security-level changes (up to 3, within last 30 days) are displayed as compact notification lines.
+   - **Format**: `[Station IATA] [from level] → [to level] [date]`. Most recent entry highlighted with orange border-left and AlertTriangle icon.
+   - **Data source**: Each station's `history[]` array (sorted newest-first). `recentChanges` computed via `useMemo`.
+   - **File**: `HomePage.jsx` → `SecurityLevelMiniMap`
+
+5. **Security Pledge Agreement — Enhanced Stats**
+   - **What**: The pledge card right-side now always renders (with loading/error states), adds a department breakdown horizontal bar chart, and shows up to 10 recent signers (was 8).
+   - **Department breakdown**: Aggregates `byDept` from parsed CSV data. Renders top 5 departments as horizontal progress bars with counts.
+   - **Error state**: Shows red error banner when CSV fetch fails. Shows loading message during fetch.
+   - **State change**: `pledgeData` now includes `byDept: {}` and `error: false` fields.
+   - **File**: `HomePage.jsx` → `SecurityPledgeCard`
+
+#### Technical Notes
+- `MiniBarChart` label max-width increased from `28px` to `36px` for better readability.
+- `StackedBarChart` uses `column-reverse` flex direction for natural bottom-up stacking of status segments.
+- Korean audit type abbreviations mapped via `AUDIT_TYPE_SHORT` dictionary to keep labels under 5 characters.
+- `SecurityLevelMiniMap` → `recentChanges` useMemo depends on `[stations]`.
+
+#### Files Modified
+- `src/modules/security-audit/SecurityAuditSchedulePage.jsx` — v3.4: multi-status donut, stacked monthly bars, Korean audit type labels
+- `src/modules/home/HomePage.jsx` — security level change notifications, pledge dept breakdown, error handling
+- `PROJECT_GUIDE.md` — Session 23 changelog (v2.9)
 
 ---
 
