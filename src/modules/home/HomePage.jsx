@@ -205,6 +205,35 @@ function SecurityLevelMiniMap({ stations }) {
     }).filter(Boolean);
   }, [stations]);
 
+  // Compute recently changed stations (within last 30 days)
+  const recentChanges = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const changes = [];
+    stations.forEach(s => {
+      const history = s.history || [];
+      if (history.length === 0) return;
+      // History entries are sorted newest-first; check if most recent change is within 30 days
+      const latest = history[0];
+      if (!latest?.date) return;
+      const changeDate = new Date(latest.date);
+      if (isNaN(changeDate.getTime())) return;
+      if (changeDate >= thirtyDaysAgo) {
+        const branchName = s.branchName || s.id || '?';
+        const iata = s.airportCode?.toUpperCase().trim() || extractIATA(branchName);
+        changes.push({
+          station: iata || branchName,
+          from: latest.from || '?',
+          to: latest.to || '?',
+          date: changeDate,
+          dateStr: changeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        });
+      }
+    });
+    changes.sort((a, b) => b.date - a.date);
+    return changes;
+  }, [stations]);
+
   const green = mapped.filter(s => s.color === '#22c55e').length;
   const orange = mapped.filter(s => s.color === '#f97316').length;
   const red = mapped.filter(s => s.color === '#ef4444').length;
@@ -288,6 +317,31 @@ function SecurityLevelMiniMap({ stations }) {
         <MapPin size={8} color="#8B99A8" />
         <span style={{ fontSize: '0.48rem', color: '#8B99A8', fontWeight: '600', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Global Status</span>
       </div>
+
+      {/* Recent Security Level Changes (30 days) */}
+      {recentChanges.length > 0 && (
+        <div style={{ marginTop: '0.4rem' }}>
+          {recentChanges.slice(0, 3).map((ch, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: '0.3rem',
+              padding: '0.2rem 0.4rem', borderRadius: '0.25rem',
+              background: i === 0 ? 'rgba(249,115,22,0.06)' : 'transparent',
+              borderLeft: `2px solid ${i === 0 ? '#f97316' : '#1E3A5F'}`,
+              marginBottom: '0.15rem',
+            }}>
+              <AlertTriangle size={9} color={i === 0 ? '#f97316' : '#5F6B7A'} style={{ flexShrink: 0 }} />
+              <span style={{
+                fontSize: '0.58rem', color: i === 0 ? '#E8EAED' : '#8B99A8',
+                fontWeight: i === 0 ? '600' : '400',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+              }}>
+                <span style={{ color: '#60A5FA', fontWeight: '700' }}>{ch.station}</span> {ch.from} → {ch.to}
+              </span>
+              <span style={{ fontSize: '0.48rem', color: '#5F6B7A', fontFamily: 'monospace', flexShrink: 0 }}>{ch.dateStr}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -928,7 +982,7 @@ function PledgeDonutChart({ total, recent }) {
 function SecurityPledgeCard() {
   const { isAdmin } = useAuth();
   const [showModal, setShowModal] = useState(false);
-  const [pledgeData, setPledgeData] = useState({ total: 0, recentSigners: [], loading: true });
+  const [pledgeData, setPledgeData] = useState({ total: 0, recentSigners: [], byDept: {}, loading: true, error: false });
   const pledgeUrl = 'https://mark4mission.github.io/airzeta-security-agreement/';
 
   useEffect(() => {
@@ -938,7 +992,7 @@ function SecurityPledgeCard() {
         if (!resp.ok) throw new Error('Failed to fetch');
         const text = await resp.text();
         const lines = text.split('\n').filter(l => l.trim());
-        if (lines.length <= 1) { setPledgeData({ total: 0, recentSigners: [], loading: false }); return; }
+        if (lines.length <= 1) { setPledgeData({ total: 0, recentSigners: [], byDept: {}, loading: false, error: false }); return; }
 
         // Parse rows (skip header), only keep rows with actual data
         const allRows = [];
@@ -963,6 +1017,13 @@ function SecurityPledgeCard() {
         });
         const totalCount = validSubmissions.length;
 
+        // Department breakdown
+        const byDept = {};
+        validSubmissions.forEach(r => {
+          const d = r.dept || 'Unknown';
+          byDept[d] = (byDept[d] || 0) + 1;
+        });
+
         // Get recent signers (last 30 days) — deduplicate for display only
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -974,12 +1035,12 @@ function SecurityPledgeCard() {
             const key = r.name.toLowerCase();
             if (!recentMap.has(key)) recentMap.set(key, r);
           });
-        const recentSigners = Array.from(recentMap.values()).slice(0, 8);
+        const recentSigners = Array.from(recentMap.values()).slice(0, 10);
 
-        setPledgeData({ total: totalCount, recentSigners, loading: false });
+        setPledgeData({ total: totalCount, recentSigners, byDept, loading: false, error: false });
       } catch (err) {
         console.error('[Pledge] Sheet fetch error:', err);
-        setPledgeData({ total: 0, recentSigners: [], loading: false });
+        setPledgeData({ total: 0, recentSigners: [], byDept: {}, loading: false, error: true });
       }
     };
     fetchPledgeData();
@@ -1066,48 +1127,90 @@ function SecurityPledgeCard() {
             </div>
           </div>
 
-          {/* Right side: Total count donut + Recent signers */}
-          {!pledgeData.loading && pledgeData.total > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '200px' }}>
-              <PledgeDonutChart total={pledgeData.total} recent={pledgeData.recentSigners.length} />
+          {/* Right side: Total count donut + Recent signers + Dept breakdown */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flexShrink: 0, minWidth: '210px' }}>
+            {pledgeData.loading ? (
+              <div style={{ padding: '1rem', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.68rem', color: '#8B99A8' }}>Loading pledge data...</span>
+              </div>
+            ) : pledgeData.error ? (
+              <div style={{ padding: '0.75rem', textAlign: 'center', background: 'rgba(220,38,38,0.06)', borderRadius: '0.5rem', border: '1px solid rgba(220,38,38,0.15)' }}>
+                <span style={{ fontSize: '0.62rem', color: '#F87171' }}>Could not load pledge data</span>
+              </div>
+            ) : (
+              <>
+                <PledgeDonutChart total={pledgeData.total} recent={pledgeData.recentSigners.length} />
 
-              {pledgeData.recentSigners.length > 0 && (
-                <div style={{
-                  width: '100%', maxWidth: '220px',
-                  background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
-                  border: '1px solid rgba(30,58,95,0.5)', padding: '0.5rem 0.6rem',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.35rem' }}>
-                    <Users size={10} color="#34D399" />
-                    <span style={{ fontSize: '0.55rem', color: '#34D399', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Recent Signers (30 days)
-                    </span>
+                {/* Department breakdown mini chart */}
+                {Object.keys(pledgeData.byDept).length > 0 && (
+                  <div style={{
+                    width: '100%', maxWidth: '220px',
+                    background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
+                    border: '1px solid rgba(30,58,95,0.5)', padding: '0.4rem 0.5rem',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', marginBottom: '0.25rem' }}>
+                      <Users size={9} color="#60A5FA" />
+                      <span style={{ fontSize: '0.5rem', color: '#60A5FA', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>By Department</span>
+                    </div>
+                    {Object.entries(pledgeData.byDept).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([dept, cnt]) => {
+                      const pct = pledgeData.total > 0 ? (cnt / pledgeData.total) * 100 : 0;
+                      return (
+                        <div key={dept} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.15rem' }}>
+                          <span style={{ fontSize: '0.5rem', color: '#8B99A8', width: '55px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>{dept}</span>
+                          <div style={{ flex: 1, height: '4px', background: '#1E3A5F', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: '#60A5FA', borderRadius: '2px', transition: 'width 0.3s' }} />
+                          </div>
+                          <span style={{ fontSize: '0.48rem', color: '#8B99A8', fontFamily: 'monospace', width: '18px', textAlign: 'right', flexShrink: 0 }}>{cnt}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                    {pledgeData.recentSigners.map((signer, idx) => (
-                      <div key={idx} style={{
-                        display: 'flex', alignItems: 'center', gap: '0.3rem',
-                        padding: '0.15rem 0.25rem', borderRadius: '0.2rem',
-                        background: idx === 0 ? 'rgba(52,211,153,0.06)' : 'transparent',
-                      }}>
-                        <CheckCircle2 size={9} color={idx < 3 ? '#34D399' : '#5F6B7A'} style={{ flexShrink: 0 }} />
-                        <span style={{
-                          fontSize: '0.62rem', fontWeight: '600', flex: 1,
-                          color: idx < 3 ? '#E8EAED' : '#8B99A8',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                )}
+
+                {/* Recent signers list */}
+                {pledgeData.recentSigners.length > 0 && (
+                  <div style={{
+                    width: '100%', maxWidth: '220px',
+                    background: 'rgba(10,22,40,0.5)', borderRadius: '0.5rem',
+                    border: '1px solid rgba(30,58,95,0.5)', padding: '0.5rem 0.6rem',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.35rem' }}>
+                      <Users size={10} color="#34D399" />
+                      <span style={{ fontSize: '0.55rem', color: '#34D399', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Recent Signers (30 days)
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                      {pledgeData.recentSigners.map((signer, idx) => (
+                        <div key={idx} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.3rem',
+                          padding: '0.15rem 0.25rem', borderRadius: '0.2rem',
+                          background: idx === 0 ? 'rgba(52,211,153,0.06)' : 'transparent',
                         }}>
-                          {maskName(signer.name)}
-                        </span>
-                        <span style={{ fontSize: '0.48rem', color: '#5F6B7A', fontFamily: 'monospace', flexShrink: 0 }}>
-                          {signer.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        </span>
-                      </div>
-                    ))}
+                          <CheckCircle2 size={9} color={idx < 3 ? '#34D399' : '#5F6B7A'} style={{ flexShrink: 0 }} />
+                          <span style={{
+                            fontSize: '0.62rem', fontWeight: '600', flex: 1,
+                            color: idx < 3 ? '#E8EAED' : '#8B99A8',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {maskName(signer.name)}
+                          </span>
+                          {signer.dept && (
+                            <span style={{ fontSize: '0.42rem', color: '#5F6B7A', maxWidth: '40px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {signer.dept}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '0.48rem', color: '#5F6B7A', fontFamily: 'monospace', flexShrink: 0 }}>
+                            {signer.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

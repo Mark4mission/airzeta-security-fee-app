@@ -1,13 +1,11 @@
 /**
- * Security Audit Schedule Page (Admin-Only Module) — v3.3
+ * Security Audit Schedule Page (Admin-Only Module) — v3.4
  * 
- * v3.3 Enhancements:
- * - File upload: improved error handling, explicit error messages for Firestore permission errors,
- *   added retry mechanism, cleaner drag-and-drop UX, progress feedback
- * - Findings/Recommendations: added numeric count fields (findingsCount, recommendationsCount)
- *   in completed/in_progress status. Counts shown in dashboard totals and table '결과' column.
- * - Dashboard summary cards: hover popover with detailed breakdown per card
- * - Statistics: getAuditStatistics now aggregates findingsCount + recommendationsCount totals
+ * v3.4 Enhancements:
+ * - Dashboard charts upgraded: multi-segment donut for Completion Rate showing all statuses,
+ *   stacked bar chart for Monthly Distribution with status breakdown per month,
+ *   By Audit Type chart with abbreviated Korean labels and multi-status stacking
+ * - Audit type labels: short Korean translations (정기점검, 특별점검, etc.) prevent truncation
  *
  * v3.2 Fixes:
  * - Auditor multi-edit now persists correctly (explicit auditor+auditors sync on save)
@@ -611,14 +609,94 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
         return (
           <div key={key} title={`${key}: ${val}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
             <div style={{ width: '100%', minWidth: '8px', maxWidth: '28px', height: `${Math.max(h, 4)}%`, background: c, borderRadius: '2px 2px 0 0', transition: 'height 0.3s' }} />
-            <span style={{ fontSize: '0.5rem', color: COLORS.text.light, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '28px' }}>
-              {key.length > 4 ? key.substring(5) || key.substring(0, 3) : key}
+            <span style={{ fontSize: '0.5rem', color: COLORS.text.light, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '36px', textAlign: 'center' }}>
+              {key}
             </span>
           </div>
         );
       })}
     </div>
   );
+
+  // Stacked bar chart for multi-status monthly distribution
+  const StackedBarChart = ({ monthlyData }) => {
+    const maxTotal = Math.max(...monthlyData.map(m => m.total), 1);
+    const statusColorMap = {
+      scheduled: COLORS.blue, in_progress: COLORS.yellow, completed: COLORS.green,
+      cancelled: COLORS.red, postponed: COLORS.orange
+    };
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '65px' }}>
+          {monthlyData.map(m => (
+            <div key={m.label} title={`${m.label}: ${m.total}`} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '100%', justifyContent: 'flex-start' }}>
+              <span style={{ fontSize: '0.5rem', color: COLORS.text.light, marginTop: '2px' }}>{m.label}</span>
+              <div style={{ width: '100%', maxWidth: '22px', display: 'flex', flexDirection: 'column-reverse', height: `${Math.max((m.total / maxTotal) * 100, m.total > 0 ? 8 : 2)}%` }}>
+                {Object.entries(m.byStatus).filter(([, v]) => v > 0).map(([status, count]) => {
+                  const pct = m.total > 0 ? (count / m.total) * 100 : 0;
+                  return (
+                    <div key={status} title={`${STATUS_CONFIG[status]?.label || status}: ${count}`}
+                      style={{ width: '100%', minHeight: '2px', height: `${pct}%`, background: statusColorMap[status] || '#94A3B8', borderRadius: '1px' }} />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+          {Object.entries(statusColorMap).filter(([k]) => statusItems.some(s => s.key === k)).map(([k, c]) => (
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', fontSize: '0.48rem', color: COLORS.text.light }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '1px', background: c, display: 'inline-block' }} />
+              {STATUS_CONFIG[k]?.label || k}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Audit type label abbreviation map (Korean short labels)
+  const AUDIT_TYPE_SHORT = {
+    'Regular Security Audit': '정기점검',
+    'Special Inspection': '특별점검',
+    'Compliance Check': '적합성',
+    'Emergency Audit': '긴급점검',
+    'Follow-up Audit': '후속점검',
+    'Annual Review': '연간검토',
+  };
+  const shortenAuditType = (name) => AUDIT_TYPE_SHORT[name] || (name.length > 6 ? name.substring(0, 5) + '..' : name);
+
+  // Build monthly data with status breakdown
+  const monthlyStatusData = useMemo(() => {
+    return MONTHS.map((m, i) => {
+      const monthKey = `${selectedYear}-${String(i + 1).padStart(2, '0')}`;
+      const monthSchedules = (schedules || []).filter(s => {
+        const sd = s.startDate || s.auditDate || '';
+        return sd.startsWith(monthKey);
+      });
+      const byStatus = {};
+      ['scheduled', 'in_progress', 'completed', 'cancelled', 'postponed'].forEach(st => {
+        byStatus[st] = monthSchedules.filter(s => s.status === st).length;
+      });
+      return { label: m, total: monthSchedules.length, byStatus };
+    });
+  }, [schedules, selectedYear]);
+
+  // Build audit type data with status breakdown and short labels
+  const auditTypeStatusData = useMemo(() => {
+    const types = {};
+    (schedules || []).forEach(s => {
+      const t = s.auditType || 'General';
+      if (!types[t]) types[t] = { total: 0, byStatus: {} };
+      types[t].total++;
+      types[t].byStatus[s.status] = (types[t].byStatus[s.status] || 0) + 1;
+    });
+    return Object.entries(types).map(([name, data]) => ({
+      label: shortenAuditType(name),
+      fullName: name,
+      ...data
+    }));
+  }, [schedules]);
 
   const maxMonth = Math.max(...Object.values(stats.byMonth || {}), 1);
   const maxType = Math.max(...Object.values(stats.byAuditType || {}), 1);
@@ -705,55 +783,80 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
 
       {/* Charts Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-        {/* Completion Rate */}
+        {/* Completion Rate — multi-segment donut */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
             <PieChart size={13} color={COLORS.green} />
             <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>Completion Rate</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ position: 'relative', width: '52px', height: '52px' }}>
+            <div style={{ position: 'relative', width: '60px', height: '60px' }}>
               <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
                 <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E2E8F0" strokeWidth="3" />
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke={COLORS.green} strokeWidth="3"
-                  strokeDasharray={`${completionRate} ${100 - completionRate}`} strokeLinecap="round" />
+                {(() => {
+                  let offset = 0;
+                  return statusItems.map(s => {
+                    const pct = stats.total > 0 ? (s.val / stats.total) * 100 : 0;
+                    const seg = (
+                      <circle key={s.key} cx="18" cy="18" r="15.9" fill="none" stroke={s.color} strokeWidth="3.2"
+                        strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={`${-offset}`} strokeLinecap="butt" />
+                    );
+                    offset += pct;
+                    return seg;
+                  });
+                })()}
               </svg>
-              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: '800', color: COLORS.green }}>{completionRate}%</span>
+              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: '800', color: COLORS.green }}>{completionRate}%</span>
             </div>
             <div style={{ flex: 1 }}>
               {statusItems.map(s => (
                 <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.15rem' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: s.color }} />
                   <span style={{ fontSize: '0.6rem', color: COLORS.text.secondary }}>{STATUS_CONFIG[s.key]?.label}: <strong>{s.val}</strong></span>
+                  <span style={{ fontSize: '0.5rem', color: COLORS.text.light }}>({stats.total > 0 ? Math.round((s.val / stats.total) * 100) : 0}%)</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Monthly Distribution */}
+        {/* Monthly Distribution — stacked bar chart with status breakdown */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
             <TrendingUp size={13} color={COLORS.blue} />
             <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>Monthly Distribution</span>
           </div>
-          <MiniBarChart data={(() => {
-            const d = {};
-            MONTHS.forEach((m, i) => {
-              const key = `${selectedYear}-${String(i + 1).padStart(2, '0')}`;
-              d[m] = stats.byMonth[key] || 0;
-            });
-            return d;
-          })()} maxVal={maxMonth} />
+          <StackedBarChart monthlyData={monthlyStatusData} />
         </div>
 
-        {/* By Audit Type */}
+        {/* By Audit Type — stacked with short Korean labels */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
             <FileText size={13} color={COLORS.purple} />
             <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>By Audit Type</span>
           </div>
-          <MiniBarChart data={stats.byAuditType} maxVal={maxType} colorFn={() => COLORS.purple} />
+          {auditTypeStatusData.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '65px' }}>
+                {auditTypeStatusData.map(t => {
+                  const maxT = Math.max(...auditTypeStatusData.map(x => x.total), 1);
+                  return (
+                    <div key={t.label} title={`${t.fullName}: ${t.total}`} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '100%', justifyContent: 'flex-start' }}>
+                      <span style={{ fontSize: '0.48rem', color: COLORS.text.light, marginTop: '2px', whiteSpace: 'nowrap' }}>{t.label}</span>
+                      <div style={{ width: '100%', maxWidth: '28px', display: 'flex', flexDirection: 'column-reverse', height: `${Math.max((t.total / maxT) * 100, t.total > 0 ? 10 : 2)}%` }}>
+                        {Object.entries(t.byStatus).filter(([, v]) => v > 0).map(([status, count]) => (
+                          <div key={status} title={`${STATUS_CONFIG[status]?.label}: ${count}`}
+                            style={{ width: '100%', minHeight: '2px', height: `${(count / t.total) * 100}%`, background: STATUS_CONFIG[status]?.color || COLORS.purple, borderRadius: '1px' }} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <MiniBarChart data={stats.byAuditType} maxVal={maxType} colorFn={() => COLORS.purple} />
+          )}
         </div>
 
         {/* By Auditor */}
