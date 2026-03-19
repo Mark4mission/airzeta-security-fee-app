@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 2.9
-> **Last Updated**: 2026-03-13
+> **Document Version**: 3.1
+> **Last Updated**: 2026-03-19
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -1026,6 +1026,72 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-19 (Session 24 - Bug Fixes & Readability Improvements)
+
+#### Bug Fixes
+
+1. **Security Pledge Agreement — "Could not load pledge data" (CORS Fix)**
+   - **Symptom**: Google Sheets CSV fetch redirects to Google Login page, causing CORS error. Error: `Access-Control-Allow-Origin` header blocked.
+   - **Root cause**: Google Sheets `gviz/tq?tqx=out:csv` URL requires "Publish to Web" sharing (not just link sharing). If publishing is disabled, Google redirects to login.
+   - **Fix**: Added fallback URL pattern array `PLEDGE_SHEET_CSV_URLS` with two strategies: (1) gviz URL, (2) `/export?format=csv&gid=0`. The fetch loop tries each URL, checks `content-type` header to detect HTML login redirect vs actual CSV data. Falls back to next URL on failure.
+   - **Important lesson**: Google Sheets CSV access requires either "Publish to Web" (File > Share > Publish to web) OR using the `/export?format=csv` URL which works with standard link-sharing permissions.
+   - **File**: `HomePage.jsx` → `SecurityPledgeCard`
+
+2. **Security Communication showing Directive posts (Component Remount Fix)**
+   - **Symptom**: Navigating from "Security Directive" to "Security Communication" in sidebar showed the same posts from `bulletinPosts` collection instead of `communicationPosts`.
+   - **Root cause**: Both routes render the same `<BulletinPage>` component with different `boardType` prop. React Router may reuse the component instance without triggering a proper cleanup of the Firestore `onSnapshot` listener.
+   - **Fix**: Added `key="directive"` and `key="communication"` to the Route elements in `App.jsx`, forcing React to unmount/remount `BulletinPage` when switching between the two boards. This ensures a fresh Firestore listener is created for the correct collection.
+   - **File**: `App.jsx` → Routes
+
+3. **Security Fee Home Card — Chart Data Not Showing**
+   - **Symptom**: Estimated/Actual sparkline chart on Home dashboard showed no data.
+   - **Fix**: Added fallback field names (`doc.items` alongside `doc.costItems`, `item.estimated`/`item.actual` alongside `item.estimatedCost`/`item.actualCost`) to handle potential Firestore schema variations. This makes the aggregation more resilient to field naming differences.
+   - **File**: `HomePage.jsx` → `fetchFeeStats`
+
+#### Readability Improvements
+
+4. **Security Fee Page — Font Size Improvements**
+   - **What**: Increased font sizes across the Security Fee module for better readability while maintaining compact layout.
+   - **Cost Status table** (`AdminDashboard.jsx`): Table base font `0.7rem` → `0.78rem`, station header `fontWeight: 800` + `fontSize: 0.82rem`, station name `fontWeight: 700` + `fontSize: 0.82rem`, month headers `fontWeight: 700` → `800` + color → `COLORS.text.primary`, Est/Act KRW totals `0.55rem` → `0.6rem` + `fontWeight: 800`, cell Est/Act values `0.6rem` → `0.72rem` + `fontWeight: 700` + `letterSpacing: -0.01em`, variance `0.55rem` → `0.62rem` + `fontWeight: 800`, legend `0.65rem` → `0.7rem` + `fontWeight: 500`.
+   - **Cost input form** (`SecurityFeePage.jsx`): Field labels `0.6rem` → `0.65rem` + `fontWeight: 700`, Est/Act Cost labels `0.65rem` → `0.68rem`, Est/Act result values `0.9rem` → `0.95rem`.
+
+5. **Audit Schedule Page — Font & Readability Improvements (v3.5)**
+   - **Summary cards**: Card labels `0.68rem` → `0.72rem` + color changed to `COLORS.text.primary` (from `secondary`), card values `1.6rem` → `1.8rem`, icon size `13` → `14`.
+   - **Dashboard chart headers**: All chart titles `0.75rem` → `0.78rem`, icon size `13` → `14`, increased bottom margin `0.5rem` → `0.6rem`.
+   - **Completion Rate donut**: Enlarged from 60px to 80px, thicker stroke (`3.2` → `4.5`), added `완료율` label below percentage, legend now shows per-status count with individual color + bold % alignment. Percentage text increased to `0.95rem/900 weight`.
+   - **MiniBarChart**: Added value numbers above each bar for immediate readability.
+   - **Table view (ScheduleTable)**: Cell padding `0.6rem` → `0.65rem`, header font `0.76rem` → `0.78rem` + `fontWeight: 800` + color `#1E293B`.
+   - **Annual table**: Station header `0.72rem` → `0.76rem` + `fontWeight: 800` + color `COLORS.text.primary`, month headers `0.7rem` → `0.74rem` + `fontWeight: 800`, station name `0.78rem` → `0.82rem` + `fontWeight: 700`.
+
+6. **Audit Schedule — "By Auditor" Chart Redesign**
+   - **What**: Replaced the old vertical bar chart (which showed nothing when `stats.byAuditor` was empty) with a horizontal stacked bar chart that always renders. Shows each auditor's total assignments with per-status color breakdown.
+   - **Empty state**: Shows icon + "No auditor assignments yet" + "Assign auditors to audit schedules" hint instead of being hidden.
+   - **Format**: Horizontal bars 16px tall (up from 14px), sorted by count (descending), up to 8 auditors. Each bar subdivided by status in consistent order (completed → in_progress → scheduled → postponed → cancelled). Auditor name 60px (up from 52px), font `0.68rem` (up from `0.62rem`). Bottom status legend with color dots.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnalyticsDashboard`
+
+7. **Annual Schedule Table — Audit Type in Cells**
+   - **What**: Changed the cell content from station branch name (redundant with row header) to audit type abbreviation (e.g., "RSA" for Regular Security Audit, "SI" for Special Inspection), providing meaningful per-cell information.
+   - **Rationale**: Since rows are already grouped by station, showing the station name again in cells was redundant. Displaying audit type abbreviation gives immediate context about what kind of audit is scheduled in each month. Full details appear in the hover tooltip.
+   - **Tooltip**: Added `title` attribute showing full audit type name, status, and auditor for quick reference.
+   - **Font improvements**: Cell label `0.58rem` → `0.6rem`, auditor sub-label `0.5rem` → `0.52rem` with `fontWeight: 600`.
+   - **File**: `SecurityAuditSchedulePage.jsx` → `AnnualScheduleTable`
+
+#### Technical Notes
+- Google Sheets CORS lesson: **gviz URL requires "Publish to Web"** (separate from link-sharing); `/export?format=csv` works with standard sharing.
+- `BulletinPage` `key` prop forces full remount including Firestore listener cleanup when switching between boards.
+- Completion Rate donut uses `strokeDasharray/strokeDashoffset` for multi-segment rendering; segments with 0% are now filtered out to prevent rendering artifacts.
+- By Auditor chart renders status segments in consistent order to avoid visual jumping when data changes.
+
+#### Files Modified
+- `src/App.jsx` — Added `key` prop to BulletinPage routes for component remount
+- `src/modules/home/HomePage.jsx` — Pledge CORS fallback URLs, fee stats field name fallbacks
+- `src/modules/security-audit/SecurityAuditSchedulePage.jsx` — v3.5: enhanced Completion Rate donut (80px, thicker strokes, 완료율 label), By Auditor horizontal stacked bars with status legend, Annual table cells show audit type abbreviation + tooltip, readability improvements throughout
+- `src/modules/security-fee/SecurityFeePage.jsx` — Font size improvements (labels, Est/Act values)
+- `src/modules/security-fee/components/AdminDashboard.jsx` — Font size improvements (table 0.78rem, cells 0.72rem, station 0.82rem, headers 0.82rem)
+- `PROJECT_GUIDE.md` — Session 24 changelog (v3.1)
 
 ---
 

@@ -1,6 +1,14 @@
 /**
- * Security Audit Schedule Page (Admin-Only Module) — v3.4
+ * Security Audit Schedule Page (Admin-Only Module) — v3.5
  * 
+ * v3.5 Enhancements:
+ * - Completion Rate donut: larger 80px, thicker strokes, inline percentage labels per segment
+ * - By Auditor card: polished horizontal stacked bars with auditor-specific status breakdown
+ * - Annual table cells: show audit type abbreviation + auditor name in tooltip, clearer labels
+ * - Overall readability: darker/bolder text, larger fonts, higher contrast throughout
+ * - Summary cards: larger value text (1.8rem), bolder labels
+ * - Chart headers: increased to 0.78rem, darker text color
+ *
  * v3.4 Enhancements:
  * - Dashboard charts upgraded: multi-segment donut for Completion Rate showing all statuses,
  *   stacked bar chart for Monthly Distribution with status breakdown per month,
@@ -503,7 +511,7 @@ function SecurityAuditSchedulePage() {
 const selectStyle = { padding: '0.4rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.75rem', outline: 'none' };
 const btnPrimary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: COLORS.accent, border: 'none', borderRadius: '0.5rem', color: 'white', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 8px rgba(233,69,96,0.25)' };
 const btnSecondary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.secondary, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer' };
-const cellStyle = { padding: '0.6rem 0.75rem', fontSize: '0.78rem', verticalAlign: 'middle', color: '#334155' };
+const cellStyle = { padding: '0.65rem 0.75rem', fontSize: '0.82rem', verticalAlign: 'middle', color: '#1E293B' };
 const actionBtnStyle = { padding: '0.3rem', background: COLORS.surfaceAlt, border: `1px solid ${COLORS.border}`, borderRadius: '0.3rem', color: COLORS.text.secondary, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const labelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '600', color: COLORS.text.secondary, marginBottom: '0.3rem' };
 const inputStyle = { padding: '0.5rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' };
@@ -608,8 +616,9 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
         const c = colorFn ? colorFn(key) : COLORS.blue;
         return (
           <div key={key} title={`${key}: ${val}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+            <span style={{ fontSize: '0.52rem', fontWeight: '700', color: COLORS.text.secondary }}>{val > 0 ? val : ''}</span>
             <div style={{ width: '100%', minWidth: '8px', maxWidth: '28px', height: `${Math.max(h, 4)}%`, background: c, borderRadius: '2px 2px 0 0', transition: 'height 0.3s' }} />
-            <span style={{ fontSize: '0.5rem', color: COLORS.text.light, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '36px', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.55rem', color: COLORS.text.secondary, fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '42px', textAlign: 'center' }}>
               {key}
             </span>
           </div>
@@ -630,7 +639,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '65px' }}>
           {monthlyData.map(m => (
             <div key={m.label} title={`${m.label}: ${m.total}`} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '100%', justifyContent: 'flex-start' }}>
-              <span style={{ fontSize: '0.5rem', color: COLORS.text.light, marginTop: '2px' }}>{m.label}</span>
+              <span style={{ fontSize: '0.55rem', color: COLORS.text.secondary, fontWeight: '600', marginTop: '2px' }}>{m.label}</span>
               <div style={{ width: '100%', maxWidth: '22px', display: 'flex', flexDirection: 'column-reverse', height: `${Math.max((m.total / maxTotal) * 100, m.total > 0 ? 8 : 2)}%` }}>
                 {Object.entries(m.byStatus).filter(([, v]) => v > 0).map(([status, count]) => {
                   const pct = m.total > 0 ? (count / m.total) * 100 : 0;
@@ -645,7 +654,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
           {Object.entries(statusColorMap).filter(([k]) => statusItems.some(s => s.key === k)).map(([k, c]) => (
-            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', fontSize: '0.48rem', color: COLORS.text.light }}>
+            <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', fontSize: '0.52rem', color: COLORS.text.secondary, fontWeight: '500' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '1px', background: c, display: 'inline-block' }} />
               {STATUS_CONFIG[k]?.label || k}
             </span>
@@ -700,7 +709,6 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
 
   const maxMonth = Math.max(...Object.values(stats.byMonth || {}), 1);
   const maxType = Math.max(...Object.values(stats.byAuditType || {}), 1);
-  const maxAuditor = Math.max(...Object.values(stats.byAuditor || {}), 1);
 
   // Donut-like status indicator
   const statusItems = [
@@ -750,10 +758,10 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
               onMouseLeave={() => setHoveredCard(null)}
               style={{ background: card.bg, border: `1px solid ${card.border}`, borderRadius: '0.6rem', padding: '0.75rem', position: 'relative', cursor: 'default', transition: 'box-shadow 0.2s', boxShadow: isHovered ? '0 4px 16px rgba(0,0,0,0.12)' : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.35rem' }}>
-                <Icon size={13} color={card.color} />
-                <span style={{ fontSize: '0.65rem', fontWeight: '600', color: COLORS.text.secondary }}>{card.label}</span>
+                <Icon size={14} color={card.color} />
+                <span style={{ fontSize: '0.72rem', fontWeight: '700', color: COLORS.text.primary }}>{card.label}</span>
               </div>
-              <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: card.color }}>{card.value}</p>
+              <p style={{ margin: 0, fontSize: '1.8rem', fontWeight: '900', color: card.color }}>{card.value}</p>
               {/* Hover detail popover */}
               {isHovered && details.length > 0 && (
                 <div style={{
@@ -785,20 +793,21 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
         {/* Completion Rate — multi-segment donut */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
-            <PieChart size={13} color={COLORS.green} />
-            <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>Completion Rate</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.6rem' }}>
+            <PieChart size={14} color={COLORS.green} />
+            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.text.primary }}>Completion Rate</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ position: 'relative', width: '60px', height: '60px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{ position: 'relative', width: '80px', height: '80px', flexShrink: 0 }}>
               <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                <circle cx="18" cy="18" r="15.9" fill="none" stroke="#E2E8F0" strokeWidth="3" />
+                <circle cx="18" cy="18" r="14.5" fill="none" stroke="#E2E8F0" strokeWidth="4" />
                 {(() => {
                   let offset = 0;
                   return statusItems.map(s => {
                     const pct = stats.total > 0 ? (s.val / stats.total) * 100 : 0;
+                    if (pct === 0) return null;
                     const seg = (
-                      <circle key={s.key} cx="18" cy="18" r="15.9" fill="none" stroke={s.color} strokeWidth="3.2"
+                      <circle key={s.key} cx="18" cy="18" r="14.5" fill="none" stroke={s.color} strokeWidth="4.5"
                         strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={`${-offset}`} strokeLinecap="butt" />
                     );
                     offset += pct;
@@ -806,34 +815,41 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
                   });
                 })()}
               </svg>
-              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: '800', color: COLORS.green }}>{completionRate}%</span>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '0.95rem', fontWeight: '900', color: COLORS.green, lineHeight: 1 }}>{completionRate}%</span>
+                <span style={{ fontSize: '0.5rem', fontWeight: '600', color: COLORS.text.light, marginTop: '1px' }}>완료율</span>
+              </div>
             </div>
             <div style={{ flex: 1 }}>
-              {statusItems.map(s => (
-                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.15rem' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: s.color }} />
-                  <span style={{ fontSize: '0.6rem', color: COLORS.text.secondary }}>{STATUS_CONFIG[s.key]?.label}: <strong>{s.val}</strong></span>
-                  <span style={{ fontSize: '0.5rem', color: COLORS.text.light }}>({stats.total > 0 ? Math.round((s.val / stats.total) * 100) : 0}%)</span>
-                </div>
-              ))}
+              {statusItems.map(s => {
+                const pct = stats.total > 0 ? Math.round((s.val / stats.total) * 100) : 0;
+                return (
+                  <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: s.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.7rem', color: COLORS.text.primary, fontWeight: '600', flex: 1 }}>{STATUS_CONFIG[s.key]?.label}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: '800', color: s.color }}>{s.val}</span>
+                    <span style={{ fontSize: '0.6rem', color: COLORS.text.secondary, fontWeight: '600', minWidth: '28px', textAlign: 'right' }}>{pct}%</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
 
         {/* Monthly Distribution — stacked bar chart with status breakdown */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
-            <TrendingUp size={13} color={COLORS.blue} />
-            <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>Monthly Distribution</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.6rem' }}>
+            <TrendingUp size={14} color={COLORS.blue} />
+            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.text.primary }}>Monthly Distribution</span>
           </div>
           <StackedBarChart monthlyData={monthlyStatusData} />
         </div>
 
         {/* By Audit Type — stacked with short Korean labels */}
         <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
-            <FileText size={13} color={COLORS.purple} />
-            <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>By Audit Type</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.6rem' }}>
+            <FileText size={14} color={COLORS.purple} />
+            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.text.primary }}>By Audit Type</span>
           </div>
           {auditTypeStatusData.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -842,7 +858,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
                   const maxT = Math.max(...auditTypeStatusData.map(x => x.total), 1);
                   return (
                     <div key={t.label} title={`${t.fullName}: ${t.total}`} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', alignItems: 'center', height: '100%', justifyContent: 'flex-start' }}>
-                      <span style={{ fontSize: '0.48rem', color: COLORS.text.light, marginTop: '2px', whiteSpace: 'nowrap' }}>{t.label}</span>
+                      <span style={{ fontSize: '0.52rem', color: COLORS.text.secondary, fontWeight: '600', marginTop: '2px', whiteSpace: 'nowrap' }}>{t.label}</span>
                       <div style={{ width: '100%', maxWidth: '28px', display: 'flex', flexDirection: 'column-reverse', height: `${Math.max((t.total / maxT) * 100, t.total > 0 ? 10 : 2)}%` }}>
                         {Object.entries(t.byStatus).filter(([, v]) => v > 0).map(([status, count]) => (
                           <div key={status} title={`${STATUS_CONFIG[status]?.label}: ${count}`}
@@ -859,16 +875,74 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
           )}
         </div>
 
-        {/* By Auditor */}
-        {Object.keys(stats.byAuditor || {}).length > 0 && (
-          <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
-              <Users size={13} color={COLORS.cyan} />
-              <span style={{ fontSize: '0.7rem', fontWeight: '700', color: COLORS.text.primary }}>By Auditor</span>
-            </div>
-            <MiniBarChart data={stats.byAuditor} maxVal={maxAuditor} colorFn={(name) => getAuditorColor(name, allAuditors).bg} />
+        {/* By Auditor — enhanced with auditor-specific stacked bars */}
+        <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.6rem', padding: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.6rem' }}>
+            <Users size={14} color={COLORS.cyan} />
+            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.text.primary }}>By Auditor</span>
           </div>
-        )}
+          {(() => {
+            // Build auditor data from schedules directly (more reliable than stats.byAuditor)
+            const auditorData = {};
+            const auditorStatusData = {};
+            (schedules || []).forEach(s => {
+              const names = s.auditors || (s.auditor ? s.auditor.split(',').map(a => a.trim()).filter(Boolean) : []);
+              names.forEach(name => {
+                if (!name) return;
+                auditorData[name] = (auditorData[name] || 0) + 1;
+                if (!auditorStatusData[name]) auditorStatusData[name] = {};
+                auditorStatusData[name][s.status] = (auditorStatusData[name][s.status] || 0) + 1;
+              });
+            });
+            const entries = Object.entries(auditorData).sort((a, b) => b[1] - a[1]);
+            if (entries.length === 0) {
+              return (
+                <div style={{ textAlign: 'center', padding: '1.25rem 0.5rem', color: COLORS.text.light }}>
+                  <Users size={24} color={COLORS.text.light} style={{ marginBottom: '0.3rem', opacity: 0.5 }} />
+                  <div style={{ fontSize: '0.75rem', fontWeight: '600' }}>No auditor assignments yet</div>
+                  <div style={{ fontSize: '0.62rem', marginTop: '0.15rem' }}>Assign auditors to audit schedules</div>
+                </div>
+              );
+            }
+            const maxA = Math.max(...entries.map(([, v]) => v), 1);
+            const statusColorMap = { scheduled: COLORS.blue, in_progress: COLORS.yellow, completed: COLORS.green, cancelled: COLORS.red, postponed: COLORS.orange };
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                {entries.slice(0, 8).map(([name, total]) => {
+                  const pct = (total / maxA) * 100;
+                  const statusBreakdown = auditorStatusData[name] || {};
+                  return (
+                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '700', color: COLORS.text.primary, width: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}
+                        title={name}>{name}</span>
+                      <div style={{ flex: 1, height: '16px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
+                        {['completed', 'in_progress', 'scheduled', 'postponed', 'cancelled'].map(st => {
+                          const cnt = statusBreakdown[st] || 0;
+                          if (cnt === 0) return null;
+                          return (
+                            <div key={st} title={`${STATUS_CONFIG[st]?.label || st}: ${cnt}`}
+                              style={{ height: '100%', width: `${(cnt / total) * pct}%`, background: statusColorMap[st] || '#94A3B8', transition: 'width 0.3s' }} />
+                          );
+                        })}
+                      </div>
+                      <span style={{ fontSize: '0.68rem', fontWeight: '800', color: COLORS.text.primary, width: '22px', textAlign: 'right', flexShrink: 0 }}>{total}</span>
+                    </div>
+                  );
+                })}
+                {entries.length > 8 && <div style={{ fontSize: '0.6rem', color: COLORS.text.light, textAlign: 'center', marginTop: '2px' }}>+{entries.length - 8} more auditors</div>}
+                {/* Mini status legend */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.3rem', paddingTop: '0.3rem', borderTop: `1px solid ${COLORS.borderLight}` }}>
+                  {Object.entries(statusColorMap).filter(([k]) => entries.some(([, , sd]) => true)).map(([k, c]) => (
+                    <span key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.15rem', fontSize: '0.52rem', color: COLORS.text.secondary, fontWeight: '600' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '1px', background: c, display: 'inline-block' }} />
+                      {STATUS_CONFIG[k]?.label || k}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );
@@ -921,11 +995,11 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr>
-              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: '#F8FAFC', padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.72rem', fontWeight: '700', color: COLORS.text.secondary, borderBottom: `2px solid ${COLORS.border}`, minWidth: '140px', borderRight: `1px solid ${COLORS.border}` }}>
+              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: '#F8FAFC', padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.76rem', fontWeight: '800', color: COLORS.text.primary, borderBottom: `2px solid ${COLORS.border}`, minWidth: '140px', borderRight: `1px solid ${COLORS.border}` }}>
                 Station
               </th>
               {MONTHS.map((m, i) => (
-                <th key={m} style={{ padding: '0.6rem 0.4rem', textAlign: 'center', fontSize: '0.7rem', fontWeight: '700', borderBottom: `2px solid ${COLORS.border}`, color: isCurrentYear && i === todayMonth ? COLORS.accent : COLORS.text.secondary, background: isCurrentYear && i === todayMonth ? '#FFF1F2' : '#F8FAFC', minWidth: '58px' }}>
+                <th key={m} style={{ padding: '0.6rem 0.4rem', textAlign: 'center', fontSize: '0.74rem', fontWeight: '800', borderBottom: `2px solid ${COLORS.border}`, color: isCurrentYear && i === todayMonth ? COLORS.accent : COLORS.text.primary, background: isCurrentYear && i === todayMonth ? '#FFF1F2' : '#F8FAFC', minWidth: '60px' }}>
                   {m}
                 </th>
               ))}
@@ -937,9 +1011,9 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
             ) : (
               branchSchedules.map(([branch, items], rowIdx) => (
                 <tr key={branch} style={{ borderBottom: `1px solid ${COLORS.borderLight}` }}>
-                  <td style={{ position: 'sticky', left: 0, zIndex: 1, background: rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFBFC', padding: '0.5rem 0.75rem', fontSize: '0.78rem', fontWeight: '600', color: COLORS.text.primary, borderRight: `1px solid ${COLORS.border}`, whiteSpace: 'nowrap' }}>
+                  <td style={{ position: 'sticky', left: 0, zIndex: 1, background: rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFBFC', padding: '0.5rem 0.75rem', fontSize: '0.82rem', fontWeight: '700', color: COLORS.text.primary, borderRight: `1px solid ${COLORS.border}`, whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <MapPin size={12} color={COLORS.blue} /> {branch}
+                      <MapPin size={13} color={COLORS.blue} /> {branch}
                     </div>
                   </td>
                   {MONTHS.map((m, monthIdx) => {
@@ -963,17 +1037,18 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
                               }}
                               onMouseLeave={() => setTooltip(null)}
                               style={{
-                                padding: '0.15rem 0.25rem', margin: '1px', borderRadius: '0.25rem',
+                                padding: '0.2rem 0.25rem', margin: '1px', borderRadius: '0.25rem',
                                 background: auditorColor ? auditorColor.bg : statusCfg.bg,
                                 border: `1px solid ${auditorColor ? auditorColor.border : statusCfg.border}`,
                                 cursor: 'pointer', overflow: 'hidden', transition: 'all 0.15s'
                               }}
+                              title={`${s.auditType || 'Audit'} — ${statusCfg.label}${primaryAuditor ? ' · ' + primaryAuditor : ''}`}
                             >
-                              <div style={{ fontSize: '0.55rem', fontWeight: '700', color: auditorColor ? auditorColor.text : statusCfg.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {s.auditType ? s.auditType.split(' ').map(w => w[0]).join('') : 'A'}
+                              <div style={{ fontSize: '0.6rem', fontWeight: '700', color: auditorColor ? auditorColor.text : statusCfg.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {s.auditType ? (s.auditType.length > 8 ? s.auditType.split(' ').map(w => w[0]).join('') : s.auditType) : branch.substring(0, 6)}
                               </div>
                               {primaryAuditor && (
-                                <div style={{ fontSize: '0.48rem', color: auditorColor ? auditorColor.text : COLORS.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.8 }}>
+                                <div style={{ fontSize: '0.52rem', color: auditorColor ? auditorColor.text : COLORS.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85, fontWeight: '600' }}>
                                   {primaryAuditor.split(' ')[0]}
                                 </div>
                               )}
@@ -1120,7 +1195,7 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
           <thead>
             <tr style={{ background: '#F8FAFC' }}>
               {columns.map(col => (
-                <th key={col.key} onClick={() => !col.noSort && onSort(col.key)} style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.72rem', fontWeight: '700', color: '#475569', borderBottom: `2px solid ${COLORS.border}`, cursor: col.noSort ? 'default' : 'pointer', width: col.width }}>
+                <th key={col.key} onClick={() => !col.noSort && onSort(col.key)} style={{ padding: '0.7rem 0.75rem', textAlign: 'left', fontSize: '0.78rem', fontWeight: '800', color: '#1E293B', borderBottom: `2px solid ${COLORS.border}`, cursor: col.noSort ? 'default' : 'pointer', width: col.width }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                     {col.label}
                     {!col.noSort && sortField === col.key && <ArrowUpDown size={11} color={COLORS.accent} />}
@@ -1137,9 +1212,9 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
                   onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
                   onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC'}>
                   <td style={cellStyle}><div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><MapPin size={12} color={COLORS.blue} /><span style={{ fontWeight: '600', color: '#1E293B' }}>{schedule.branchName || '-'}</span></div></td>
-                  <td style={{ ...cellStyle, color: '#475569' }}>{schedule.auditType || 'General'}</td>
-                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#475569' }}>{schedule.startDate || '-'}</span></td>
-                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#475569' }}>{schedule.endDate || '-'}</span></td>
+                  <td style={{ ...cellStyle, color: '#334155', fontWeight: '500' }}>{schedule.auditType || 'General'}</td>
+                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#334155', fontWeight: '500' }}>{schedule.startDate || '-'}</span></td>
+                  <td style={cellStyle}><span style={{ fontFamily: 'monospace', color: '#334155', fontWeight: '500' }}>{schedule.endDate || '-'}</span></td>
                   <td style={cellStyle}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
                       {(schedule.auditors || []).map(a => <AuditorTag key={a} name={a} allAuditors={allAuditors} />)}
@@ -1152,21 +1227,21 @@ function ScheduleTable({ schedules, sortField, sortAsc, onSort, onEdit, onDelete
                     {(schedule.findingsCount > 0 || schedule.recommendationsCount > 0) ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
                         {schedule.findingsCount > 0 && (
-                          <span style={{ fontSize: '0.68rem', color: COLORS.orange, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: COLORS.orange, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                             <AlertTriangle size={10} /> 시정 {schedule.findingsCount}
                           </span>
                         )}
                         {schedule.recommendationsCount > 0 && (
-                          <span style={{ fontSize: '0.68rem', color: COLORS.cyan, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                          <span style={{ fontSize: '0.72rem', color: COLORS.cyan, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                             <FileText size={10} /> 권고 {schedule.recommendationsCount}
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span style={{ fontSize: '0.68rem', color: COLORS.text.light }}>—</span>
+                      <span style={{ fontSize: '0.72rem', color: COLORS.text.light }}>—</span>
                     )}
                   </td>
-                  <td style={cellStyle}><span style={{ color: '#64748B', fontSize: '0.72rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{schedule.notes || '-'}</span></td>
+                  <td style={cellStyle}><span style={{ color: '#334155', fontSize: '0.78rem', fontWeight: '500', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{schedule.notes || '-'}</span></td>
                   <td style={cellStyle}>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
                       <button onClick={() => onEdit(schedule)} title="Edit" style={actionBtnStyle}><Edit3 size={13} /></button>

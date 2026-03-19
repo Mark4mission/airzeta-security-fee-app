@@ -463,15 +463,15 @@ function HomePage() {
         // Count branches with actual cost data for last month
         const lastMonthDocs = allCosts.filter(d => d.targetMonth === lastMonth);
         const lastMonthBranches = new Set(lastMonthDocs.filter(d => {
-          const items = d.costItems || [];
-          return items.some(i => parseFloat(i.actualCost) > 0);
+          const items = d.costItems || d.items || [];
+          return items.some(i => parseFloat(i.actualCost || i.actual || 0) > 0);
         }).map(d => d.branchName));
 
         // Count branches with est cost data for this month
         const thisMonthDocs = allCosts.filter(d => d.targetMonth === thisMonth);
         const thisMonthBranches = new Set(thisMonthDocs.filter(d => {
-          const items = d.costItems || [];
-          return items.some(i => parseFloat(i.estimatedCost) > 0);
+          const items = d.costItems || d.items || [];
+          return items.some(i => parseFloat(i.estimatedCost || i.estimated || 0) > 0);
         }).map(d => d.branchName));
 
         // Total branches
@@ -487,9 +487,9 @@ function HomePage() {
           const monthDocs = allCosts.filter(c => c.targetMonth === key);
           let est = 0, act = 0;
           monthDocs.forEach(doc => {
-            (doc.costItems || []).forEach(item => {
-              est += parseFloat(item.estimatedCost) || 0;
-              act += parseFloat(item.actualCost) || 0;
+            (doc.costItems || doc.items || []).forEach(item => {
+              est += parseFloat(item.estimatedCost || item.estimated || 0) || 0;
+              act += parseFloat(item.actualCost || item.actual || 0) || 0;
             });
           });
           chartData.push({ month: label, est, act });
@@ -902,7 +902,11 @@ function UpcomingAuditCard({ audits, navigate }) {
 // SECURITY PLEDGE AGREEMENT CARD (with Google Sheets data)
 // ============================================================
 const PLEDGE_SHEET_ID = '1rAN--sDV6dj9N5fgB71y7NoUyjgfkOHnmyAoBRiuHIw';
-const PLEDGE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/gviz/tq?tqx=out:csv`;
+// Multiple CSV URL patterns as fallbacks (gviz may require 'Publish to Web'; export works with link-sharing)
+const PLEDGE_SHEET_CSV_URLS = [
+  `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/gviz/tq?tqx=out:csv`,
+  `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/export?format=csv&gid=0`,
+];
 const PLEDGE_SHEET_EDIT_URL = `https://docs.google.com/spreadsheets/d/${PLEDGE_SHEET_ID}/edit?usp=sharing`;
 
 /** Mask ~1/3 of a name with asterisks for privacy */
@@ -988,8 +992,41 @@ function SecurityPledgeCard() {
   useEffect(() => {
     const fetchPledgeData = async () => {
       try {
-        const resp = await fetch(PLEDGE_SHEET_CSV_URL);
-        if (!resp.ok) throw new Error('Failed to fetch');
+        // Try multiple URL patterns (gviz needs 'Publish to Web'; export works with link-sharing)
+        let resp = null;
+        let lastError = null;
+        for (const url of PLEDGE_SHEET_CSV_URLS) {
+          try {
+            const r = await fetch(url);
+            // Google login redirects return 200 HTML; detect by checking content-type
+            const ct = r.headers.get('content-type') || '';
+            if (r.ok && (ct.includes('text/csv') || ct.includes('text/plain') || ct.includes('application/octet'))) {
+              resp = r;
+              break;
+            }
+            // If response is HTML (login redirect), try next URL
+            if (r.ok && ct.includes('text/html')) {
+              const preview = await r.text();
+              // If the response starts with what looks like CSV data, accept it
+              if (preview && !preview.trim().startsWith('<!') && !preview.trim().startsWith('<html')) {
+                resp = { ok: true, text: async () => preview };
+                break;
+              }
+              lastError = new Error('Redirected to login page');
+              continue;
+            }
+            if (!r.ok) {
+              lastError = new Error(`HTTP ${r.status}`);
+              continue;
+            }
+            resp = r;
+            break;
+          } catch (e) {
+            lastError = e;
+            continue;
+          }
+        }
+        if (!resp) throw lastError || new Error('All CSV fetch attempts failed');
         const text = await resp.text();
         const lines = text.split('\n').filter(l => l.trim());
         if (lines.length <= 1) { setPledgeData({ total: 0, recentSigners: [], byDept: {}, loading: false, error: false }); return; }
