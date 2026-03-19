@@ -420,7 +420,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
       )}
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', fontSize: '0.65rem', color: COLORS.text.secondary, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem', fontSize: '0.7rem', color: COLORS.text.secondary, flexWrap: 'wrap', fontWeight: '500' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <span style={{ width: 10, height: 10, borderRadius: 2, background: COLORS.success, display: 'inline-block' }} /> Both submitted
         </span>
@@ -446,32 +446,32 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
 
       {/* Table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
           <thead>
             {/* Monthly KRW Totals Row (above month headers) - only when any month has rates */}
             {Object.keys(monthlyKRWTotals).length > 0 && (
               <>
                 <tr>
-                  <th style={{ padding: '0.15rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#eef2ff', zIndex: 2, fontSize: '0.55rem', color: COLORS.primary, fontWeight: '600', borderBottom: 'none', verticalAlign: 'bottom' }}>
+                  <th style={{ padding: '0.2rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#eef2ff', zIndex: 2, fontSize: '0.6rem', color: COLORS.primary, fontWeight: '700', borderBottom: 'none', verticalAlign: 'bottom' }}>
                     Est. (KRW)
                   </th>
                   {activeMonths.map(m => {
                     const t = monthlyKRWTotals[m];
                     return (
-                      <th key={`est-${m}`} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', background: '#eef2ff', fontSize: '0.55rem', color: COLORS.primary, fontWeight: '700', borderBottom: 'none', whiteSpace: 'nowrap' }}>
+                      <th key={`est-${m}`} style={{ padding: '0.2rem 0.2rem', textAlign: 'center', background: '#eef2ff', fontSize: '0.6rem', color: COLORS.primary, fontWeight: '800', borderBottom: 'none', whiteSpace: 'nowrap' }}>
                         {t?.est != null ? fmtKRW(t.est) : ''}
                       </th>
                     );
                   })}
                 </tr>
                 <tr>
-                  <th style={{ padding: '0.15rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#fff1f2', zIndex: 2, fontSize: '0.55rem', color: COLORS.secondary, fontWeight: '600', borderBottom: '1px solid #e5e7eb', verticalAlign: 'bottom' }}>
+                  <th style={{ padding: '0.2rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#fff1f2', zIndex: 2, fontSize: '0.6rem', color: COLORS.secondary, fontWeight: '700', borderBottom: '1px solid #e5e7eb', verticalAlign: 'bottom' }}>
                     Act. (KRW)
                   </th>
                   {activeMonths.map(m => {
                     const t = monthlyKRWTotals[m];
                     return (
-                      <th key={`act-${m}`} style={{ padding: '0.15rem 0.2rem', textAlign: 'center', background: '#fff1f2', fontSize: '0.55rem', color: COLORS.secondary, fontWeight: '700', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      <th key={`act-${m}`} style={{ padding: '0.2rem 0.2rem', textAlign: 'center', background: '#fff1f2', fontSize: '0.6rem', color: COLORS.secondary, fontWeight: '800', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
                         {t?.act != null ? fmtKRW(t.act) : ''}
                       </th>
                     );
@@ -481,12 +481,12 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
             )}
             {/* Month header row with per-month upload/view icons */}
             <tr style={{ background: '#f1f5f9' }}>
-              <th style={{ padding: '0.5rem 0.4rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '700', color: COLORS.primary, minWidth: '90px' }}>Station</th>
+              <th style={{ padding: '0.5rem 0.5rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '800', color: COLORS.primary, minWidth: '95px', fontSize: '0.82rem' }}>Station</th>
               {activeMonths.map((m) => {
                 const yearMonth = `${filterYear}-${m}`;
                 const hasRates = !!monthlyExchangeRates?.[yearMonth]?.rates;
                 return (
-                  <th key={m} style={{ padding: '0.3rem 0.2rem', textAlign: 'center', borderBottom: '2px solid #d1d5db', fontWeight: '600', color: COLORS.text.secondary, minWidth: '70px', verticalAlign: 'middle' }}>
+                  <th key={m} style={{ padding: '0.35rem 0.25rem', textAlign: 'center', borderBottom: '2px solid #d1d5db', fontWeight: '700', color: COLORS.text.primary, minWidth: '72px', verticalAlign: 'middle', fontSize: '0.78rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                       <span>{monthLabels[parseInt(m) - 1]}</span>
                       {/* Per-month exchange rate icons (admin only) */}
@@ -537,7 +537,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
           <tbody>
             {displayBranches.map(bn => (
               <tr key={bn} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <td style={{ padding: '0.4rem', fontWeight: '600', color: COLORS.text.primary, position: 'sticky', left: 0, background: 'white', zIndex: 1, whiteSpace: 'nowrap' }}>
+                <td style={{ padding: '0.45rem 0.5rem', fontWeight: '700', color: COLORS.text.primary, position: 'sticky', left: 0, background: 'white', zIndex: 1, whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
                   {bn.length > 12 ? bn.slice(0, 12) + '..' : bn}
                 </td>
                 {activeMonths.map(m => {
@@ -589,16 +589,16 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
                       >
                         {cost ? (
                           <>
-                            <div style={{ fontSize: '0.6rem', color: COLORS.primary, fontWeight: '600' }}>
+                            <div style={{ fontSize: '0.72rem', color: COLORS.primary, fontWeight: '700', letterSpacing: '-0.01em' }}>
                               E: {fmt(cost.totalEstimated)}
                             </div>
-                            <div style={{ fontSize: '0.6rem', color: hasAct ? COLORS.secondary : COLORS.text.light, fontWeight: hasAct ? '600' : '400' }}>
+                            <div style={{ fontSize: '0.72rem', color: hasAct ? COLORS.secondary : COLORS.text.light, fontWeight: hasAct ? '700' : '400', letterSpacing: '-0.01em' }}>
                               A: {hasAct ? fmt(cost.totalActual) : '-'}
                             </div>
                             {variancePct !== null && (
                               <div style={{
-                                fontSize: '0.55rem',
-                                fontWeight: '700',
+                                fontSize: '0.62rem',
+                                fontWeight: '800',
                                 marginTop: '1px',
                                 padding: '0px 3px',
                                 borderRadius: '3px',
@@ -615,7 +615,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
                             )}
                           </>
                         ) : (
-                          <div style={{ color: COLORS.text.light, fontSize: '0.6rem' }}>-</div>
+                          <div style={{ color: COLORS.text.light, fontSize: '0.65rem' }}>-</div>
                         )}
                       </div>
                     </td>
