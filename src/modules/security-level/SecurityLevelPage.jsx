@@ -733,10 +733,7 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
     // Load map data + Firestore data concurrently
     Promise.all([
       fetch('/countries-110m.json').then(r => r.json()).catch(() => null),
-      getDocs(collection(db, 'securityLevels')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(err => {
-        console.warn('[SecurityLevel] Failed to load security levels:', err.message);
-        return []; // Return empty on permission error — map still shows
-      }),
+      getDocs(collection(db, 'securityLevels')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
     ]).then(([topo, data]) => {
       if (topo) {
         try {

@@ -243,8 +243,15 @@ function SecurityFeePage() {
       const branch = settings.branches.find(b => b.name === currentUser.branchName || b.id === currentUser.branchName);
       if (branch) {
         setCurrency(branch.currency || 'USD');
-        setManagerName(branch.manager || '');
+        // Only overwrite managerName from branch if it's not already set
+        // (user may have typed a name manually)
+        if (!managerName) {
+          setManagerName(branch.manager || currentUser.displayName || '');
+        }
         setDefaultPaymentMethod(currentUser.preferredPaymentMethod || branch.paymentMethod || '');
+      } else if (!managerName) {
+        // Fallback: use displayName when branch record isn't found in settings
+        setManagerName(currentUser.displayName || '');
       }
     }
   }, [currentUser, settings.branches]);
@@ -274,25 +281,26 @@ function SecurityFeePage() {
           currency: item.currency || currency, paymentMethod: item.paymentMethod || '', notes: item.notes || ''
         }));
         setCostItems(cleanItems);
+        // Restore manager name from previous submission if available
+        if (previousData[0].managerName && !managerName) {
+          setManagerName(previousData[0].managerName);
+        }
         setAutoLoadMessage(`Loaded data for ${branch} - ${month}`);
         setTimeout(() => setAutoLoadMessage(''), 4000);
       } else {
         resetCostItems();
+        // Empty result from getSecurityCostsByBranch can mean:
+        // 1. No data for this month (normal)
+        // 2. Permission denied (App Check) - returns [] gracefully
+        // Either way, user can enter new data
         setAutoLoadMessage('No previous data for this station/month. Enter new cost items.');
       }
     } catch (error) {
       console.warn('[SecurityFee] autoLoadCostData error:', error.message);
       resetCostItems();
-      const isPermissionError = error.code === 'permission-denied' || 
-                                error.message?.includes('permission') ||
-                                error.message?.includes('Missing or insufficient');
-      if (isPermissionError) {
-        setAutoLoadMessage('Data access restricted. Please contact admin to check Firebase App Check settings.');
-      } else {
-        setAutoLoadMessage('Could not load previous data. You can still enter new cost items.');
-      }
+      setAutoLoadMessage('Could not load previous data. You can still enter new cost items.');
     }
-  }, [currency, defaultPaymentMethod]);
+  }, [currency, defaultPaymentMethod, managerName]);
 
   const resetCostItems = () => {
     setCostItems([{

@@ -96,17 +96,10 @@ if (DISABLE_APP_CHECK) {
         appCheckError = error.message;
         
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'SSR';
-        console.error('[Config] App Check: Token validation FAILED');
-        console.error('[Config] Error:', error.message);
-        console.error('[Config] Domain:', domain);
-        console.error('[Config] Key prefix:', RECAPTCHA_SITE_KEY.substring(0, 8) + '...');
-        console.error('[Config] Possible causes:');
-        console.error('  1. Domain "' + domain + '" is not in the key\'s allowed domains list');
-        console.error('  2. reCAPTCHA Enterprise API not enabled in GCP project');
-        console.error('  3. Key not registered in Firebase Console > App Check');
-        console.error('  4. Key was created as reCAPTCHA v2/v3, not Enterprise (check GCP Console)');
-        console.error('[Config] Fix: GCP Console > reCAPTCHA Enterprise > Edit key > Add domain');
-        console.error('[Config] Or: Firebase Console > App Check > Authentication > Unenforce');
+        console.warn('[Config] App Check: Token validation failed for domain "' + domain + '".');
+        console.warn('[Config] App will continue with local fallback data. To resolve:');
+        console.warn('[Config]   1. Add domain "' + domain + '" to reCAPTCHA Enterprise key allowed domains');
+        console.warn('[Config]   2. Or set VITE_DISABLE_APP_CHECK=true to skip App Check');
         appCheckReadyResolve(appCheckStatus);
       });
   } catch (error) {
