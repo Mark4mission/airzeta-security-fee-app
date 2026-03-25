@@ -246,7 +246,6 @@ function App() {
       <HashRouter>
         <AuthProvider>
           <ProtectedRoutes />
-          <SessionWarningToast />
         </AuthProvider>
       </HashRouter>
     </ErrorBoundary>

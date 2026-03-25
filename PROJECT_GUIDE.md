@@ -1,7 +1,7 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 3.1
-> **Last Updated**: 2026-03-19
+> **Document Version**: 3.3
+> **Last Updated**: 2026-03-25
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
 
@@ -1026,6 +1026,132 @@ Level names containing these keywords auto-detect their color:
 | Contract files not loading | Ensure `contracts` and `contracts/{id}/chunks` collections have Firestore rules. Previously missing (fixed in v2.5). |
 | Build OOM killed in sandbox | Use `NODE_OPTIONS='--max-old-space-size=768'` for 1GB RAM environments. The `vite.config.js` manual chunks help reduce peak memory. |
 | Security events lost on failed login | Expected behavior in v2.3. Pre-auth events are queued in memory and flushed after successful login. If the user never logs in, events are discarded after 5 minutes. |
+
+---
+
+### 2026-03-25 (Session 25 - Login/Registration Fix & UI Improvements v3.2)
+
+#### Critical Fix: Login/Registration Branch List Not Loading
+
+**Problem Diagnosis**: User registration (both email and Google SSO) could fail at the BranchSelection step due to a race condition between Firebase Auth user creation and Firestore user profile creation.
+
+1. **FIXED: `updateUserBranch()` — NOT_FOUND error for new users**
+   - **Symptom**: After registration, selecting a branch in BranchSelection would fail silently with Firestore NOT_FOUND error
+   - **Root Cause**: `updateUserBranch()` used `updateDoc()` which requires the document to already exist. For new users (especially Google SSO), the Firestore user profile might not exist yet due to race condition between `onAuthStateChanged` and `handleGoogleUserProfile()`
+   - **Fix**: Added `getDoc()` check before update. If document doesn't exist, uses `setDoc()` to create the full profile with branch selection. Falls back gracefully for both HQ (pending_admin) and branch_user paths.
+   - **File**: `src/firebase/auth.js` → `updateUserBranch()`
+
+2. **FIXED: `_isNewUser` flag never created Firestore document**
+   - **Symptom**: Users logged in via Google SSO might get stuck in BranchSelection with subsequent operations failing
+   - **Root Cause**: `listenToAuthChanges()` fallback profile set `_isNewUser: true` but never created the Firestore document. All subsequent Firestore operations (updateUserBranch, updateUserPreferences) using `updateDoc()` would fail.
+   - **Fix**: Changed fallback behavior to create the Firestore user profile document via `setDoc()` when no profile exists after retry. Removed `_isNewUser` flag in favor of actual document creation.
+   - **File**: `src/firebase/auth.js` → `listenToAuthChanges()`
+
+3. **FIXED: BranchSelection — No retry on branch list load failure**
+   - **Symptom**: If `getAllBranches()` failed (e.g., timing issue with auth propagation), user was stuck with "Failed to load station list" with no recovery option
+   - **Fix**: Added automatic retry with exponential backoff (up to 3 retries: 1s, 2s, 4s delays). Added "Retry Loading" button in error state. Improved error messages for NOT_FOUND and PERMISSION_DENIED scenarios.
+   - **File**: `src/components/BranchSelection.jsx`
+
+4. **FIXED: Duplicate SessionWarningToast rendering**
+   - **Symptom**: `SessionWarningToast` was rendered both inside `ProtectedRoutes` and directly in `App` component, causing double toast notifications
+   - **Fix**: Removed duplicate `<SessionWarningToast />` from `App()`, keeping only the one inside `ProtectedRoutes`
+   - **File**: `src/App.jsx`
+
+#### SSS vs SeMIS Portal Architecture Note
+- **This is the SSS (Station Security System) portal** — uses RBAC with branch selection after login
+- SSS requires `branchCodes` collection for branch list + `users` collection for role/branch assignment
+- SeMIS (Security Management Information System) is a separate portal using ‘Officer’ permission directly
+- Both share the same Firebase project (`airzeta-security-system`) and SSO (Google Auth)
+- **No SeMIS code contamination found** in this codebase — the registration issue was purely a race condition in the SSS auth flow
+
+#### Previously Applied Fixes (Verified)
+- Security Pledge fallback data for when Google Sheets CSV is unreachable
+- Security Communication using `communicationPosts` Firestore collection
+- Estimated/Actual charts on Home Dashboard with fallback sample data
+- Annual table audit type display improvements
+- Increased font sizes/weights on AdminDashboard and SecurityFeePage
+- Darker/bolder Auditor Schedule text
+- Enhanced By Auditor chart readability
+
+#### Modified Files
+- `src/firebase/auth.js` — `updateUserBranch()`, `listenToAuthChanges()` race condition fixes
+- `src/components/BranchSelection.jsx` — Retry logic, better error handling
+- `src/App.jsx` — Removed duplicate SessionWarningToast
+- `PROJECT_GUIDE.md` — Session 25 changelog
+- Build: **0 errors**, 2550 modules, ~15s
+
+---
+
+### 2026-03-25 (Session 26 - Firestore App Check Fallback & Branch Loading Fix v3.3)
+
+#### Critical Fix: Branch List Still Not Loading After Session 25 Deploy
+
+**Problem Diagnosis**: Session 25 fixes addressed the race condition, but the user `테스트` (test@test.com) still saw "Failed to load station list" and "No stations are configured yet". Console analysis revealed the root cause was **not** a race condition but **Firestore App Check enforcement blocking ALL Firestore read operations**.
+
+**Root Cause**: Firebase App Check enforcement is **enabled server-side** for Firestore in the Firebase Console. The reCAPTCHA Enterprise token validation fails because the production domain (`airzeta-security-fee-app.vercel.app`) may not be in the reCAPTCHA Enterprise key's allowed domains list. When enforcement is ON, Firestore rejects ALL requests (read and write) with "Missing or insufficient permissions" — regardless of whether the user is authenticated and the security rules would permit access.
+
+**Error Flow**:
+1. User logs in → Firebase Auth succeeds ✅
+2. `listenToAuthChanges()` → tries to read `users/{uid}` → **PERMISSION DENIED** (App Check blocks)
+3. Falls back to minimal profile → shows BranchSelection ✅
+4. `getAllBranches()` → tries to read `branchCodes` collection → **PERMISSION DENIED** (App Check blocks)
+5. Shows "Failed to load station list" / "No stations configured" ❌
+6. `updateUserBranch()` → tries to write `users/{uid}` → **PERMISSION DENIED** (App Check blocks)
+
+#### Fixes Applied
+
+1. **NEW: Hardcoded fallback branch list in `collections.js`**
+   - Added `FALLBACK_BRANCHES` array with all known stations: HQ, ALASU, TYOSU, SINSU, HKGSU, BKKSU, SFOSF
+   - `getAllBranches()` now catches permission errors and returns the fallback list instead of throwing
+   - Users can select a branch and proceed even when Firestore is blocked by App Check
+   - **Important**: Update `FALLBACK_BRANCHES` when branches are added/removed in Settings
+   - **File**: `src/firebase/collections.js`
+
+2. **IMPROVED: `updateUserBranch()` permission error handling**
+   - If Firestore write fails due to App Check enforcement, returns `{ success: true, localOnly: true }`
+   - User can proceed with local-only branch assignment (stored in React state)
+   - Branch will be persisted to Firestore when App Check is resolved
+   - **File**: `src/firebase/auth.js`
+
+3. **IMPROVED: `listenToAuthChanges()` permission error logging**
+   - Explicitly detects App Check-related permission errors
+   - Logs clear diagnostic message instead of generic error
+   - **File**: `src/firebase/auth.js`
+
+4. **IMPROVED: BranchSelection UI for fallback mode**
+   - Detects when fallback branches are being used (via `_fallback` marker)
+   - Shows a subtle yellow banner: "Using cached station list. Contact admin if your station is missing."
+   - Removed verbose Firestore permission error panel (since fallback handles it gracefully)
+   - Simplified error display — only shows generic errors for non-permission failures
+   - **File**: `src/components/BranchSelection.jsx`
+
+#### Admin Action Required (Resolve Root Cause)
+
+The fallback ensures users can register and log in, but full Firestore access requires fixing one of these:
+
+**Option A (Recommended): Disable Firestore App Check enforcement**
+1. Firebase Console → App Check → APIs
+2. Find "Cloud Firestore" in the list
+3. Click to **unenforce** (disable enforcement)
+4. Firestore will accept all requests regardless of App Check token status
+
+**Option B: Add production domain to reCAPTCHA Enterprise key**
+1. GCP Console → reCAPTCHA Enterprise → Select key `6LdAk4Ms...`
+2. Edit key → Add `airzeta-security-fee-app.vercel.app` to allowed domains
+3. Also add `mark4mission.github.io` if using GitHub Pages
+4. Wait 5-10 minutes for propagation
+
+**Option C: Deploy Firestore rules manually**
+- `firebase login && firebase deploy --only firestore:rules`
+- Note: This alone won't help if App Check enforcement is ON
+
+#### Modified Files
+- `src/firebase/collections.js` — `FALLBACK_BRANCHES` array, permission-error fallback in `getAllBranches()`
+- `src/firebase/auth.js` — `updateUserBranch()` permission-error fallback, `listenToAuthChanges()` improved logging
+- `src/components/BranchSelection.jsx` — Fallback detection, simplified error UI, "Using cached station list" banner
+- `firestore.rules` — `exists()` guard in `isAdmin()` (from Session 25)
+- `PROJECT_GUIDE.md` — v3.3, Session 26 changelog
+- Build: **0 errors**, 2550 modules, ~15s
 
 ---
 

@@ -415,7 +415,7 @@ function SecurityAuditSchedulePage() {
         padding: '0.75rem 1rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`,
         borderRadius: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
       }}>
-        <Filter size={15} color={COLORS.text.secondary} style={{ flexShrink: 0 }} />
+        <Filter size={15} color={COLORS.text.primary} style={{ flexShrink: 0 }} />
         <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} style={selectStyle}>
           {Array.from({ length: 5 }, (_, i) => {
             const y = new Date().getFullYear() - 2 + i;
@@ -446,16 +446,15 @@ function SecurityAuditSchedulePage() {
 
         {/* View Mode Buttons */}
         <div style={{ display: 'flex', background: COLORS.surfaceAlt, borderRadius: '0.5rem', overflow: 'hidden', border: `1px solid ${COLORS.border}` }}>
-          {[
-            { key: 'annual', icon: Grid3X3, label: 'Annual' },
+          {[{ key: 'annual', icon: Grid3X3, label: 'Annual' },
             { key: 'table', icon: List, label: 'Table' },
             { key: 'calendar', icon: Calendar, label: 'Calendar' },
             { key: 'inspector', icon: User, label: 'Inspector' },
           ].map(v => (
             <button key={v.key} onClick={() => setViewMode(v.key)} title={v.label} style={{
-              padding: '0.35rem 0.55rem', border: 'none', cursor: 'pointer', fontSize: '0.68rem', fontWeight: '600',
+              padding: '0.4rem 0.6rem', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700',
               background: viewMode === v.key ? COLORS.accent : 'transparent',
-              color: viewMode === v.key ? 'white' : COLORS.text.secondary,
+              color: viewMode === v.key ? 'white' : COLORS.text.primary,
               display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.15s'
             }}>
               <v.icon size={13} /> {v.label}
@@ -508,7 +507,7 @@ function SecurityAuditSchedulePage() {
 // Shared Styles
 // ============================================================
 
-const selectStyle = { padding: '0.4rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.75rem', outline: 'none' };
+const selectStyle = { padding: '0.4rem 0.6rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.primary, fontSize: '0.8rem', fontWeight: '600', outline: 'none' };
 const btnPrimary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.5rem 1rem', background: COLORS.accent, border: 'none', borderRadius: '0.5rem', color: 'white', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer', boxShadow: '0 2px 8px rgba(233,69,96,0.25)' };
 const btnSecondary = { display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.45rem 0.75rem', background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: '0.4rem', color: COLORS.text.secondary, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer' };
 const cellStyle = { padding: '0.65rem 0.75rem', fontSize: '0.82rem', verticalAlign: 'middle', color: '#1E293B' };
@@ -913,9 +912,9 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
                   const statusBreakdown = auditorStatusData[name] || {};
                   return (
                     <div key={name} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span style={{ fontSize: '0.68rem', fontWeight: '700', color: COLORS.text.primary, width: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}
+                      <span style={{ fontSize: '0.72rem', fontWeight: '800', color: COLORS.text.primary, width: '65px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}
                         title={name}>{name}</span>
-                      <div style={{ flex: 1, height: '16px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
+                      <div style={{ flex: 1, height: '18px', background: '#F1F5F9', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
                         {['completed', 'in_progress', 'scheduled', 'postponed', 'cancelled'].map(st => {
                           const cnt = statusBreakdown[st] || 0;
                           if (cnt === 0) return null;
@@ -925,7 +924,7 @@ function AnalyticsDashboard({ stats, allAuditors, selectedYear, viewMode, schedu
                           );
                         })}
                       </div>
-                      <span style={{ fontSize: '0.68rem', fontWeight: '800', color: COLORS.text.primary, width: '22px', textAlign: 'right', flexShrink: 0 }}>{total}</span>
+                      <span style={{ fontSize: '0.72rem', fontWeight: '900', color: COLORS.text.primary, width: '22px', textAlign: 'right', flexShrink: 0 }}>{total}</span>
                     </div>
                   );
                 })}
@@ -1042,10 +1041,10 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
                                 border: `1px solid ${auditorColor ? auditorColor.border : statusCfg.border}`,
                                 cursor: 'pointer', overflow: 'hidden', transition: 'all 0.15s'
                               }}
-                              title={`${s.auditType || 'Audit'} — ${statusCfg.label}${primaryAuditor ? ' · ' + primaryAuditor : ''}`}
+                              title={`${branch} — ${s.auditType || 'Audit'} (${statusCfg.label})${primaryAuditor ? ' · ' + primaryAuditor : ''}`}
                             >
                               <div style={{ fontSize: '0.6rem', fontWeight: '700', color: auditorColor ? auditorColor.text : statusCfg.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {s.auditType ? (s.auditType.length > 8 ? s.auditType.split(' ').map(w => w[0]).join('') : s.auditType) : branch.substring(0, 6)}
+                                {s.auditType ? (s.auditType.length > 8 ? s.auditType.substring(0, 7) + '..' : s.auditType) : (branch.length > 6 ? branch.substring(0, 6) : branch)}
                               </div>
                               {primaryAuditor && (
                                 <div style={{ fontSize: '0.52rem', color: auditorColor ? auditorColor.text : COLORS.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85, fontWeight: '600' }}>
