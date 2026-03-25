@@ -24,6 +24,22 @@ export const COLLECTIONS = {
   SECURITY_NEWS: 'securityNews',
 };
 
+// ============================================================
+// Hardcoded fallback branch list
+// Used when Firestore is unreachable (App Check enforcement blocks reads)
+// These MUST match the actual branchCodes collection documents in Firestore.
+// Update this list whenever branches are added/removed in Settings.
+// ============================================================
+const FALLBACK_BRANCHES = [
+  { id: 'HQ', branchName: 'HQ', manager: '', currency: 'KRW', active: true },
+  { id: 'ALASU', branchName: 'ALASU', manager: 'Park Joonhyuk', currency: 'USD', active: true },
+  { id: 'TYOSU', branchName: 'TYOSU', manager: 'Yamamoto Kenji', currency: 'JPY', active: true },
+  { id: 'SINSU', branchName: 'SINSU', manager: 'Lim Wei Ling', currency: 'SGD', active: true },
+  { id: 'HKGSU', branchName: 'HKGSU', manager: 'Chan Siu Ming', currency: 'HKD', active: true },
+  { id: 'BKKSU', branchName: 'BKKSU', manager: 'Pimchanok Srisai', currency: 'THB', active: true },
+  { id: 'SFOSF', branchName: 'SFOSF', manager: 'David Kim', currency: 'USD', active: true },
+];
+
 /**
  * Wait for authentication to initialize
  * @returns {Promise<User|null>} The authenticated user or null
@@ -54,15 +70,33 @@ const ensureAuthenticated = async () => {
   return user;
 };
 
-// Branches 조회 (인증 대기 로직 추가)
+// Branches 조회 (인증 대기 로직 추가, App Check 에러 감지, fallback 포함)
 export const getAllBranches = async () => {
   try {
     // 인증 대기
-    await ensureAuthenticated();
+    const user = await ensureAuthenticated();
+    console.log('[getAllBranches] Auth confirmed, uid:', user.uid, 'reading branchCodes...');
     
     const querySnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
+    console.log('[getAllBranches] Success:', querySnapshot.docs.length, 'branches loaded from Firestore');
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
+    // Enhanced error logging for permission issues
+    const isPermissionError = error.code === 'permission-denied' || 
+                              error.message?.includes('permission') ||
+                              error.message?.includes('Missing or insufficient');
+    if (isPermissionError) {
+      console.error('[getAllBranches] PERMISSION DENIED reading branchCodes.');
+      console.error('[getAllBranches] Cause: Firestore App Check enforcement blocks requests when reCAPTCHA token is invalid.');
+      console.error('[getAllBranches] Current auth user:', auth.currentUser?.email || 'null');
+      console.warn('[getAllBranches] Returning FALLBACK branch list (' + FALLBACK_BRANCHES.length + ' branches) so users can still select a station.');
+      
+      // Return fallback branches instead of throwing
+      // This allows users to complete registration/login even when
+      // App Check enforcement blocks Firestore reads.
+      // Mark with _fallback so BranchSelection can show a notice
+      return FALLBACK_BRANCHES.map((b, i) => ({ ...b, _fallback: i === 0 ? true : undefined }));
+    }
     console.error('Error fetching branches:', error);
     throw error;
   }

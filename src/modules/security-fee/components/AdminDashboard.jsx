@@ -205,7 +205,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
     <section style={{ background: COLORS.surface, padding: '1.5rem', borderRadius: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', marginBottom: '2rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: COLORS.text.primary, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+        <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: COLORS.text.primary, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
           <BarChart3 size={22} color={COLORS.primary} />
           All Stations - Cost Status
         </h2>
@@ -446,7 +446,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
 
       {/* Table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
             {/* Monthly KRW Totals Row (above month headers) - only when any month has rates */}
             {Object.keys(monthlyKRWTotals).length > 0 && (
@@ -481,12 +481,12 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
             )}
             {/* Month header row with per-month upload/view icons */}
             <tr style={{ background: '#f1f5f9' }}>
-              <th style={{ padding: '0.5rem 0.5rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '800', color: COLORS.primary, minWidth: '95px', fontSize: '0.82rem' }}>Station</th>
+              <th style={{ padding: '0.5rem 0.5rem', textAlign: 'left', position: 'sticky', left: 0, background: '#f1f5f9', zIndex: 1, borderBottom: '2px solid #d1d5db', fontWeight: '900', color: COLORS.primary, minWidth: '95px', fontSize: '0.9rem' }}>Station</th>
               {activeMonths.map((m) => {
                 const yearMonth = `${filterYear}-${m}`;
                 const hasRates = !!monthlyExchangeRates?.[yearMonth]?.rates;
                 return (
-                  <th key={m} style={{ padding: '0.35rem 0.25rem', textAlign: 'center', borderBottom: '2px solid #d1d5db', fontWeight: '700', color: COLORS.text.primary, minWidth: '72px', verticalAlign: 'middle', fontSize: '0.78rem' }}>
+                  <th key={m} style={{ padding: '0.35rem 0.25rem', textAlign: 'center', borderBottom: '2px solid #d1d5db', fontWeight: '800', color: COLORS.text.primary, minWidth: '72px', verticalAlign: 'middle', fontSize: '0.85rem' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                       <span>{monthLabels[parseInt(m) - 1]}</span>
                       {/* Per-month exchange rate icons (admin only) */}
@@ -537,7 +537,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
           <tbody>
             {displayBranches.map(bn => (
               <tr key={bn} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <td style={{ padding: '0.45rem 0.5rem', fontWeight: '700', color: COLORS.text.primary, position: 'sticky', left: 0, background: 'white', zIndex: 1, whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
+                <td style={{ padding: '0.45rem 0.5rem', fontWeight: '800', color: COLORS.text.primary, position: 'sticky', left: 0, background: 'white', zIndex: 1, whiteSpace: 'nowrap', fontSize: '0.88rem' }}>
                   {bn.length > 12 ? bn.slice(0, 12) + '..' : bn}
                 </td>
                 {activeMonths.map(m => {
@@ -589,10 +589,10 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
                       >
                         {cost ? (
                           <>
-                            <div style={{ fontSize: '0.72rem', color: COLORS.primary, fontWeight: '700', letterSpacing: '-0.01em' }}>
+                            <div style={{ fontSize: '0.78rem', color: COLORS.primary, fontWeight: '800', letterSpacing: '-0.01em' }}>
                               E: {fmt(cost.totalEstimated)}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: hasAct ? COLORS.secondary : COLORS.text.light, fontWeight: hasAct ? '700' : '400', letterSpacing: '-0.01em' }}>
+                            <div style={{ fontSize: '0.78rem', color: hasAct ? COLORS.secondary : COLORS.text.light, fontWeight: hasAct ? '800' : '400', letterSpacing: '-0.01em' }}>
                               A: {hasAct ? fmt(cost.totalActual) : '-'}
                             </div>
                             {variancePct !== null && (

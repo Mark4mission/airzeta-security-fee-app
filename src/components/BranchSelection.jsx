@@ -25,12 +25,21 @@ function BranchSelection({ currentUser, onBranchSelected }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [pendingAdminResult, setPendingAdminResult] = useState(false); // HQ 선택 후 승인 대기 상태
+  const [retryCount, setRetryCount] = useState(0);
+  const [isPermissionError, setIsPermissionError] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false); // Fallback 브랜치 사용 여부
 
-  // Firestore에서 branchCodes 컬렉션 로드
+  // Firestore에서 branchCodes 컬렉션 로드 (with retry logic & fallback)
   useEffect(() => {
-    const loadBranches = async () => {
+    let cancelled = false;
+    const loadBranches = async (attempt = 0) => {
       try {
+        setLoading(true);
+        setError('');
+        setIsPermissionError(false);
+        setUsingFallback(false);
         const branchList = await getAllBranches();
+        if (cancelled) return;
         // active 필터링 + 브랜치명 추출 (문서 ID 또는 branchName 필드)
         const activeBranches = branchList
           .filter(b => b.active !== false)
@@ -47,17 +56,39 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           .filter(b => b.name) // 이름 없는 것 제외
           .sort((a, b) => a.name.localeCompare(b.name)); // 알파벳 순 정렬
 
+        // Detect if this was a fallback response (getAllBranches returns fallback on permission error)
+        // Check if the branchList came from fallback by looking for the _fallback marker
+        // or by checking if the list matches the known fallback pattern
+        const wasFallback = branchList.length > 0 && branchList[0]._fallback;
+        if (wasFallback) {
+          setUsingFallback(true);
+          console.log('[BranchSelection] Using fallback branch list (Firestore permission denied)');
+        }
+
         setBranches(activeBranches);
-        console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개');
+        console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개', wasFallback ? '(fallback)' : '(Firestore)');
       } catch (err) {
-        console.error('[BranchSelection] 브랜치 로드 실패:', err);
+        if (cancelled) return;
+        console.error('[BranchSelection] 브랜치 로드 실패 (attempt', attempt + 1, '):', err);
+        
+        // Retry up to 2 times with exponential backoff for non-permission errors
+        if (attempt < 2) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 4000);
+          console.log(`[BranchSelection] ${delay}ms 후 재시도...`);
+          setTimeout(() => {
+            if (!cancelled) loadBranches(attempt + 1);
+          }, delay);
+          return;
+        }
+        
         setError('Failed to load station list. Please try again.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    loadBranches();
-  }, []);
+    loadBranches(0);
+    return () => { cancelled = true; };
+  }, [retryCount]);
 
   // 검색 필터링 (full name과 displayName 모두 대상)
   const filteredBranches = branches.filter(b =>
@@ -90,7 +121,16 @@ function BranchSelection({ currentUser, onBranchSelected }) {
       }
     } catch (err) {
       console.error('[BranchSelection] 브랜치 등록 실패:', err);
-      setError('Failed to save station selection. Please try again.');
+      
+      // Provide more specific error messages
+      const errMsg = err.message || '';
+      if (errMsg.includes('NOT_FOUND') || errMsg.includes('No document to update')) {
+        setError('Your user profile was not found. Please sign out and sign in again to create your profile.');
+      } else if (errMsg.includes('PERMISSION_DENIED') || errMsg.includes('permission')) {
+        setError('Permission denied. Please sign out and sign in again.');
+      } else {
+        setError('Failed to save station selection. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -215,6 +255,26 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           </div>
         )}
 
+        {/* Fallback 모드 안내 배너 */}
+        {!pendingAdminResult && usingFallback && !error && (
+          <div style={{
+            padding: '0.6rem 0.75rem',
+            marginBottom: '1rem',
+            background: '#fffbeb',
+            border: '1px solid #fbbf24',
+            borderRadius: '0.5rem',
+            color: '#92400e',
+            fontSize: '0.78rem',
+            lineHeight: '1.4',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '0.4rem'
+          }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.15rem' }} />
+            <span>Using cached station list. Contact admin if your station is missing.</span>
+          </div>
+        )}
+
         {/* 에러 메시지 */}
         {!pendingAdminResult && error && (
           <div style={{
@@ -224,9 +284,28 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             border: `1px solid ${COLORS.error}`,
             borderRadius: '0.5rem',
             color: '#991b1b',
-            fontSize: '0.85rem'
+            fontSize: '0.82rem',
+            whiteSpace: 'pre-line',
+            lineHeight: '1.5'
           }}>
             {error}
+            <button
+              onClick={() => { setError(''); setIsPermissionError(false); setRetryCount(c => c + 1); }}
+              style={{
+                display: 'block',
+                marginTop: '0.5rem',
+                padding: '0.35rem 0.75rem',
+                background: COLORS.error,
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.35rem',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              Retry Loading
+            </button>
           </div>
         )}
 

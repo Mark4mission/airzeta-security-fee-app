@@ -791,7 +791,7 @@ function SecurityFeePage() {
                   {/* Row 1 */}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 0.8fr 0.6fr 1fr', gap: '0.4rem', padding: '0.4rem 0.65rem', alignItems: 'end' }}>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Cost Item</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Cost Item</label>
                       <select value={item.item} onChange={(e) => handleItemChange(index, e.target.value)} required
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.78rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         <option value="">Select Item</option>
@@ -800,14 +800,14 @@ function SecurityFeePage() {
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Currency</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Currency</label>
                       <select value={itemCurrency} onChange={(e) => handleCurrencyChange(index, e.target.value)}
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         {settings.currencies.map(c => <option key={c} value={c}>{c} ({CURRENCY_SYMBOLS[c] || ''})</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Unit Price</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Unit Price</label>
                       <input type="text" inputMode="decimal" value={item._unitPriceFocused ? stripCommas(item.unitPrice) : formatInputDisplay(item.unitPrice)}
                         onChange={(e) => handleInputChange(index, 'unitPrice', stripCommas(e.target.value))}
                         onFocus={() => { const n = [...costItems]; n[index]._unitPriceFocused = true; setCostItems(n); }}
@@ -816,7 +816,7 @@ function SecurityFeePage() {
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? '#E2E8F0' : COLORS.input.bg, color: COLORS.input.text }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Qty</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Qty</label>
                       <input type="text" inputMode="numeric" value={item._qtyFocused ? stripCommas(item.quantity) : formatInputDisplay(item.quantity, 0)}
                         onChange={(e) => handleInputChange(index, 'quantity', stripCommas(e.target.value))}
                         onFocus={() => { const n = [...costItems]; n[index]._qtyFocused = true; setCostItems(n); }}
@@ -825,12 +825,12 @@ function SecurityFeePage() {
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', textAlign: 'right', background: !canEditEstimatedCost() ? '#E2E8F0' : COLORS.input.bg, color: COLORS.input.text }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Unit</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Unit</label>
                       <input type="text" value={item.qtyUnit || ''} onChange={(e) => handleInputChange(index, 'qtyUnit', e.target.value)} placeholder="kg, hr..."
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.7rem', background: COLORS.input.bg, color: COLORS.input.text, textAlign: 'center' }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.65rem', fontWeight: '700', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Payment</label>
+                      <label style={{ fontSize: '0.7rem', fontWeight: '800', color: COLORS.text.secondary, display: 'block', marginBottom: '0.15rem' }}>Payment</label>
                       <select value={item.paymentMethod} onChange={(e) => handlePaymentMethodChange(index, e.target.value)}
                         style={{ width: '100%', padding: '0.35rem', border: `1px solid ${COLORS.input.border}`, borderRadius: '0.375rem', fontSize: '0.75rem', background: COLORS.input.bg, color: COLORS.input.text }}>
                         <option value="">Select</option>
