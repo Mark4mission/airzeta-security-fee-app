@@ -184,11 +184,12 @@ function SecurityFeePage() {
   }, [currentUser]);
 
   // Reload exchange rates when year changes (separate from initial load)
-  const [initialExchangeRateYear] = useState(exchangeRateYear);
+  const exchangeRateYearRef = useRef(exchangeRateYear);
   useEffect(() => {
-    // Skip on initial load (already loaded in the main sequential useEffect)
+    // Skip the first trigger (already loaded in the main sequential useEffect)
+    if (exchangeRateYear === exchangeRateYearRef.current) return;
+    exchangeRateYearRef.current = exchangeRateYear;
     if (!settingsLoaded || !currentUser || !exchangeRateYear) return;
-    if (exchangeRateYear === initialExchangeRateYear) return;
     const loadRates = async () => {
       try {
         const ratesData = await loadExchangeRatesByYear(exchangeRateYear);
@@ -204,7 +205,7 @@ function SecurityFeePage() {
       }
     };
     loadRates();
-  }, [exchangeRateYear]);
+  }, [exchangeRateYear, settingsLoaded]);
 
   useEffect(() => {
     localStorage.setItem('securityAppSettings', JSON.stringify(settings));
