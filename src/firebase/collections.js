@@ -81,7 +81,8 @@ const waitForAuth = () => {
 };
 
 /**
- * Check if user is authenticated
+ * Check if user is authenticated and ensure the auth token is ready.
+ * Waits for the token to be available before returning.
  * @throws {Error} If user is not authenticated
  */
 const ensureAuthenticated = async () => {
@@ -89,7 +90,47 @@ const ensureAuthenticated = async () => {
   if (!user) {
     throw new Error('User must be authenticated to access this resource');
   }
+  // Ensure the auth token is fresh and available for Firestore operations.
+  // Without this, rapid Firestore reads immediately after auth state change
+  // may fail with permission-denied because the token hasn't propagated.
+  try {
+    await user.getIdToken(false);
+  } catch (tokenErr) {
+    console.warn('[ensureAuthenticated] Token refresh warning:', tokenErr.message);
+  }
   return user;
+};
+
+/**
+ * Retry helper for Firestore reads that may fail due to auth token propagation delay.
+ * @param {Function} fn - async function to retry
+ * @param {number} maxRetries - max number of retries (default 2)
+ * @param {number} delayMs - delay between retries in ms (default 1500)
+ */
+const retryOnPermissionError = async (fn, maxRetries = 2, delayMs = 1500) => {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const isPermissionError = error.code === 'permission-denied' || 
+                                error.message?.includes('permission') ||
+                                error.message?.includes('Missing or insufficient');
+      if (isPermissionError && attempt < maxRetries) {
+        console.warn(`[Firestore] Permission error on attempt ${attempt + 1}, retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        // Force token refresh before retry
+        try {
+          const user = auth.currentUser;
+          if (user) await user.getIdToken(true);
+        } catch (e) { /* ignore token refresh error */ }
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
 };
 
 // Branches 조회 (인증 대기 로직 추가, App Check 에러 감지, fallback 포함)
@@ -99,21 +140,20 @@ export const getAllBranches = async () => {
     const user = await ensureAuthenticated();
     console.log('[getAllBranches] Auth confirmed, uid:', user.uid, 'reading branchCodes...');
     
-    const querySnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
-    console.log('[getAllBranches] Success:', querySnapshot.docs.length, 'branches loaded from Firestore');
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return await retryOnPermissionError(async () => {
+      const querySnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
+      console.log('[getAllBranches] Success:', querySnapshot.docs.length, 'branches loaded from Firestore');
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    });
   } catch (error) {
     // Enhanced error logging for permission issues
     const isPermissionError = error.code === 'permission-denied' || 
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[getAllBranches] Firestore temporarily unavailable. Using local branch list (' + FALLBACK_BRANCHES.length + ' branches).');
+      console.warn('[getAllBranches] Firestore temporarily unavailable after retries. Using local branch list (' + FALLBACK_BRANCHES.length + ' branches).');
       
       // Return fallback branches instead of throwing
-      // This allows users to complete registration/login even when
-      // App Check enforcement blocks Firestore reads.
-      // Mark with _fallback so BranchSelection can detect it
       return FALLBACK_BRANCHES.map((b, i) => ({ ...b, _fallback: i === 0 ? true : undefined }));
     }
     console.error('Error fetching branches:', error);
@@ -129,28 +169,30 @@ export const getSecurityCostsByBranch = async (branch, month) => {
     
     console.log('Fetching data for:', { branch, month });
     
-    const q = query(
-      collection(db, COLLECTIONS.SECURITY_COSTS),
-      where('branchName', '==', branch),
-      where('targetMonth', '==', month)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    console.log('Found documents:', results.length);
-    
-    return results.sort((a, b) => {
-      const aTime = a.submittedAt?.seconds || 0;
-      const bTime = b.submittedAt?.seconds || 0;
-      return bTime - aTime;
+    return await retryOnPermissionError(async () => {
+      const q = query(
+        collection(db, COLLECTIONS.SECURITY_COSTS),
+        where('branchName', '==', branch),
+        where('targetMonth', '==', month)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const results = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      console.log('Found documents:', results.length);
+      
+      return results.sort((a, b) => {
+        const aTime = a.submittedAt?.seconds || 0;
+        const bTime = b.submittedAt?.seconds || 0;
+        return bTime - aTime;
+      });
     });
   } catch (error) {
     const isPermissionError = error.code === 'permission-denied' || 
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[getSecurityCostsByBranch] Firestore temporarily unavailable. Returning empty results.');
+      console.warn('[getSecurityCostsByBranch] Firestore temporarily unavailable after retries. Returning empty results.');
       return [];
     }
     console.error('Error fetching security costs:', error);
@@ -164,9 +206,15 @@ export const submitSecurityCost = async (data) => {
     // 인증 대기
     await ensureAuthenticated();
     
-    await addDoc(collection(db, COLLECTIONS.SECURITY_COSTS), data);
+    const docRef = await addDoc(collection(db, COLLECTIONS.SECURITY_COSTS), data);
+    console.log('[submitSecurityCost] Successfully saved document:', docRef.id, 'branch:', data.branchName, 'month:', data.targetMonth);
+    return docRef.id;
   } catch (error) {
-    console.error('Error submitting security cost:', error);
+    console.error('[submitSecurityCost] Error:', error.code, error.message);
+    // Provide clear error message for branch users
+    if (error.code === 'permission-denied') {
+      throw new Error('Permission denied. Please ensure you are logged in and try again.');
+    }
     throw error;
   }
 };
@@ -188,28 +236,30 @@ export const getSecurityCostsByBranchYear = async (branch, year) => {
   try {
     await ensureAuthenticated();
     
-    // 복합 인덱스 문제를 피하기 위해 branchName만으로 쿼리 후 클라이언트에서 필터링
-    const q = query(
-      collection(db, COLLECTIONS.SECURITY_COSTS),
-      where('branchName', '==', branch)
-    );
-    const querySnapshot = await getDocs(q);
-    const allDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    
-    // 클라이언트 사이드에서 연도 필터링
-    const filtered = allDocs.filter(d => {
-      if (!d.targetMonth) return false;
-      return d.targetMonth.startsWith(year);
+    return await retryOnPermissionError(async () => {
+      // 복합 인덱스 문제를 피하기 위해 branchName만으로 쿼리 후 클라이언트에서 필터링
+      const q = query(
+        collection(db, COLLECTIONS.SECURITY_COSTS),
+        where('branchName', '==', branch)
+      );
+      const querySnapshot = await getDocs(q);
+      const allDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 클라이언트 사이드에서 연도 필터링
+      const filtered = allDocs.filter(d => {
+        if (!d.targetMonth) return false;
+        return d.targetMonth.startsWith(year);
+      });
+      
+      console.log(`[getSecurityCostsByBranchYear] branch=${branch}, year=${year}, total=${allDocs.length}, filtered=${filtered.length}`);
+      return filtered;
     });
-    
-    console.log(`[getSecurityCostsByBranchYear] branch=${branch}, year=${year}, total=${allDocs.length}, filtered=${filtered.length}`);
-    return filtered;
   } catch (error) {
     const isPermissionError = error.code === 'permission-denied' || 
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[getSecurityCostsByBranchYear] Firestore temporarily unavailable. Returning empty results.');
+      console.warn('[getSecurityCostsByBranchYear] Firestore temporarily unavailable after retries. Returning empty results.');
       return [];
     }
     console.error('Error fetching branch year costs:', error);
@@ -410,20 +460,22 @@ export const saveExchangeRates = async (rates, fileName, yearMonth) => {
 export const loadExchangeRatesByYear = async (year) => {
   try {
     await ensureAuthenticated();
-    const snapshot = await getDocs(collection(db, 'exchangeRates'));
-    const result = {};
-    snapshot.docs.forEach(d => {
-      const data = d.data();
-      if (d.id.startsWith(year)) {
-        result[d.id] = data;
-      }
+    return await retryOnPermissionError(async () => {
+      const snapshot = await getDocs(collection(db, 'exchangeRates'));
+      const result = {};
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (d.id.startsWith(year)) {
+          result[d.id] = data;
+        }
+      });
+      console.log(`[ExchangeRate] ${year}년 환율 로드: ${Object.keys(result).length}개월`);
+      return result;
     });
-    console.log(`[ExchangeRate] ${year}년 환율 로드: ${Object.keys(result).length}개월`);
-    return result;
   } catch (error) {
     const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
     if (isPermErr) {
-      console.warn('[ExchangeRate] Firestore temporarily unavailable. Exchange rates not loaded.');
+      console.warn('[ExchangeRate] Firestore temporarily unavailable after retries. Exchange rates not loaded.');
     } else {
       console.error('[ExchangeRate] 로드 에러:', error);
     }
@@ -504,20 +556,22 @@ export const saveContractFile = async (branchName, year, fileName, fileBase64, f
 export const loadContractFile = async (branchName, year) => {
   try {
     await ensureAuthenticated();
-    const docId = `${branchName}_${year}`;
-    const contractRef = doc(db, 'contracts', docId);
-    const contractDoc = await getDoc(contractRef);
-    if (contractDoc.exists()) {
-      const data = contractDoc.data();
-      // 하위 호환: 기존 단일 문서에 fileBase64가 있으면 그대로 반환
-      if (data.fileBase64) return data;
-      return { ...data, _chunked: true };
-    }
-    return null;
+    return await retryOnPermissionError(async () => {
+      const docId = `${branchName}_${year}`;
+      const contractRef = doc(db, 'contracts', docId);
+      const contractDoc = await getDoc(contractRef);
+      if (contractDoc.exists()) {
+        const data = contractDoc.data();
+        // 하위 호환: 기존 단일 문서에 fileBase64가 있으면 그대로 반환
+        if (data.fileBase64) return data;
+        return { ...data, _chunked: true };
+      }
+      return null;
+    }, 1, 1000);
   } catch (error) {
     const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
     if (isPermErr) {
-      console.warn('[Contract] Firestore temporarily unavailable.');
+      console.warn('[Contract] Firestore temporarily unavailable after retries.');
     } else {
       console.error('[Contract] 로드 에러:', error);
     }
@@ -583,58 +637,61 @@ export const loadSettingsFromFirestore = async () => {
     
     console.log('[Settings] Firestore에서 로드 시작...');
     
-    // 1. branches 로드 (branchCodes 컬렉션)
-    const branchesSnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
-    const branches = branchesSnapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        ...data,
-        name: d.id,
-        manager: data.manager || '',
-        currency: data.currency || 'USD',
-        paymentMethod: data.paymentMethod || '',
-        branchCode: data.branchCode || '',
-        id: d.id
+    // Use retry wrapper to handle auth token propagation delay
+    return await retryOnPermissionError(async () => {
+      // 1. branches 로드 (branchCodes 컬렉션)
+      const branchesSnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
+      const branches = branchesSnapshot.docs.map(d => {
+        const data = d.data();
+        return {
+          ...data,
+          name: d.id,
+          manager: data.manager || '',
+          currency: data.currency || 'USD',
+          paymentMethod: data.paymentMethod || '',
+          branchCode: data.branchCode || '',
+          id: d.id
+        };
+      });
+      
+      // 2. settings 문서 로드
+      const settingsRef = doc(db, 'settings', SETTINGS_DOC_ID);
+      const settingsDoc = await getDoc(settingsRef);
+      
+      let costItems = [];
+      let currencies = [];
+      let paymentMethods = [];
+      
+      if (settingsDoc.exists()) {
+        const data = settingsDoc.data();
+        costItems = data.costItems || [];
+        currencies = data.currencies || [];
+        paymentMethods = data.paymentMethods || [];
+      }
+      
+      const result = {
+        branches,
+        costItems,
+        currencies,
+        paymentMethods
       };
+      
+      console.log('[Settings] Firestore 로드 완료:', {
+        branches: branches.length,
+        costItems: costItems.length,
+        currencies: currencies.length,
+        paymentMethods: paymentMethods.length
+      });
+      
+      return result;
     });
-    
-    // 2. settings 문서 로드
-    const settingsRef = doc(db, 'settings', SETTINGS_DOC_ID);
-    const settingsDoc = await getDoc(settingsRef);
-    
-    let costItems = [];
-    let currencies = [];
-    let paymentMethods = [];
-    
-    if (settingsDoc.exists()) {
-      const data = settingsDoc.data();
-      costItems = data.costItems || [];
-      currencies = data.currencies || [];
-      paymentMethods = data.paymentMethods || [];
-    }
-    
-    const result = {
-      branches,
-      costItems,
-      currencies,
-      paymentMethods
-    };
-    
-    console.log('[Settings] Firestore 로드 완료:', {
-      branches: branches.length,
-      costItems: costItems.length,
-      currencies: currencies.length,
-      paymentMethods: paymentMethods.length
-    });
-    
-    return result;
   } catch (error) {
     // On permission errors, return fallback branch data so SecurityFeePage can still show branches
     const isPermissionError = error.code === 'permission-denied' || 
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[Settings] Firestore temporarily unavailable. Using local branch data.');
+      console.warn('[Settings] Firestore temporarily unavailable after retries. Using local branch data.');
       const fallbackBranches = FALLBACK_BRANCHES.map(b => ({
         ...b,
         name: b.id,
@@ -692,26 +749,28 @@ export const saveAttachment = async (branchName, yearMonth, fileName, fileBase64
 export const loadAttachments = async (branchName, yearMonth) => {
   try {
     await ensureAuthenticated();
-    const q = query(
-      collection(db, 'attachments'),
-      where('branchName', '==', branchName),
-      where('yearMonth', '==', yearMonth)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        fileName: data.fileName,
-        fileType: data.fileType,
-        fileSize: data.fileSize,
-        uploadedAt: data.uploadedAt
-      };
-    });
+    return await retryOnPermissionError(async () => {
+      const q = query(
+        collection(db, 'attachments'),
+        where('branchName', '==', branchName),
+        where('yearMonth', '==', yearMonth)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          fileName: data.fileName,
+          fileType: data.fileType,
+          fileSize: data.fileSize,
+          uploadedAt: data.uploadedAt
+        };
+      });
+    }, 1, 1000);
   } catch (error) {
     const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
     if (isPermErr) {
-      console.warn('[Attachment] Firestore temporarily unavailable.');
+      console.warn('[Attachment] Firestore temporarily unavailable after retries.');
     } else {
       console.error('[Attachment] 로드 에러:', error);
     }

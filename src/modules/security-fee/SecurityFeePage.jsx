@@ -133,57 +133,87 @@ function SecurityFeePage() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
-  // Load settings from Firestore
+  // Load settings and exchange rates sequentially from Firestore
+  // Sequential loading prevents auth token race condition where parallel reads
+  // fail with permission-denied because the token hasn't propagated yet
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  
   useEffect(() => {
-    const loadSettings = async () => {
-      if (currentUser) {
-        try {
-          const firestoreSettings = await loadSettingsFromFirestore();
-          const merged = { ...settings };
-          if (firestoreSettings.branches?.length > 0) merged.branches = firestoreSettings.branches;
-          if (firestoreSettings.costItems?.length > 0) merged.costItems = firestoreSettings.costItems;
-          if (firestoreSettings.currencies?.length > 0) merged.currencies = firestoreSettings.currencies;
-          if (firestoreSettings.paymentMethods?.length > 0) merged.paymentMethods = firestoreSettings.paymentMethods;
-          setSettings(merged);
-          console.log('[SecurityFee] Settings loaded:', merged.branches.length, 'branches');
-        } catch (error) {
-          console.warn('[SecurityFee] Settings load failed:', error.message);
-          // Settings load failed but we can still use DEFAULT_SETTINGS or localStorage cache
+    const loadAllData = async () => {
+      if (!currentUser) return;
+      
+      // Step 1: Load settings first
+      try {
+        const firestoreSettings = await loadSettingsFromFirestore();
+        const merged = { ...DEFAULT_SETTINGS }; // Always start from defaults to ensure costItems exist
+        if (firestoreSettings.branches?.length > 0) merged.branches = firestoreSettings.branches;
+        if (firestoreSettings.costItems?.length > 0) merged.costItems = firestoreSettings.costItems;
+        if (firestoreSettings.currencies?.length > 0) merged.currencies = firestoreSettings.currencies;
+        if (firestoreSettings.paymentMethods?.length > 0) merged.paymentMethods = firestoreSettings.paymentMethods;
+        setSettings(merged);
+        console.log('[SecurityFee] Settings loaded:', merged.branches.length, 'branches,', merged.costItems.length, 'costItems');
+      } catch (error) {
+        console.warn('[SecurityFee] Settings load failed:', error.message);
+        // Ensure DEFAULT_SETTINGS costItems are always available as fallback
+        setSettings(prev => {
+          if (!prev.costItems || prev.costItems.length === 0) {
+            return { ...prev, costItems: DEFAULT_SETTINGS.costItems };
+          }
+          return prev;
+        });
+      }
+      
+      setSettingsLoaded(true);
+      
+      // Step 2: Load exchange rates after settings (auth token is now propagated)
+      try {
+        const ratesData = await loadExchangeRatesByYear(exchangeRateYear);
+        if (ratesData && Object.keys(ratesData).length > 0) {
+          setMonthlyExchangeRates(prev => {
+            const merged = { ...prev };
+            Object.keys(ratesData).forEach(k => { merged[k] = ratesData[k]; });
+            return merged;
+          });
+          console.log('[SecurityFee] Exchange rates loaded:', Object.keys(ratesData).length, 'months');
         }
+      } catch (error) {
+        console.warn('[SecurityFee] Exchange rates load failed:', error.message);
       }
     };
-    loadSettings();
+    loadAllData();
   }, [currentUser]);
+
+  // Reload exchange rates when year changes (separate from initial load)
+  const [initialExchangeRateYear] = useState(exchangeRateYear);
+  useEffect(() => {
+    // Skip on initial load (already loaded in the main sequential useEffect)
+    if (!settingsLoaded || !currentUser || !exchangeRateYear) return;
+    if (exchangeRateYear === initialExchangeRateYear) return;
+    const loadRates = async () => {
+      try {
+        const ratesData = await loadExchangeRatesByYear(exchangeRateYear);
+        if (ratesData && Object.keys(ratesData).length > 0) {
+          setMonthlyExchangeRates(prev => {
+            const merged = { ...prev };
+            Object.keys(ratesData).forEach(k => { merged[k] = ratesData[k]; });
+            return merged;
+          });
+        }
+      } catch (error) {
+        console.warn('[SecurityFee] Exchange rates reload failed:', error.message);
+      }
+    };
+    loadRates();
+  }, [exchangeRateYear]);
 
   useEffect(() => {
     localStorage.setItem('securityAppSettings', JSON.stringify(settings));
   }, [settings]);
 
-  // Load exchange rates
-  useEffect(() => {
-    const loadRates = async () => {
-      if (currentUser && exchangeRateYear) {
-        try {
-          const ratesData = await loadExchangeRatesByYear(exchangeRateYear);
-          if (ratesData && Object.keys(ratesData).length > 0) {
-            setMonthlyExchangeRates(prev => {
-              const merged = { ...prev };
-              Object.keys(ratesData).forEach(k => { merged[k] = ratesData[k]; });
-              return merged;
-            });
-          }
-        } catch (error) {
-          console.warn('[SecurityFee] Exchange rates load failed:', error.message);
-        }
-      }
-    };
-    loadRates();
-  }, [currentUser, exchangeRateYear]);
-
-  // Load contract file
+  // Load contract file (wait for settings to be loaded first)
   useEffect(() => {
     const loadContract = async () => {
-      if (currentUser && branchName && contractYear) {
+      if (settingsLoaded && currentUser && branchName && contractYear) {
         setContractLoading(true);
         try {
           const data = await loadContractFile(branchName, contractYear);
@@ -198,12 +228,12 @@ function SecurityFeePage() {
       }
     };
     loadContract();
-  }, [currentUser, branchName, contractYear]);
+  }, [settingsLoaded, currentUser, branchName, contractYear]);
 
-  // Load attachments
+  // Load attachments (wait for settings to be loaded first)
   useEffect(() => {
     const loadFiles = async () => {
-      if (currentUser && branchName && targetMonth) {
+      if (settingsLoaded && currentUser && branchName && targetMonth) {
         setAttachmentsLoading(true);
         try {
           const files = await loadAttachments(branchName, targetMonth);
@@ -218,7 +248,7 @@ function SecurityFeePage() {
       }
     };
     loadFiles();
-  }, [currentUser, branchName, targetMonth]);
+  }, [settingsLoaded, currentUser, branchName, targetMonth]);
 
   // Auto-dismiss messages
   useEffect(() => {
@@ -309,11 +339,13 @@ function SecurityFeePage() {
     }]);
   };
 
+  // Wait for settings to be loaded before auto-loading cost data
+  // This prevents race condition where cost data loads before auth is ready
   useEffect(() => {
-    if (currentUser && branchName && targetMonth) {
+    if (settingsLoaded && currentUser && branchName && targetMonth) {
       autoLoadCostData(branchName, targetMonth);
     }
-  }, [branchName, targetMonth, currentUser?.uid]);
+  }, [branchName, targetMonth, currentUser?.uid, settingsLoaded]);
 
   // Handlers
   const handleBranchChange = (selectedBranchName) => {
