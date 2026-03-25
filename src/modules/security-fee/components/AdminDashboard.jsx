@@ -43,7 +43,7 @@ function AdminDashboard({ branches, onCellClick, monthlyExchangeRates, isAdmin, 
       const data = await getAllSecurityCosts();
       setAllCosts(data);
     } catch (err) {
-      console.error('[AdminDashboard] load error:', err);
+      console.warn('[AdminDashboard] load error:', err.message);
     } finally {
       setLoading(false);
     }

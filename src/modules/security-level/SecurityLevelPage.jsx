@@ -345,7 +345,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      console.error('[SecurityLevel] Save error:', err);
+      console.warn('[SecurityLevel] Save error:', err.message);
       alert('Failed to save: ' + err.message);
     } finally {
       setSaving(false);

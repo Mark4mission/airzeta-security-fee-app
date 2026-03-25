@@ -135,7 +135,7 @@ export default function DocumentUpload() {
 
       navigate('/document-library');
     } catch (err) {
-      console.error('[DocUpload]', err);
+      console.warn('[DocUpload]', err.message);
       setError('Failed to upload document: ' + err.message);
       setIsSubmitting(false);
     }

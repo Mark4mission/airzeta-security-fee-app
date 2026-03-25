@@ -355,7 +355,7 @@ ${plainText}`;
         return updated;
       });
     } catch (err) {
-      console.error('[PostDetail] Delete comment error:', err);
+      console.warn('[PostDetail] Delete comment error:', err.message);
       alert('Failed to delete comment: ' + err.message);
     }
   };

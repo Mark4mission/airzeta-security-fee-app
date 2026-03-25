@@ -34,7 +34,7 @@ function SettingsPage() {
           if (fs.currencies?.length > 0) merged.currencies = fs.currencies;
           if (fs.paymentMethods?.length > 0) merged.paymentMethods = fs.paymentMethods;
           setSettings(merged);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.warn('[Settings] Load error:', e.message); }
         finally { setLoading(false); }
       }
     };

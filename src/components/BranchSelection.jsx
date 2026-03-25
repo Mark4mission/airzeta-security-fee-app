@@ -68,7 +68,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
         console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개', wasFallback ? '(local)' : '(Firestore)');
       } catch (err) {
         if (cancelled) return;
-        console.error('[BranchSelection] 브랜치 로드 실패 (attempt', attempt + 1, '):', err);
+        console.warn('[BranchSelection] 브랜치 로드 실패 (attempt', attempt + 1, '):', err.message);
         
         // Retry up to 2 times with exponential backoff for non-permission errors
         if (attempt < 2) {
@@ -119,7 +119,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
         onBranchSelected(selectedBranch);
       }
     } catch (err) {
-      console.error('[BranchSelection] 브랜치 등록 실패:', err);
+      console.warn('[BranchSelection] 브랜치 등록 실패:', err.message);
       
       // Provide more specific error messages
       const errMsg = err.message || '';
@@ -140,7 +140,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
     try {
       await logoutUser();
     } catch (err) {
-      console.error('Logout error:', err);
+      console.warn('Logout error:', err.message);
     }
   };
 

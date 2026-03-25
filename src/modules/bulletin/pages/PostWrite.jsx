@@ -78,6 +78,15 @@ export default function PostWrite({ boardType = 'directive' }) {
   const MAX_FILE_SIZE_MB = isAdmin ? 100 : 50;
   const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+  // Auto-prefix station name for Communication board posts
+  const branchName = currentUser?.branchName || currentUser?.displayName || '';
+  useEffect(() => {
+    if (isComm && branchName && !title) {
+      const prefix = `[${branchName}] `;
+      setTitle(prefix);
+    }
+  }, [isComm, branchName]);
+
   // Auto-detect language and suggest target
   useEffect(() => {
     if (!content || content === '<p><br></p>') return;
@@ -453,7 +462,7 @@ ${plainText}`;
       });
       navigate(basePath);
     } catch (err) {
-      console.error(err);
+      console.warn('[PostWrite]', err.message);
       setError(`Failed to post: ${err.message}`);
       setIsSubmitting(false);
     }

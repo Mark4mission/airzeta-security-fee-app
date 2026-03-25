@@ -355,7 +355,7 @@ ${plainText}`;
       await updateDoc(doc(db, collectionName, id), { title, content: finalContent, attachments: uploadedAttachments });
       navigate(`${basePath}/post/${id}`);
     } catch (err) {
-      console.error(err);
+      console.warn('[PostEdit]', err.message);
       setError('Failed to save: ' + err.message);
       setIsSubmitting(false);
     }

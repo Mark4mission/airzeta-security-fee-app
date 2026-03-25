@@ -86,7 +86,7 @@ export default function SecurityPolicyPage() {
         if (isPermErr) {
           console.warn('[SecurityPolicy] Firestore temporarily unavailable. Using default policy.');
         } else {
-          console.error('[SecurityPolicy] Load error:', err);
+          console.warn('[SecurityPolicy] Load error:', err.message);
         }
         // On permission error, show default policy with notice
         setPolicy(DEFAULT_POLICY);

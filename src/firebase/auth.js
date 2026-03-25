@@ -26,22 +26,19 @@ import {
   checkLoginRateLimit,
   recordLoginAttempt,
   logSecurityEvent,
-  SECURITY_EVENTS,
-  updateLoginSecurityMeta,
-  getDeviceFingerprint
+  SECURITY_EVENTS
 } from './security';
 
 // ============================================================
 // 로그인 / 로그아웃
 // ============================================================
 
-// 🔑 이메일 로그인 (보안 강화: rate limiting + audit logging)
 export const loginUser = async (email, password) => {
-  // Rate limit check
+  // Rate limit check (in-memory only)
   const rateCheck = checkLoginRateLimit();
   if (!rateCheck.allowed) {
     if (rateCheck.isLocked) {
-      logSecurityEvent(SECURITY_EVENTS.LOGIN_LOCKED, { email, waitSeconds: rateCheck.waitSeconds });
+      logSecurityEvent(SECURITY_EVENTS.LOGIN_LOCKED, { email });
     }
     const error = new Error(rateCheck.reason);
     error.code = 'auth/rate-limited';
@@ -52,17 +49,8 @@ export const loginUser = async (email, password) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Record successful login
     recordLoginAttempt(true);
-    
-    // Security audit log
-    logSecurityEvent(SECURITY_EVENTS.LOGIN_SUCCESS, {
-      email: user.email,
-      deviceFingerprint: getDeviceFingerprint()
-    });
-    
-    // Update security metadata
-    updateLoginSecurityMeta(user.uid, true, email);
+    logSecurityEvent(SECURITY_EVENTS.LOGIN_SUCCESS, { email: user.email });
     
     // Firestore 프로필 확인
     try {
@@ -79,7 +67,7 @@ export const loginUser = async (email, password) => {
         return { uid: user.uid, email: user.email, ...userDoc.data() };
       }
       
-      // 프로필 없으면 기본 생성 (branchName 없이)
+      // 프로필 없으면 기본 생성
       const newProfile = {
         email: user.email,
         role: 'branch_user',
@@ -91,9 +79,7 @@ export const loginUser = async (email, password) => {
       await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
       return { uid: user.uid, ...newProfile };
     } catch (profileErr) {
-      // Firestore profile load failed (App Check enforcement / permission denied)
-      // Return minimal profile so login can proceed — profile will be loaded
-      // from Firestore once App Check is fixed
+      // Firestore profile load failed — return minimal profile so login proceeds
       console.warn('[Auth] Firestore profile load failed during login:', profileErr.message);
       return {
         uid: user.uid,
@@ -105,30 +91,19 @@ export const loginUser = async (email, password) => {
       };
     }
   } catch (error) {
-    // Record failed attempt (unless it's a rate limit error we threw)
     if (error.code !== 'auth/rate-limited') {
       recordLoginAttempt(false);
-      logSecurityEvent(SECURITY_EVENTS.LOGIN_FAILED, {
-        email,
-        errorCode: error.code,
-        deviceFingerprint: getDeviceFingerprint()
-      });
-      // Note: Do NOT call updateLoginSecurityMeta here because the user
-      // is not authenticated (login failed), so Firestore writes would be
-      // rejected by security rules. Client-side rate limiting handles this.
+      logSecurityEvent(SECURITY_EVENTS.LOGIN_FAILED, { email, errorCode: error.code });
     }
     console.error('Login error:', error);
     throw error;
   }
 };
 
-// 🚪 로그아웃 (보안 강화: audit logging)
 export const logoutUser = async () => {
   try {
     const user = auth.currentUser;
-    logSecurityEvent(SECURITY_EVENTS.LOGOUT, {
-      email: user?.email
-    });
+    logSecurityEvent(SECURITY_EVENTS.LOGOUT, { email: user?.email });
     await signOut(auth);
   } catch (error) {
     console.error('Logout error:', error);
@@ -137,10 +112,9 @@ export const logoutUser = async () => {
 };
 
 // ============================================================
-// 회원가입 (셀프 등록)
+// 회원가입
 // ============================================================
 
-// 🆕 이메일 회원가입 — 계정 생성 + Firestore 프로필 (branchName 미지정) + 보안 로깅
 export const registerUser = async (email, password, displayName = '') => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -149,21 +123,14 @@ export const registerUser = async (email, password, displayName = '') => {
     const profile = {
       email: user.email,
       role: 'branch_user',
-      branchName: '',  // 가입 직후에는 비어 있음 → BranchSelection에서 선택
+      branchName: '',
       displayName: displayName || '',
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp()
     };
     
     await setDoc(doc(db, COLLECTIONS.USERS, user.uid), profile);
-    
-    // Security audit log
-    logSecurityEvent(SECURITY_EVENTS.ACCOUNT_CREATED, {
-      email: user.email,
-      method: 'email',
-      deviceFingerprint: getDeviceFingerprint()
-    });
-    
+    logSecurityEvent(SECURITY_EVENTS.ACCOUNT_CREATED, { email: user.email });
     console.log('[Auth] 새 이메일 사용자 가입 완료:', email);
     
     return { uid: user.uid, ...profile };
@@ -177,7 +144,6 @@ export const registerUser = async (email, password, displayName = '') => {
 // 비밀번호 관리
 // ============================================================
 
-// 📧 비밀번호 재설정 이메일 발송 (보안 강화: audit logging)
 export const resetPassword = async (email) => {
   try {
     await sendPasswordResetEmail(auth, email);
@@ -190,18 +156,14 @@ export const resetPassword = async (email) => {
   }
 };
 
-// 🔒 비밀번호 변경 (로그인 상태에서)
 export const changePassword = async (currentPassword, newPassword) => {
   try {
     const user = auth.currentUser;
     if (!user) throw new Error('No authenticated user');
     if (!user.email) throw new Error('User has no email (Google-only account)');
     
-    // 기존 비밀번호로 재인증
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
-    
-    // 새 비밀번호 설정
     await updatePassword(user, newPassword);
     logSecurityEvent(SECURITY_EVENTS.PASSWORD_CHANGE, { email: user.email });
     console.log('[Auth] 비밀번호 변경 완료');
@@ -216,8 +178,6 @@ export const changePassword = async (currentPassword, newPassword) => {
 // 프로필 / 브랜치 관리
 // ============================================================
 
-// 👤 현재 사용자 프로필 가져오기
-// Returns null if no profile found, or minimal profile on permission error
 export const getCurrentUserProfile = async (uid) => {
   try {
     const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, uid));
@@ -230,23 +190,19 @@ export const getCurrentUserProfile = async (uid) => {
                       error.message?.includes('permission') ||
                       error.message?.includes('Missing or insufficient');
     if (isPermErr) {
-      console.warn('[Auth] getCurrentUserProfile: Permission denied (App Check). Returning null.');
-      return null; // Will trigger the new-user fallback path in listenToAuthChanges
+      console.warn('[Auth] getCurrentUserProfile: Permission denied. Returning null.');
+      return null;
     }
     console.error('Get user profile error:', error);
     throw error;
   }
 };
 
-// 🏢 사용자 브랜치 등록/변경
-// HQ 선택 시 → pending_admin 상태로 설정 (기존 admin의 승인 필요)
-// FIX: Uses setDoc with merge to handle _isNewUser case where Firestore doc may not exist yet
 export const updateUserBranch = async (uid, branchName) => {
   try {
     const isHQ = branchName === 'HQ' || branchName === 'hq';
     const userRef = doc(db, COLLECTIONS.USERS, uid);
     
-    // Check if user doc exists first; if not, create it with setDoc
     const userDoc = await getDoc(userRef);
     const docExists = userDoc.exists();
     
@@ -260,7 +216,6 @@ export const updateUserBranch = async (uid, branchName) => {
       if (docExists) {
         await updateDoc(userRef, hqData);
       } else {
-        // _isNewUser case: doc doesn't exist yet, create it
         const user = auth.currentUser;
         await setDoc(userRef, {
           email: user?.email || '',
@@ -272,7 +227,7 @@ export const updateUserBranch = async (uid, branchName) => {
           updatedAt: serverTimestamp()
         });
       }
-      console.log('[Auth] HQ 선택 → pending_admin 등록:', uid, docExists ? '(updated)' : '(created)');
+      console.log('[Auth] HQ 선택 → pending_admin 등록:', uid);
       return { success: true, pendingAdmin: true };
     } else {
       const branchData = {
@@ -282,7 +237,6 @@ export const updateUserBranch = async (uid, branchName) => {
       if (docExists) {
         await updateDoc(userRef, branchData);
       } else {
-        // _isNewUser case: doc doesn't exist yet, create it
         const user = auth.currentUser;
         await setDoc(userRef, {
           email: user?.email || '',
@@ -294,19 +248,15 @@ export const updateUserBranch = async (uid, branchName) => {
           updatedAt: serverTimestamp()
         });
       }
-      console.log('[Auth] 브랜치 등록 완료:', uid, '→', branchName, docExists ? '(updated)' : '(created)');
+      console.log('[Auth] 브랜치 등록 완료:', uid, '→', branchName);
       return { success: true, pendingAdmin: false };
     }
   } catch (error) {
-    // If Firestore write fails due to App Check enforcement,
-    // still return success so the user can proceed (branch stored in-memory).
-    // The branch will be persisted to Firestore when App Check is fixed.
     const isPermErr = error.code === 'permission-denied' || 
                       error.message?.includes('permission') ||
                       error.message?.includes('Missing or insufficient');
     if (isPermErr) {
-      console.warn('[Auth] Branch update failed due to Firestore permission error (likely App Check).');
-      console.warn('[Auth] Proceeding with local-only branch assignment:', branchName);
+      console.warn('[Auth] Branch update failed due to permission error. Using local-only assignment:', branchName);
       const isHQ = branchName === 'HQ' || branchName === 'hq';
       return { success: true, pendingAdmin: isHQ, localOnly: true };
     }
@@ -315,7 +265,6 @@ export const updateUserBranch = async (uid, branchName) => {
   }
 };
 
-// 💾 사용자 선호 설정 저장 (currency, paymentMethod 등)
 export const updateUserPreferences = async (uid, prefs) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -325,7 +274,12 @@ export const updateUserPreferences = async (uid, prefs) => {
     console.log('[Auth] 사용자 설정 저장:', uid, prefs);
     return { success: true };
   } catch (error) {
-    console.error('Update user preferences error:', error);
+    const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[Auth] User preferences update skipped (permission):', uid);
+      return { success: false, permissionDenied: true };
+    }
+    console.warn('[Auth] Update user preferences error:', error.message);
     throw error;
   }
 };
@@ -334,9 +288,6 @@ export const updateUserPreferences = async (uid, prefs) => {
 // 인증 상태 리스너
 // ============================================================
 
-// 👂 인증 상태 변경 감지
-// callback(profile | null)
-// profile에는 반드시 branchName 포함 (비어있을 수 있음)
 export const listenToAuthChanges = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -344,17 +295,12 @@ export const listenToAuthChanges = (callback) => {
       try {
         let profile = await getCurrentUserProfile(user.uid);
         
-        // 프로필이 아직 없으면 (Google 로그인 직후 race condition)
         if (!profile) {
           console.log('[Auth] 프로필 없음, 1초 후 재시도...');
           await new Promise(resolve => setTimeout(resolve, 1000));
           profile = await getCurrentUserProfile(user.uid);
         }
         
-        // 그래도 없으면 Firestore에 프로필 생성 후 반환
-        // FIX: Previously used _isNewUser flag without creating Firestore doc,
-        // causing updateUserBranch (updateDoc) to fail with NOT_FOUND.
-        // Now we create the doc so subsequent updates work correctly.
         if (!profile) {
           console.log('[Auth] 프로필 없음 - 신규 사용자 Firestore 프로필 생성');
           const newProfile = {
@@ -370,27 +316,16 @@ export const listenToAuthChanges = (callback) => {
             await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
             console.log('[Auth] 신규 사용자 Firestore 프로필 생성 완료');
           } catch (createErr) {
-            console.warn('[Auth] 프로필 생성 실패 (다른 곳에서 이미 생성됨?):', createErr.message);
+            console.warn('[Auth] 프로필 생성 실패:', createErr.message);
           }
-          profile = {
-            uid: user.uid,
-            ...newProfile
-          };
+          profile = { uid: user.uid, ...newProfile };
         }
         
         console.log('[Auth] 프로필 로드:', profile.email, '역할:', profile.role, '브랜치:', profile.branchName || '(미지정)');
         callback(profile);
       } catch (error) {
         console.error('[Auth] 프로필 로드 에러:', error);
-        // On Firestore permission error (App Check enforcement), still provide
-        // a minimal profile so the user can proceed to BranchSelection
-        const isPermErr = error.code === 'permission-denied' || 
-                          error.message?.includes('permission') ||
-                          error.message?.includes('Missing or insufficient');
-        if (isPermErr) {
-          console.warn('[Auth] Firestore permission denied (likely App Check). Using minimal profile.');
-          console.warn('[Auth] Existing users will need to re-select their station until App Check is resolved.');
-        }
+        // On permission error, provide minimal profile
         callback({
           uid: user.uid,
           email: user.email,
@@ -412,26 +347,28 @@ export const listenToAuthChanges = (callback) => {
 // 관리자 전용 기능
 // ============================================================
 
-// 🔐 관리자 권한 확인
-export const isAdmin = (user) => {
-  return user && user.role === 'hq_admin';
-};
+export const isAdmin = (user) => user && user.role === 'hq_admin';
+export const isPendingAdmin = (user) => user && user.role === 'pending_admin';
 
-// 🕐 관리자 승인 대기 상태 확인
-export const isPendingAdmin = (user) => {
-  return user && user.role === 'pending_admin';
-};
-
-// 📝 역할별 권한 체크
+/**
+ * Permission check with clear scope definitions:
+ * 
+ * hq_admin: Full access to all modules
+ *   - view_all, edit_all, manage_users, manage_settings, view_audit
+ * 
+ * branch_user: Access to their branch data + global content
+ *   - view_own (own branch security fee, SSOP board)
+ *   - edit_own (own branch data submission)
+ *   - view_global (announcements, news, security policy, security levels, important links)
+ */
 export const checkPermission = (user, permission) => {
   const permissions = {
-    'hq_admin': ['view_all', 'edit_all', 'manage_users', 'manage_settings'],
-    'branch_user': ['view_own', 'edit_own']
+    'hq_admin': ['view_all', 'edit_all', 'manage_users', 'manage_settings', 'view_audit', 'view_own', 'edit_own', 'view_global'],
+    'branch_user': ['view_own', 'edit_own', 'view_global']
   };
   return user && permissions[user.role]?.includes(permission);
 };
 
-// 🆕 관리자 전용: 새 사용자 생성 (관리자가 직접)
 export const createUser = async (email, password, userData) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -453,21 +390,16 @@ export const createUser = async (email, password, userData) => {
   }
 };
 
-// 📋 관리자 전용: 모든 사용자 목록
 export const getAllUsers = async () => {
   try {
     const usersSnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
-    return usersSnapshot.docs.map(d => ({
-      uid: d.id,
-      ...d.data()
-    }));
+    return usersSnapshot.docs.map(d => ({ uid: d.id, ...d.data() }));
   } catch (error) {
     console.error('Get all users error:', error);
     throw error;
   }
 };
 
-// 🔄 관리자 전용: 사용자 역할 변경
 export const updateUserRole = async (uid, newRole) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -481,13 +413,9 @@ export const updateUserRole = async (uid, newRole) => {
   }
 };
 
-// ⚡ 관리자 전용: 사용자 활성화/비활성화
 export const toggleUserStatus = async (uid, active) => {
   try {
-    await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
-      active,
-      updatedAt: serverTimestamp()
-    });
+    await updateDoc(doc(db, COLLECTIONS.USERS, uid), { active, updatedAt: serverTimestamp() });
     return { success: true };
   } catch (error) {
     console.error('Toggle user status error:', error);
@@ -496,10 +424,9 @@ export const toggleUserStatus = async (uid, active) => {
 };
 
 // ============================================================
-// 관리자 승인 관련 기능 (pending_admin)
+// 관리자 승인 관련 기능
 // ============================================================
 
-// 📋 승인 대기 중인 관리자 목록 조회
 export const getPendingAdmins = async () => {
   try {
     const usersSnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
@@ -512,7 +439,6 @@ export const getPendingAdmins = async () => {
   }
 };
 
-// ✅ 관리자 승인 (pending_admin → hq_admin)
 export const approvePendingAdmin = async (uid) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -528,7 +454,6 @@ export const approvePendingAdmin = async (uid) => {
   }
 };
 
-// ❌ 관리자 승인 거부 (pending_admin → branch_user, branchName 초기화)
 export const rejectPendingAdmin = async (uid) => {
   try {
     await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
@@ -545,7 +470,6 @@ export const rejectPendingAdmin = async (uid) => {
   }
 };
 
-// 🗑️ 사용자 프로필 삭제 (Firestore만)
 export const deleteUserProfile = async (userId) => {
   try {
     await deleteDoc(doc(db, COLLECTIONS.USERS, userId));
@@ -560,43 +484,34 @@ export const deleteUserProfile = async (userId) => {
 // Google 로그인
 // ============================================================
 
-// Google 로그인 후 Firestore 프로필 처리
 const handleGoogleUserProfile = async (user) => {
   const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
   
   if (!userDoc.exists()) {
-    // 신규 Google 사용자 → branchName 비워둠 (BranchSelection에서 선택)
     const newProfile = {
       email: user.email,
       role: 'branch_user',
-      branchName: '',  // 비어있음 → BranchSelection 화면으로 이동
+      branchName: '',
       displayName: user.displayName || '',
       photoURL: user.photoURL || '',
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp()
     };
-    
     await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
     console.log('[Auth] 신규 Google 사용자 프로필 생성 (브랜치 미지정)');
-    
     return { uid: user.uid, ...newProfile };
   } else {
-    // 기존 사용자 → lastLogin 업데이트
-    await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
-      lastLogin: serverTimestamp()
-    });
+    await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), { lastLogin: serverTimestamp() });
     console.log('[Auth] 기존 Google 사용자 로그인');
-    
     return { uid: user.uid, email: user.email, ...userDoc.data() };
   }
 };
 
-// 🆕 Google 로그인 함수 (보안 강화: rate limiting + audit logging)
 export const loginWithGoogle = async () => {
   const currentDomain = window.location.hostname;
   const currentOrigin = window.location.origin;
   
-  // Rate limit check (applies to Google login too)
+  // Rate limit check
   const rateCheck = checkLoginRateLimit();
   if (!rateCheck.allowed && rateCheck.isLocked) {
     logSecurityEvent(SECURITY_EVENTS.LOGIN_LOCKED, { method: 'google' });
@@ -607,7 +522,6 @@ export const loginWithGoogle = async () => {
   
   console.log('[Google Login] 시작...');
   console.log('[Google Login] 현재 도메인:', currentDomain);
-  console.log('[Google Login] 현재 Origin:', currentOrigin);
   
   try {
     const provider = new GoogleAuthProvider();
@@ -616,13 +530,8 @@ export const loginWithGoogle = async () => {
     const result = await signInWithPopup(auth, provider);
     console.log('[Google Login] signInWithPopup 성공!');
     
-    // Record successful login
     recordLoginAttempt(true);
-    logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN, {
-      email: result.user.email,
-      deviceFingerprint: getDeviceFingerprint()
-    });
-    updateLoginSecurityMeta(result.user.uid, true, result.user.email);
+    logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN, { email: result.user.email });
     
     return await handleGoogleUserProfile(result.user);
     
@@ -658,25 +567,11 @@ export const loginWithGoogle = async () => {
     }
     
     if (popupError.code === 'auth/popup-blocked') {
-      throw new Error(
-        'Google login popup was blocked.\n\n' +
-        'Please allow popups for this site and try again.'
-      );
+      throw new Error('Google login popup was blocked.\n\nPlease allow popups for this site and try again.');
     }
 
     if (popupError.code === 'auth/internal-error' || 
         popupError.code === 'auth/network-request-failed') {
-      // Check if it might be an App Check issue
-      const isAppCheckIssue = popupError.message?.includes('app-check') || 
-                              popupError.message?.includes('App Check');
-      if (isAppCheckIssue) {
-        const appCheckErr = new Error(
-          'App Check token is invalid. Google login requires a valid App Check token when enforcement is ON.'
-        );
-        appCheckErr.code = 'auth/firebase-app-check-token-is-invalid';
-        throw appCheckErr;
-      }
-      
       throw new Error(
         'Network error during Google login.\n\n' +
         'Please check your internet connection and try again.\n' +
@@ -684,21 +579,10 @@ export const loginWithGoogle = async () => {
       );
     }
     
-    // Check for App Check token errors
-    if (popupError.code === 'auth/firebase-app-check-token-is-invalid' ||
-        popupError.message?.includes('app-check-token') ||
-        popupError.message?.includes('App Check')) {
-      const appCheckErr = new Error(popupError.message);
-      appCheckErr.code = 'auth/firebase-app-check-token-is-invalid';
-      throw appCheckErr;
-    }
-    
-    // Record failed Google login attempt (client-side rate limiting only)
     recordLoginAttempt(false);
     logSecurityEvent(SECURITY_EVENTS.GOOGLE_LOGIN_FAILED, {
       errorCode: popupError.code,
-      errorMessage: popupError.message,
-      deviceFingerprint: getDeviceFingerprint()
+      errorMessage: popupError.message
     });
     
     throw new Error(
@@ -708,7 +592,4 @@ export const loginWithGoogle = async () => {
   }
 };
 
-// Google Redirect 결과 처리 (호환성 유지)
-export const initGoogleRedirectResult = async () => {
-  return null;
-};
+export const initGoogleRedirectResult = async () => null;

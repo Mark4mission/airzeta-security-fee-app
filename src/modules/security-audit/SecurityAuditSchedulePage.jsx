@@ -173,7 +173,7 @@ function SecurityAuditSchedulePage() {
       setAuditSettings(settingsData);
       setStats(statsData);
     } catch (err) {
-      console.error('[AuditSchedule] Load error:', err);
+      console.warn('[AuditSchedule] Load error:', err.message);
       showMessage('Failed to load audit schedules.', 'error');
     } finally {
       setLoading(false);
@@ -991,11 +991,14 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
           <thead>
             <tr>
-              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: '#F8FAFC', padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.76rem', fontWeight: '800', color: COLORS.text.primary, borderBottom: `2px solid ${COLORS.border}`, minWidth: '140px', borderRight: `1px solid ${COLORS.border}` }}>
+              <th style={{ position: 'sticky', left: 0, zIndex: 2, background: '#F8FAFC', padding: '0.6rem 0.75rem', textAlign: 'left', fontSize: '0.76rem', fontWeight: '800', color: COLORS.text.primary, borderBottom: `2px solid ${COLORS.border}`, minWidth: '120px', borderRight: `1px solid ${COLORS.border}` }}>
                 Station
+              </th>
+              <th style={{ background: '#F8FAFC', padding: '0.6rem 0.5rem', textAlign: 'left', fontSize: '0.76rem', fontWeight: '800', color: COLORS.text.primary, borderBottom: `2px solid ${COLORS.border}`, minWidth: '100px', borderRight: `1px solid ${COLORS.border}` }}>
+                Auditor
               </th>
               {MONTHS.map((m, i) => (
                 <th key={m} style={{ padding: '0.6rem 0.4rem', textAlign: 'center', fontSize: '0.74rem', fontWeight: '800', borderBottom: `2px solid ${COLORS.border}`, color: isCurrentYear && i === todayMonth ? COLORS.accent : COLORS.text.primary, background: isCurrentYear && i === todayMonth ? '#FFF1F2' : '#F8FAFC', minWidth: '60px' }}>
@@ -1006,14 +1009,48 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
           </thead>
           <tbody>
             {branchSchedules.length === 0 ? (
-              <tr><td colSpan={13} style={{ padding: '2rem', textAlign: 'center', color: COLORS.text.light, fontSize: '0.85rem' }}>No audit schedules found for {selectedYear}.</td></tr>
+              <tr><td colSpan={14} style={{ padding: '2rem', textAlign: 'center', color: COLORS.text.light, fontSize: '0.85rem' }}>No audit schedules found for {selectedYear}.</td></tr>
             ) : (
-              branchSchedules.map(([branch, items], rowIdx) => (
+              branchSchedules.map(([branch, items], rowIdx) => {
+                // Collect unique auditors for this branch
+                const branchAuditors = [...new Set(items.flatMap(s => {
+                  const auditors = s.auditors?.length > 0 ? s.auditors : (s.auditor ? [s.auditor] : []);
+                  return auditors;
+                }))];
+                const auditorDisplay = branchAuditors.length > 0 ? branchAuditors[0] : '';
+                const extraAuditors = branchAuditors.length > 1 ? branchAuditors.slice(1) : [];
+                const primaryAuditorColor = auditorDisplay ? getAuditorColor(auditorDisplay, allAuditors) : null;
+
+                return (
                 <tr key={branch} style={{ borderBottom: `1px solid ${COLORS.borderLight}` }}>
                   <td style={{ position: 'sticky', left: 0, zIndex: 1, background: rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFBFC', padding: '0.5rem 0.75rem', fontSize: '0.82rem', fontWeight: '700', color: COLORS.text.primary, borderRight: `1px solid ${COLORS.border}`, whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                       <MapPin size={13} color={COLORS.blue} /> {branch}
                     </div>
+                  </td>
+                  <td style={{ background: rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFBFC', padding: '0.35rem 0.5rem', borderRight: `1px solid ${COLORS.border}`, verticalAlign: 'middle' }}>
+                    {auditorDisplay ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                          padding: '0.12rem 0.4rem', borderRadius: '0.25rem',
+                          background: primaryAuditorColor ? primaryAuditorColor.bg : '#F1F5F9',
+                          color: primaryAuditorColor ? primaryAuditorColor.text : COLORS.text.secondary,
+                          border: `1px solid ${primaryAuditorColor ? primaryAuditorColor.border : COLORS.border}`,
+                          fontSize: '0.65rem', fontWeight: '700', whiteSpace: 'nowrap', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>
+                          <User size={9} /> {auditorDisplay.split(' ')[0]}
+                        </span>
+                        {extraAuditors.length > 0 && (
+                          <span style={{ fontSize: '0.55rem', color: COLORS.text.light, fontWeight: '600' }}
+                            title={extraAuditors.join(', ')}>
+                            +{extraAuditors.length}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.6rem', color: COLORS.text.light, fontStyle: 'italic' }}>-</span>
+                    )}
                   </td>
                   {MONTHS.map((m, monthIdx) => {
                     const cellSchedules = items.filter(s => {
@@ -1026,8 +1063,8 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
                       <td key={monthIdx} style={{ padding: '0.25rem', textAlign: 'center', verticalAlign: 'middle', background: isCurrentMonth ? 'rgba(233,69,96,0.03)' : (rowIdx % 2 === 0 ? '#FFFFFF' : '#FAFBFC'), borderLeft: `1px solid ${COLORS.borderLight}` }}>
                         {cellSchedules.map((s, si) => {
                           const statusCfg = STATUS_CONFIG[s.status] || STATUS_CONFIG.scheduled;
-                          const primaryAuditor = (s.auditors || [])[0] || s.auditor;
-                          const auditorColor = primaryAuditor ? getAuditorColor(primaryAuditor, allAuditors) : null;
+                          const cellAuditor = (s.auditors || [])[0] || s.auditor;
+                          const auditorColor = cellAuditor ? getAuditorColor(cellAuditor, allAuditors) : null;
                           return (
                             <div key={si} onClick={() => onEdit(s)}
                               onMouseEnter={(e) => {
@@ -1041,14 +1078,14 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
                                 border: `1px solid ${auditorColor ? auditorColor.border : statusCfg.border}`,
                                 cursor: 'pointer', overflow: 'hidden', transition: 'all 0.15s'
                               }}
-                              title={`${branch} — ${s.auditType || 'Audit'} (${statusCfg.label})${primaryAuditor ? ' · ' + primaryAuditor : ''}`}
+                              title={`${branch} — ${s.auditType || 'Audit'} (${statusCfg.label})${cellAuditor ? ' · ' + cellAuditor : ''}`}
                             >
                               <div style={{ fontSize: '0.6rem', fontWeight: '700', color: auditorColor ? auditorColor.text : statusCfg.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {s.auditType ? (s.auditType.length > 8 ? s.auditType.substring(0, 7) + '..' : s.auditType) : (branch.length > 6 ? branch.substring(0, 6) : branch)}
                               </div>
-                              {primaryAuditor && (
+                              {cellAuditor && (
                                 <div style={{ fontSize: '0.52rem', color: auditorColor ? auditorColor.text : COLORS.text.secondary, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85, fontWeight: '600' }}>
-                                  {primaryAuditor.split(' ')[0]}
+                                  {cellAuditor.split(' ')[0]}
                                 </div>
                               )}
                             </div>
@@ -1058,7 +1095,8 @@ function AnnualScheduleTable({ schedules, branches, selectedYear, onEdit, allAud
                     );
                   })}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
