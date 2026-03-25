@@ -35,11 +35,18 @@ export default function DocumentDashboard() {
 
   useEffect(() => {
     const q = query(collection(db, 'documentLibrary'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setDocuments(docs);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(q,
+      (snapshot) => {
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setDocuments(docs);
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('[DocumentDashboard] Firestore listener error:', error.message);
+        setDocuments([]);
+        setLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, []);
 

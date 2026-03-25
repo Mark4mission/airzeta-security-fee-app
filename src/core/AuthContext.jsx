@@ -1,12 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { listenToAuthChanges, logoutUser, isAdmin, isPendingAdmin } from '../firebase/auth';
-import { firebaseApp, getAppCheckInfo } from '../firebase/config';
 import {
-  initializeSecurityAppCheck,
   startSessionMonitor,
   logSecurityEvent,
   SECURITY_EVENTS,
-  isAppCheckActive,
   getSecurityConfig
 } from '../firebase/security';
 
@@ -16,56 +13,8 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [sessionWarning, setSessionWarning] = useState(false);
-  const [securityStatus, setSecurityStatus] = useState({
-    appCheckActive: false,
-    appCheckFailed: false,
-    appCheckError: null,
-    sessionMonitorActive: false,
-    initialized: false
-  });
 
-  // Initialize App Check status on mount
-  // NOTE: App Check is already initialized in config.js at module load time.
-  // This awaits token validation and sets status accordingly.
-  useEffect(() => {
-    const initSecurity = async () => {
-      try {
-        // This awaits token validation internally
-        await initializeSecurityAppCheck(firebaseApp);
-        const info = getAppCheckInfo();
-        const isActive = info.status === 'active';
-        const isFailed = info.status === 'failed';
-        
-        setSecurityStatus(prev => ({
-          ...prev,
-          appCheckActive: isActive,
-          appCheckFailed: isFailed,
-          appCheckError: info.error,
-          initialized: true
-        }));
-        
-        if (isActive) {
-          console.log('[AuthContext] App Check: Active');
-        } else if (isFailed) {
-          console.warn('[AuthContext] App Check: Unavailable \u2014 app will use local fallback data');
-        } else {
-          console.log('[AuthContext] App Check: Disabled');
-        }
-      } catch (error) {
-        console.warn('[AuthContext] Security initialization warning:', error.message);
-        setSecurityStatus(prev => ({ 
-          ...prev, 
-          initialized: true,
-          appCheckFailed: true,
-          appCheckError: error.message 
-        }));
-      }
-    };
-    
-    initSecurity();
-  }, []);
-
-  // Session management
+  // Session management — start monitoring when user logs in
   useEffect(() => {
     if (!currentUser) return;
 
@@ -87,16 +36,14 @@ export function AuthProvider({ children }) {
         }
       }
     });
-
-    setSecurityStatus(prev => ({ ...prev, sessionMonitorActive: true }));
     
     return () => {
       if (cleanup) cleanup();
-      setSecurityStatus(prev => ({ ...prev, sessionMonitorActive: false }));
       setSessionWarning(false);
     };
   }, [currentUser]);
 
+  // Listen to Firebase auth state
   useEffect(() => {
     const unsubscribe = listenToAuthChanges((user) => {
       setCurrentUser(user);
@@ -126,10 +73,8 @@ export function AuthProvider({ children }) {
     isAdmin: currentUser ? isAdmin(currentUser) : false,
     isPendingAdmin: currentUser ? isPendingAdmin(currentUser) : false,
     handleLogout,
-    // Security-related
     sessionWarning,
     dismissSessionWarning,
-    securityStatus,
     getSecurityConfig
   };
 

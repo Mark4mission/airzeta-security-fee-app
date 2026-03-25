@@ -59,7 +59,7 @@ function BranchCostHistory({ branchName, currency }) {
         if (isPermErr) {
           console.warn('[BranchCostHistory] Firestore temporarily unavailable. Cost history not loaded.');
         } else {
-          console.error('[BranchCostHistory] load error:', err);
+          console.warn('[BranchCostHistory] load error:', err.message);
         }
         setAllData([]);
       } finally {

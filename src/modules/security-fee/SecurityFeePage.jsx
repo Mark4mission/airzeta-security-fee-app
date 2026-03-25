@@ -147,7 +147,7 @@ function SecurityFeePage() {
           setSettings(merged);
           console.log('[SecurityFee] Settings loaded:', merged.branches.length, 'branches');
         } catch (error) {
-          console.error('[SecurityFee] Settings load failed:', error);
+          console.warn('[SecurityFee] Settings load failed:', error.message);
           // Settings load failed but we can still use DEFAULT_SETTINGS or localStorage cache
         }
       }
@@ -173,7 +173,7 @@ function SecurityFeePage() {
             });
           }
         } catch (error) {
-          console.error('[SecurityFee] Exchange rates load failed:', error);
+          console.warn('[SecurityFee] Exchange rates load failed:', error.message);
         }
       }
     };
@@ -334,7 +334,7 @@ function SecurityFeePage() {
     newItems[index].currency = value;
     setCostItems(newItems);
     if (currentUser?.uid) {
-      updateUserPreferences(currentUser.uid, { preferredCurrency: value }).catch(console.error);
+      updateUserPreferences(currentUser.uid, { preferredCurrency: value }).catch(e => console.warn('[SecurityFee] Preference save failed:', e.message));
     }
   };
 
@@ -344,7 +344,7 @@ function SecurityFeePage() {
     setCostItems(newItems);
     setDefaultPaymentMethod(value);
     if (currentUser?.uid) {
-      updateUserPreferences(currentUser.uid, { preferredPaymentMethod: value }).catch(console.error);
+      updateUserPreferences(currentUser.uid, { preferredPaymentMethod: value }).catch(e => console.warn('[SecurityFee] Preference save failed:', e.message));
     }
   };
 

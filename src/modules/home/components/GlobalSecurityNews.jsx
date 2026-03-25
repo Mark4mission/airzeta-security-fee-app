@@ -177,16 +177,14 @@ Return ONLY a JSON array of 5 objects. No markdown, no code fences.`;
   } catch (err) {
     // Detailed error diagnosis
     const msg = err.message || String(err);
-    console.error('[Gemini] ❌ AI filtering failed:', msg);
+    console.warn('[Gemini] AI filtering failed:', msg);
 
     if (msg.includes('403') || msg.includes('PERMISSION_DENIED') || msg.includes('blocked')) {
-      console.error('[Gemini] 🔒 API key does NOT have Generative Language API permission.');
-      console.error('[Gemini] 💡 FIX: Go to https://aistudio.google.com/apikey and create a new API key,');
-      console.error('         then set it as VITE_GEMINI_API_KEY in Vercel environment variables.');
+      console.warn('[Gemini] API key does NOT have Generative Language API permission. FIX: Go to https://aistudio.google.com/apikey and create a new key, set it as VITE_GEMINI_API_KEY.');
     } else if (msg.includes('400') || msg.includes('INVALID')) {
-      console.error('[Gemini] ❓ Invalid request. The API key or model may be incorrect.');
+      console.warn('[Gemini] Invalid request. The API key or model may be incorrect.');
     } else if (msg.includes('429') || msg.includes('RATE')) {
-      console.error('[Gemini] ⏳ Rate limit exceeded. Try again later.');
+      console.warn('[Gemini] Rate limit exceeded. Try again later.');
     }
 
     return { items: keywordFallbackFilter(articles), method: 'keyword' };
@@ -314,7 +312,7 @@ async function saveNewsToFirestore(newsItems, filterMethod) {
     if (isPermErr) {
       console.warn('[Cache] Firestore temporarily unavailable. News cache not saved.');
     } else {
-      console.error('[Cache] Save error:', err);
+      console.warn('[Cache] Save error:', err.message);
     }
   }
 }
@@ -412,7 +410,7 @@ function GlobalSecurityNews() {
         if (cached.length > 0) setNewsItems(cached);
       }
     } catch (err) {
-      console.error('[GlobalSecurityNews] Error:', err);
+      console.warn('[GlobalSecurityNews] Error:', err.message);
       if (mountedRef.current) setError('Unable to load security news.');
     } finally {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }

@@ -94,7 +94,12 @@ export default function ImportantLinksPage() {
       const snap = await getDocs(collection(db, 'importantLinks'));
       setLinks(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
     } catch (err) {
-      console.error('[Links] Load error:', err);
+      const isPermErr = err.code === 'permission-denied' || err.message?.includes('Missing or insufficient');
+      if (isPermErr) {
+        console.warn('[Links] Firestore temporarily unavailable. Links not loaded.');
+      } else {
+        console.warn('[Links] Load error:', err.message);
+      }
     } finally {
       setLoading(false);
     }

@@ -49,7 +49,7 @@ function AuditScheduleSettings() {
         const data = await loadAuditSettings();
         setSettings(data);
       } catch (err) {
-        console.error('[AuditSettings] Load error:', err);
+        console.warn('[AuditSettings] Load error:', err.message);
       } finally {
         setLoading(false);
       }

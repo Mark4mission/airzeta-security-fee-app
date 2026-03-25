@@ -58,9 +58,13 @@ export default function DocumentDetail() {
     return false;
   };
 
+  // Same-branch users can edit/delete documents uploaded by their branch
   const isAuthorOrAdmin = () => {
     if (!document) return false;
-    return isAdmin || currentUser?.uid === document.uploaderId;
+    if (isAdmin) return true;
+    if (currentUser?.uid === document.uploaderId) return true;
+    if (branchName && document.uploaderBranch === branchName) return true;
+    return false;
   };
 
   const trackDownload = async (fileName) => {
@@ -84,7 +88,7 @@ export default function DocumentDetail() {
         downloadLog: [...(prev.downloadLog || []), downloadEntry],
       }));
     } catch (err) {
-      console.error('[DocDetail] Download tracking error:', err);
+      console.warn('[DocDetail] Download tracking error:', err.message);
     }
   };
 
@@ -144,7 +148,7 @@ export default function DocumentDetail() {
       await updateDoc(doc(db, 'documentLibrary', id), { pinned: newPinned });
       setDocument(prev => ({ ...prev, pinned: newPinned }));
     } catch (err) {
-      console.error('[DocDetail] Pin toggle error:', err);
+      console.warn('[DocDetail] Pin toggle error:', err.message);
     }
   };
 

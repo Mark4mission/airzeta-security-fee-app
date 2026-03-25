@@ -14,7 +14,7 @@ import {
   Clock, Users, Lock, Globe, Eye, EyeOff,
   RefreshCw, ChevronDown, ChevronUp, Loader
 } from 'lucide-react';
-import { getSecurityConfig, getRecentSecurityLogs, getSecuritySummary, isAppCheckActive } from '../../firebase/security';
+import { getSecurityConfig, getRecentSecurityLogs, getSecuritySummary } from '../../firebase/security';
 
 const COLORS = {
   surface: '#132F4C',
@@ -65,7 +65,7 @@ function SecurityDashboard() {
       setSummary(sum);
       setLogs(recentLogs);
     } catch (err) {
-      console.error('[SecurityDashboard] Load error:', err);
+      console.warn('[SecurityDashboard] Load error:', err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -178,7 +178,7 @@ function SecurityDashboard() {
             title="Global Access"
             value="Supported"
             color={COLORS.blue}
-            detail={config.globalAccess.description}
+            detail={config.globalAccess?.description || 'Graceful degradation for restricted regions'}
           />
         </div>
       )}
@@ -282,32 +282,24 @@ function SecurityDashboard() {
         )}
       </div>
 
-      {/* Setup Instructions (if App Check not configured) */}
-      {config && !config.appCheck.enabled && (
-        <div style={{
-          marginTop: '1.25rem', padding: '1rem',
-          background: 'rgba(245, 158, 11, 0.08)',
-          border: '1px solid rgba(245, 158, 11, 0.2)',
-          borderRadius: '0.75rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <AlertTriangle size={16} color={COLORS.yellow} />
-            <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: '700', color: COLORS.yellow }}>
-              Enable Firebase App Check for Enhanced Security
-            </h4>
-          </div>
-          <ol style={{ margin: '0.5rem 0 0 0', paddingLeft: '1.5rem', color: COLORS.text.secondary, fontSize: '0.78rem', lineHeight: '1.8' }}>
-            <li>Go to <strong>Google Cloud Console</strong> &gt; Enable <strong>reCAPTCHA Enterprise API</strong></li>
-            <li>Create a <strong>reCAPTCHA Enterprise site key</strong> (type: score-based / web)</li>
-            <li>Go to <strong>Firebase Console</strong> &gt; App Check &gt; Register your web app with the site key</li>
-            <li>Add <code style={{ background: COLORS.surface, padding: '0.15rem 0.35rem', borderRadius: '0.2rem', fontSize: '0.72rem' }}>VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=your-site-key</code> to <strong>.env</strong></li>
-            <li>Redeploy the app. App Check will automatically activate.</li>
-          </ol>
-          <p style={{ fontSize: '0.72rem', color: COLORS.text.light, marginTop: '0.5rem' }}>
-            Note: Other security layers (rate limiting, session management, audit logging) are already active without App Check.
-          </p>
+      {/* Setup Instructions (simplified v3.0) */}
+      <div style={{
+        marginTop: '1.25rem', padding: '1rem',
+        background: 'rgba(16, 185, 129, 0.08)',
+        border: '1px solid rgba(16, 185, 129, 0.2)',
+        borderRadius: '0.75rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <ShieldCheck size={16} color={COLORS.green} />
+          <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: '700', color: COLORS.green }}>
+            Security v3.0 — Simplified
+          </h4>
         </div>
-      )}
+        <p style={{ fontSize: '0.78rem', color: COLORS.text.secondary, lineHeight: '1.6', margin: 0 }}>
+          App Check has been removed to ensure stable portal operation. Security is enforced via Firestore Security Rules,
+          Firebase Authentication, client-side rate limiting, and session management.
+        </p>
+      </div>
     </div>
   );
 }

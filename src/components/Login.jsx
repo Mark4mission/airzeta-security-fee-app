@@ -40,7 +40,7 @@ function Login() {
       try {
         await initGoogleRedirectResult();
       } catch (err) {
-        console.error('[Login] Redirect result error:', err);
+        console.warn('[Login] Redirect result error:', err.message);
       }
     };
     checkRedirectResult();

@@ -104,7 +104,7 @@ export default function DocumentEdit() {
 
       navigate(`/document-library/doc/${id}`);
     } catch (err) {
-      console.error('[DocEdit]', err);
+      console.warn('[DocEdit]', err.message);
       setError('Failed to save: ' + err.message);
       setIsSubmitting(false);
     }
