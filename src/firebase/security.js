@@ -73,8 +73,11 @@ export const initializeSecurityAppCheck = async (firebaseApp) => {
 
   if (!appCheckInstance) {
     const info = getAppCheckInfo();
-    if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
-      console.warn('[Security] App Check: No site key configured. App Check disabled.');
+    if (info.status === 'disabled') {
+      // App Check intentionally disabled (VITE_DISABLE_APP_CHECK=true or no key)
+      console.log('[Security] App Check: Disabled. Firestore fallback will be used if enforcement is ON.');
+    } else if (!RECAPTCHA_ENTERPRISE_SITE_KEY) {
+      console.warn('[Security] App Check: No site key configured.');
     } else {
       console.error('[Security] App Check: Instance not available despite site key being set!');
     }
