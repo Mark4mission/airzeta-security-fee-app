@@ -83,7 +83,9 @@ export default function SecurityPolicyPage() {
         }
       } catch (err) {
         console.error('[SecurityPolicy] Load error:', err);
+        // On permission error, show default policy with notice
         setPolicy(DEFAULT_POLICY);
+        // Don't block the page — show the default policy content
       } finally {
         setLoading(false);
       }
@@ -212,9 +214,19 @@ export default function SecurityPolicyPage() {
           <h3 style={{ fontSize: '0.85rem', fontWeight: '700', color: COLORS.text.primary, margin: 0 }}>
             Official Policy Document (PDF)
           </h3>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {pdfUrl && (
               <a href={pdfUrl} target="_blank" rel="noopener noreferrer" style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.7rem',
+                background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
+                borderRadius: '0.35rem', color: '#60A5FA', fontSize: '0.72rem', fontWeight: '600',
+                textDecoration: 'none',
+              }}>
+                <Eye size={13} /> View PDF
+              </a>
+            )}
+            {pdfUrl && (
+              <a href={pdfUrl} download={pdfName || 'Security_Policy.pdf'} style={{
                 display: 'flex', alignItems: 'center', gap: '0.3rem', padding: '0.35rem 0.7rem',
                 background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)',
                 borderRadius: '0.35rem', color: '#34D399', fontSize: '0.72rem', fontWeight: '600',
@@ -222,6 +234,11 @@ export default function SecurityPolicyPage() {
               }}>
                 <Download size={13} /> {pdfName || 'Download PDF'}
               </a>
+            )}
+            {!pdfUrl && (
+              <span style={{ fontSize: '0.72rem', color: COLORS.text.light, fontStyle: 'italic', padding: '0.35rem 0' }}>
+                No PDF uploaded yet{isAdmin ? ' — use Upload button to add one' : ' — contact admin to upload'}
+              </span>
             )}
             {isAdmin && (
               <label style={{

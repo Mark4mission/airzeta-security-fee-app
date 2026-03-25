@@ -33,11 +33,33 @@ export const COLLECTIONS = {
 const FALLBACK_BRANCHES = [
   { id: 'HQ', branchName: 'HQ', manager: '', currency: 'KRW', active: true },
   { id: 'ALASU', branchName: 'ALASU', manager: 'Park Joonhyuk', currency: 'USD', active: true },
-  { id: 'TYOSU', branchName: 'TYOSU', manager: 'Yamamoto Kenji', currency: 'JPY', active: true },
-  { id: 'SINSU', branchName: 'SINSU', manager: 'Lim Wei Ling', currency: 'SGD', active: true },
-  { id: 'HKGSU', branchName: 'HKGSU', manager: 'Chan Siu Ming', currency: 'HKD', active: true },
+  { id: 'ANCSU', branchName: 'ANCSU', manager: '', currency: 'USD', active: true },
+  { id: 'ATLSU', branchName: 'ATLSU', manager: '', currency: 'USD', active: true },
   { id: 'BKKSU', branchName: 'BKKSU', manager: 'Pimchanok Srisai', currency: 'THB', active: true },
+  { id: 'BRUSU', branchName: 'BRUSU', manager: '', currency: 'EUR', active: true },
+  { id: 'CANSU', branchName: 'CANSU', manager: '', currency: 'CNY', active: true },
+  { id: 'CTUSU', branchName: 'CTUSU', manager: '', currency: 'CNY', active: true },
+  { id: 'DFWSU', branchName: 'DFWSU', manager: '', currency: 'USD', active: true },
+  { id: 'FRASU', branchName: 'FRASU', manager: '', currency: 'EUR', active: true },
+  { id: 'HANSU', branchName: 'HANSU', manager: '', currency: 'USD', active: true },
+  { id: 'HKGSU', branchName: 'HKGSU', manager: 'Chan Siu Ming', currency: 'HKD', active: true },
+  { id: 'ICNSU', branchName: 'ICNSU', manager: '', currency: 'KRW', active: true },
+  { id: 'KIXSU', branchName: 'KIXSU', manager: '', currency: 'JPY', active: true },
+  { id: 'LAXSU', branchName: 'LAXSU', manager: '', currency: 'USD', active: true },
+  { id: 'LONSU', branchName: 'LONSU', manager: '', currency: 'GBP', active: true },
+  { id: 'MILSU', branchName: 'MILSU', manager: '', currency: 'EUR', active: true },
+  { id: 'NGOSU', branchName: 'NGOSU', manager: '', currency: 'JPY', active: true },
+  { id: 'NYCSU', branchName: 'NYCSU', manager: '', currency: 'USD', active: true },
+  { id: 'ORDSU', branchName: 'ORDSU', manager: '', currency: 'USD', active: true },
+  { id: 'SEASU', branchName: 'SEASU', manager: '', currency: 'USD', active: true },
   { id: 'SFOSF', branchName: 'SFOSF', manager: 'David Kim', currency: 'USD', active: true },
+  { id: 'SHASU', branchName: 'SHASU', manager: '', currency: 'CNY', active: true },
+  { id: 'SINSU', branchName: 'SINSU', manager: 'Lim Wei Ling', currency: 'SGD', active: true },
+  { id: 'TAOSU', branchName: 'TAOSU', manager: '', currency: 'CNY', active: true },
+  { id: 'TSNSU', branchName: 'TSNSU', manager: '', currency: 'CNY', active: true },
+  { id: 'TYOSU', branchName: 'TYOSU', manager: 'Yamamoto Kenji', currency: 'JPY', active: true },
+  { id: 'VIESU', branchName: 'VIESU', manager: '', currency: 'EUR', active: true },
+  { id: 'YNTSU', branchName: 'YNTSU', manager: '', currency: 'CNY', active: true },
 ];
 
 /**
@@ -127,6 +149,13 @@ export const getSecurityCostsByBranch = async (branch, month) => {
       return bTime - aTime;
     });
   } catch (error) {
+    const isPermissionError = error.code === 'permission-denied' || 
+                              error.message?.includes('permission') ||
+                              error.message?.includes('Missing or insufficient');
+    if (isPermissionError) {
+      console.warn('[getSecurityCostsByBranch] Permission denied. Returning empty results.');
+      return [];
+    }
     console.error('Error fetching security costs:', error);
     throw error;
   }
@@ -539,12 +568,9 @@ export const loadSettingsFromFirestore = async () => {
     const branchesSnapshot = await getDocs(collection(db, COLLECTIONS.BRANCH_CODES));
     const branches = branchesSnapshot.docs.map(d => {
       const data = d.data();
-      // name 필드: 문서 ID를 우선 사용 (Settings UI에서 저장할 때 문서 ID = branch name)
-      // 기존 데이터에서 branchName이 "Atlanta" 등 다른 이름일 수 있으므로
-      // 문서 ID를 기본 name으로 사용
       return {
         ...data,
-        name: d.id,  // 문서 ID가 곧 branch name
+        name: d.id,
         manager: data.manager || '',
         currency: data.currency || 'USD',
         paymentMethod: data.paymentMethod || '',
@@ -584,6 +610,25 @@ export const loadSettingsFromFirestore = async () => {
     
     return result;
   } catch (error) {
+    // On permission errors, return fallback branch data so SecurityFeePage can still show branches
+    const isPermissionError = error.code === 'permission-denied' || 
+                              error.message?.includes('permission') ||
+                              error.message?.includes('Missing or insufficient');
+    if (isPermissionError) {
+      console.warn('[Settings] Permission denied loading from Firestore. Returning fallback branches.');
+      const fallbackBranches = FALLBACK_BRANCHES.map(b => ({
+        ...b,
+        name: b.id,
+        paymentMethod: '',
+        branchCode: '',
+      }));
+      return {
+        branches: fallbackBranches,
+        costItems: [],
+        currencies: ['USD', 'EUR', 'KRW', 'JPY', 'SGD', 'HKD', 'THB', 'GBP', 'CNY'],
+        paymentMethods: ['Bank Transfer', 'Credit Card', 'Cash', 'Check', 'Online Payment'],
+      };
+    }
     console.error('[Settings] Firestore 로드 에러:', error);
     throw error;
   }

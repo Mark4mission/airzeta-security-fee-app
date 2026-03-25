@@ -145,6 +145,16 @@ const AIRPORT_COORDS = {
   OKA: { lat: 26.20, lng: 127.65, city: 'Okinawa' },
   ANC: { lat: 61.17, lng: -150.00, city: 'Anchorage' },
   YNT: { lat: 37.66, lng: 120.98, city: 'Yantai' },
+  ALA: { lat: 43.35, lng: 77.04, city: 'Almaty' },
+  DFW: { lat: 32.90, lng: -97.04, city: 'Dallas/Fort Worth' },
+  LON: { lat: 51.47, lng: -0.46, city: 'London' },
+  MIL: { lat: 45.63, lng: 8.72, city: 'Milan' },
+  NYC: { lat: 40.64, lng: -73.78, city: 'New York' },
+  SHA: { lat: 31.14, lng: 121.81, city: 'Shanghai' },
+  TAO: { lat: 36.27, lng: 120.37, city: 'Qingdao' },
+  TSN: { lat: 39.12, lng: 117.35, city: 'Tianjin' },
+  TYO: { lat: 35.76, lng: 140.39, city: 'Tokyo' },
+  CTU: { lat: 30.57, lng: 103.95, city: 'Chengdu' },
 };
 
 // ============================================================
@@ -224,17 +234,33 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
   useEffect(() => {
     if (!branchName) return;
     const loadData = async () => {
-      const snap = await getDoc(doc(db, 'securityLevels', branchName));
-      if (snap.exists()) {
-        const data = snap.data();
-        setLevels(data.levels || []);
-        setActiveLevel(data.activeLevel ?? 0);
-        setSavedActiveLevel(data.activeLevel ?? 0);
-        setActiveSince(data.activeSince || new Date().toISOString().split('T')[0]);
-        setGuidelines(data.guidelines || []);
-        setHistory(data.history || []);
-        setAirportCode(data.airportCode || '');
-      } else {
+      try {
+        const snap = await getDoc(doc(db, 'securityLevels', branchName));
+        if (snap.exists()) {
+          const data = snap.data();
+          setLevels(data.levels || []);
+          setActiveLevel(data.activeLevel ?? 0);
+          setSavedActiveLevel(data.activeLevel ?? 0);
+          setActiveSince(data.activeSince || new Date().toISOString().split('T')[0]);
+          setGuidelines(data.guidelines || []);
+          setHistory(data.history || []);
+          setAirportCode(data.airportCode || '');
+        } else {
+          setLevels([{ name: 'Level 1' }, { name: 'Level 2' }, { name: 'Level 3' }]);
+          setActiveLevel(0);
+          setSavedActiveLevel(0);
+          setActiveSince(new Date().toISOString().split('T')[0]);
+          setGuidelines([
+            { level: 0, action: 'Standard security procedures in effect' },
+            { level: 1, action: 'Enhanced screening and monitoring' },
+            { level: 2, action: 'Maximum screening, restricted access zones' },
+          ]);
+          setHistory([]);
+          setAirportCode('');
+        }
+      } catch (err) {
+        console.warn('[SecurityLevel] Load error for', branchName, ':', err.message);
+        // Show default levels on permission error so branch users aren't stuck
         setLevels([{ name: 'Level 1' }, { name: 'Level 2' }, { name: 'Level 3' }]);
         setActiveLevel(0);
         setSavedActiveLevel(0);
@@ -707,7 +733,10 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
     // Load map data + Firestore data concurrently
     Promise.all([
       fetch('/countries-110m.json').then(r => r.json()).catch(() => null),
-      getDocs(collection(db, 'securityLevels')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, 'securityLevels')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(err => {
+        console.warn('[SecurityLevel] Failed to load security levels:', err.message);
+        return []; // Return empty on permission error — map still shows
+      }),
     ]).then(([topo, data]) => {
       if (topo) {
         try {

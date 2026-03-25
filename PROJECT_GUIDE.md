@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 3.4
+> **Document Version**: 3.5
 > **Last Updated**: 2026-03-25
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -1152,6 +1152,81 @@ The fallback ensures users can register and log in, but full Firestore access re
 - `firestore.rules` — `exists()` guard in `isAdmin()` (from Session 25)
 - `PROJECT_GUIDE.md` — v3.3, Session 26 changelog
 - Build: **0 errors**, 2550 modules, ~15s
+
+---
+
+### 2026-03-25 (Session 27 - Full Branch Restoration & Comprehensive Permission Error Handling v3.5)
+
+#### Problem Summary
+After login, the branch selection screen showed only 7 branches (fallback) instead of the full 28+ station list. Multiple modules crashed or showed infinite loading when Firestore App Check enforcement blocked reads. Specific issues:
+1. **Branch Selection**: Only 7 fallback branches (HQ, ALASU, TYOSU, SINSU, HKGSU, BKKSU, SFOSF) instead of full 28+ list
+2. **Security Level map**: Empty world map with no station markers for branch users
+3. **Security Directive board**: Infinite loading state due to `onSnapshot` permission error without error handler
+4. **Security Policy PDF**: No download button visible for branch-level users (only View existed)
+5. **Security Fee menu**: "Failed to load data." error with no meaningful context; settings load failure cascading
+
+#### Root Cause
+Firebase App Check enforcement on Firestore rejects ALL requests when reCAPTCHA token is invalid/throttled. The previous fallback only covered `getAllBranches()` — all other Firestore calls (`loadSettingsFromFirestore`, `getSecurityCostsByBranch`, `onSnapshot` listeners, `getDoc` for security levels/policy) threw uncaught permission errors.
+
+#### Fixes Applied
+
+1. **Full Branch List Restoration (29 branches)**
+   - Expanded `FALLBACK_BRANCHES` in `collections.js` from 7 to 29 entries matching the requested list:
+     HQ, ALASU, ANCSU, ATLSU, BKKSU, BRUSU, CANSU, CTUSU, DFWSU, FRASU, HANSU, HKGSU, ICNSU, KIXSU, LAXSU, LONSU, MILSU, NGOSU, NYCSU, ORDSU, SEASU, SFOSF, SHASU, SINSU, TAOSU, TSNSU, TYOSU, VIESU, YNTSU
+   - File: `src/firebase/collections.js`
+
+2. **loadSettingsFromFirestore — Permission Fallback**
+   - Added permission-error catch that returns fallback branches + default currencies/paymentMethods
+   - Prevents Security Fee page from showing blank state on App Check failure
+   - File: `src/firebase/collections.js`
+
+3. **getSecurityCostsByBranch — Graceful Empty Return**
+   - On permission-denied, returns `[]` instead of throwing
+   - Prevents "Failed to load data." error in Security Fee cost auto-load
+   - File: `src/firebase/collections.js`
+
+4. **Security Fee autoLoadCostData — Better Error Messages**
+   - Changed "Failed to load data." → contextual messages:
+     - Permission denied: "Data access restricted. Please contact admin..."
+     - Other errors: "Could not load previous data. You can still enter new cost items."
+     - No data: "No previous data for this station/month. Enter new cost items."
+   - File: `src/modules/security-fee/SecurityFeePage.jsx`
+
+5. **Security Level Map — Error Handling for Branch Users**
+   - `AdminWorldMapView`: Added explicit error log to security levels fetch catch
+   - `BranchUserView`: Wrapped `loadData` in try/catch so permission errors show default levels instead of crash
+   - Added 11 new IATA codes to `AIRPORT_COORDS`: ALA, DFW, LON, MIL, NYC, SHA, TAO, TSN, TYO, CTU + expanded mini-map coords
+   - Files: `src/modules/security-level/SecurityLevelPage.jsx`, `src/modules/home/HomePage.jsx`
+
+6. **Bulletin Dashboard — onSnapshot Error Handler**
+   - Added error callback to `onSnapshot()` listener to catch permission-denied
+   - Stops infinite loading spinner and shows empty state instead
+   - File: `src/modules/bulletin/pages/BulletinDashboard.jsx`
+
+7. **Security Policy PDF — Download Button for All Users**
+   - Added separate "View PDF" and "Download PDF" buttons visible to ALL users (not just admin)
+   - Added "No PDF uploaded" placeholder text with role-specific guidance
+   - Policy content loads with default text fallback on permission error
+   - File: `src/modules/security-policy/SecurityPolicyPage.jsx`
+
+8. **HomePage — Graceful Degradation**
+   - Bulletin and SecurityLevel fetch errors now set empty arrays instead of leaving stale state
+   - File: `src/modules/home/HomePage.jsx`
+
+#### Architecture Notes
+- All Firestore read operations across the app now handle `permission-denied` gracefully
+- Pattern: try Firestore → on permission error, return fallback/empty → show meaningful UI message
+- Admin action still required: Firebase Console → App Check → Firestore → Unenforce (or fix reCAPTCHA Enterprise domain)
+
+#### Modified Files
+- `src/firebase/collections.js` — 29 fallback branches, loadSettings/getCosts permission fallback
+- `src/modules/security-fee/SecurityFeePage.jsx` — improved error messages, settings load logging
+- `src/modules/security-level/SecurityLevelPage.jsx` — error handling, new IATA codes
+- `src/modules/security-policy/SecurityPolicyPage.jsx` — PDF download for all users
+- `src/modules/bulletin/pages/BulletinDashboard.jsx` — onSnapshot error handler
+- `src/modules/home/HomePage.jsx` — graceful fetch errors, new IATA coords
+- `PROJECT_GUIDE.md` — v3.5, Session 27
+- Build: **0 errors**, 2550 modules, ~14s
 
 ---
 

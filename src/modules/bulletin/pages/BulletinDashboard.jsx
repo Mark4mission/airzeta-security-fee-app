@@ -66,10 +66,18 @@ export default function BulletinDashboard({ boardType = 'directive' }) {
 
   useEffect(() => {
     const q = query(collection(db, config.collection), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      },
+      (error) => {
+        console.warn('[BulletinDashboard] Firestore listener error:', error.message);
+        // On permission errors, stop loading and show empty state
+        setPosts([]);
+        setLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, [config.collection]);
 

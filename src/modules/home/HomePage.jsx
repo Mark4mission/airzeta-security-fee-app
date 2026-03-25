@@ -54,6 +54,16 @@ const MINI_AIRPORT_COORDS = {
   OKA: { lat: 26.20, lng: 127.65 },
   ANC: { lat: 61.17, lng: -150.00 },
   YNT: { lat: 37.66, lng: 120.98 },
+  ALA: { lat: 43.35, lng: 77.04 },
+  DFW: { lat: 32.90, lng: -97.04 },
+  LON: { lat: 51.47, lng: -0.46 },
+  MIL: { lat: 45.63, lng: 8.72 },
+  NYC: { lat: 40.64, lng: -73.78 },
+  SHA: { lat: 31.14, lng: 121.81 },
+  TAO: { lat: 36.27, lng: 120.37 },
+  TSN: { lat: 39.12, lng: 117.35 },
+  TYO: { lat: 35.76, lng: 140.39 },
+  CTU: { lat: 30.57, lng: 103.95 },
 };
 
 function extractIATA(branchName) {
@@ -442,12 +452,18 @@ function HomePage() {
     // Fetch bulletins
     getDocs(query(collection(db, 'bulletinPosts'), orderBy('createdAt', 'desc'), limit(5)))
       .then(snap => setLatestBulletins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(err => console.warn('[HomePage] Bulletins:', err.message));
+      .catch(err => {
+        console.warn('[HomePage] Bulletins load failed:', err.message);
+        setLatestBulletins([]);
+      });
 
     // Fetch security levels (for mini map)
     getDocs(collection(db, 'securityLevels'))
       .then(snap => setSecurityLevels(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(err => console.warn('[HomePage] SecurityLevels:', err.message));
+      .catch(err => {
+        console.warn('[HomePage] SecurityLevels load failed:', err.message);
+        setSecurityLevels([]);
+      });
 
     // Fetch fee data summary
     const fetchFeeStats = async () => {
