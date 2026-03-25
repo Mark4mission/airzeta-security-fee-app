@@ -61,9 +61,9 @@ const appCheckReady = new Promise((resolve) => {
 });
 
 if (DISABLE_APP_CHECK) {
-  console.warn('[Config] App Check DISABLED via VITE_DISABLE_APP_CHECK=true');
-  console.warn('[Config] If Firestore App Check enforcement is ON in Firebase Console,');
-  console.warn('[Config] Firestore reads/writes will still fail. Fallback branches will be used.');
+  console.log('[Config] App Check: Disabled via VITE_DISABLE_APP_CHECK=true');
+  console.log('[Config] Note: If Firestore App Check enforcement is ON in Firebase Console,');
+  console.log('[Config] Firestore reads/writes may be restricted. Fallback data will be used where available.');
   appCheckReadyResolve(appCheckStatus);
 } else if (RECAPTCHA_SITE_KEY) {
   appCheckStatus = 'initializing';
