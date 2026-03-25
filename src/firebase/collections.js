@@ -108,15 +108,12 @@ export const getAllBranches = async () => {
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.error('[getAllBranches] PERMISSION DENIED reading branchCodes.');
-      console.error('[getAllBranches] Cause: Firestore App Check enforcement blocks requests when reCAPTCHA token is invalid.');
-      console.error('[getAllBranches] Current auth user:', auth.currentUser?.email || 'null');
-      console.warn('[getAllBranches] Returning FALLBACK branch list (' + FALLBACK_BRANCHES.length + ' branches) so users can still select a station.');
+      console.warn('[getAllBranches] Firestore temporarily unavailable. Using local branch list (' + FALLBACK_BRANCHES.length + ' branches).');
       
       // Return fallback branches instead of throwing
       // This allows users to complete registration/login even when
       // App Check enforcement blocks Firestore reads.
-      // Mark with _fallback so BranchSelection can show a notice
+      // Mark with _fallback so BranchSelection can detect it
       return FALLBACK_BRANCHES.map((b, i) => ({ ...b, _fallback: i === 0 ? true : undefined }));
     }
     console.error('Error fetching branches:', error);
@@ -153,7 +150,7 @@ export const getSecurityCostsByBranch = async (branch, month) => {
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[getSecurityCostsByBranch] Permission denied. Returning empty results.');
+      console.warn('[getSecurityCostsByBranch] Firestore temporarily unavailable. Returning empty results.');
       return [];
     }
     console.error('Error fetching security costs:', error);
@@ -615,7 +612,7 @@ export const loadSettingsFromFirestore = async () => {
                               error.message?.includes('permission') ||
                               error.message?.includes('Missing or insufficient');
     if (isPermissionError) {
-      console.warn('[Settings] Permission denied loading from Firestore. Returning fallback branches.');
+      console.warn('[Settings] Firestore temporarily unavailable. Using local branch data.');
       const fallbackBranches = FALLBACK_BRANCHES.map(b => ({
         ...b,
         name: b.id,

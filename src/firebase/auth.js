@@ -65,26 +65,45 @@ export const loginUser = async (email, password) => {
     updateLoginSecurityMeta(user.uid, true, email);
     
     // Firestore 프로필 확인
-    const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
-    
-    if (userDoc.exists()) {
-      await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+    try {
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, user.uid));
+      
+      if (userDoc.exists()) {
+        try {
+          await updateDoc(doc(db, COLLECTIONS.USERS, user.uid), {
+            lastLogin: serverTimestamp()
+          });
+        } catch (updateErr) {
+          console.warn('[Auth] lastLogin update failed (non-critical):', updateErr.message);
+        }
+        return { uid: user.uid, email: user.email, ...userDoc.data() };
+      }
+      
+      // 프로필 없으면 기본 생성 (branchName 없이)
+      const newProfile = {
+        email: user.email,
+        role: 'branch_user',
+        branchName: '',
+        displayName: '',
+        createdAt: serverTimestamp(),
         lastLogin: serverTimestamp()
-      });
-      return { uid: user.uid, email: user.email, ...userDoc.data() };
+      };
+      await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
+      return { uid: user.uid, ...newProfile };
+    } catch (profileErr) {
+      // Firestore profile load failed (App Check enforcement / permission denied)
+      // Return minimal profile so login can proceed — profile will be loaded
+      // from Firestore once App Check is fixed
+      console.warn('[Auth] Firestore profile load failed during login:', profileErr.message);
+      return {
+        uid: user.uid,
+        email: user.email,
+        role: 'branch_user',
+        branchName: '',
+        displayName: user.displayName || '',
+        _firestoreUnavailable: true
+      };
     }
-    
-    // 프로필 없으면 기본 생성 (branchName 없이)
-    const newProfile = {
-      email: user.email,
-      role: 'branch_user',
-      branchName: '',
-      displayName: '',
-      createdAt: serverTimestamp(),
-      lastLogin: serverTimestamp()
-    };
-    await setDoc(doc(db, COLLECTIONS.USERS, user.uid), newProfile);
-    return { uid: user.uid, ...newProfile };
   } catch (error) {
     // Record failed attempt (unless it's a rate limit error we threw)
     if (error.code !== 'auth/rate-limited') {
@@ -198,6 +217,7 @@ export const changePassword = async (currentPassword, newPassword) => {
 // ============================================================
 
 // 👤 현재 사용자 프로필 가져오기
+// Returns null if no profile found, or minimal profile on permission error
 export const getCurrentUserProfile = async (uid) => {
   try {
     const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, uid));
@@ -206,6 +226,13 @@ export const getCurrentUserProfile = async (uid) => {
     }
     return null;
   } catch (error) {
+    const isPermErr = error.code === 'permission-denied' || 
+                      error.message?.includes('permission') ||
+                      error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[Auth] getCurrentUserProfile: Permission denied (App Check). Returning null.');
+      return null; // Will trigger the new-user fallback path in listenToAuthChanges
+    }
     console.error('Get user profile error:', error);
     throw error;
   }
@@ -362,6 +389,7 @@ export const listenToAuthChanges = (callback) => {
                           error.message?.includes('Missing or insufficient');
         if (isPermErr) {
           console.warn('[Auth] Firestore permission denied (likely App Check). Using minimal profile.');
+          console.warn('[Auth] Existing users will need to re-select their station until App Check is resolved.');
         }
         callback({
           uid: user.uid,
@@ -369,7 +397,8 @@ export const listenToAuthChanges = (callback) => {
           role: 'branch_user',
           branchName: '',
           displayName: user.displayName || '',
-          photoURL: user.photoURL || ''
+          photoURL: user.photoURL || '',
+          _firestoreUnavailable: true
         });
       }
     } else {

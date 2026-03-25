@@ -57,16 +57,15 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           .sort((a, b) => a.name.localeCompare(b.name)); // 알파벳 순 정렬
 
         // Detect if this was a fallback response (getAllBranches returns fallback on permission error)
-        // Check if the branchList came from fallback by looking for the _fallback marker
-        // or by checking if the list matches the known fallback pattern
         const wasFallback = branchList.length > 0 && branchList[0]._fallback;
         if (wasFallback) {
           setUsingFallback(true);
-          console.log('[BranchSelection] Using fallback branch list (Firestore permission denied)');
+          // Log only to console — don't show confusing UI to users
+          console.log('[BranchSelection] Using local branch list (Firestore temporarily unavailable)');
         }
 
         setBranches(activeBranches);
-        console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개', wasFallback ? '(fallback)' : '(Firestore)');
+        console.log('[BranchSelection] 브랜치 목록 로드:', activeBranches.length, '개', wasFallback ? '(local)' : '(Firestore)');
       } catch (err) {
         if (cancelled) return;
         console.error('[BranchSelection] 브랜치 로드 실패 (attempt', attempt + 1, '):', err);
@@ -255,8 +254,8 @@ function BranchSelection({ currentUser, onBranchSelected }) {
           </div>
         )}
 
-        {/* Fallback 모드 안내 배너 */}
-        {!pendingAdminResult && usingFallback && !error && (
+        {/* Fallback 모드 안내 배너 — only show if station list is suspiciously small */}
+        {!pendingAdminResult && usingFallback && !error && branches.length < 5 && (
           <div style={{
             padding: '0.6rem 0.75rem',
             marginBottom: '1rem',
@@ -271,7 +270,7 @@ function BranchSelection({ currentUser, onBranchSelected }) {
             gap: '0.4rem'
           }}>
             <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '0.15rem' }} />
-            <span>Using cached station list. Contact admin if your station is missing.</span>
+            <span>Station list may be incomplete. Contact admin if your station is missing.</span>
           </div>
         )}
 

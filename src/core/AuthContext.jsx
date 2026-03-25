@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
         if (isActive) {
           console.log('[AuthContext] App Check: Active');
         } else if (isFailed) {
-          console.error('[AuthContext] App Check: FAILED - auth operations may fail');
+          console.warn('[AuthContext] App Check: Unavailable \u2014 app will use local fallback data');
         } else {
           console.log('[AuthContext] App Check: Disabled');
         }

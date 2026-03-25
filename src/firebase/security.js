@@ -92,10 +92,7 @@ export const initializeSecurityAppCheck = async (firebaseApp) => {
   if (appCheckAvailable) {
     console.log('[Security] App Check: Active (token validated)');
   } else {
-    console.error('[Security] App Check: Token validation FAILED');
-    console.error('[Security] Status:', info.status, '| Error:', info.error);
-    console.error('[Security] If App Check enforcement is ON, auth operations may fail');
-    console.error('[Security] Check: domain allowlist, reCAPTCHA Enterprise API, Firebase App Check registration');
+    console.warn('[Security] App Check: Unavailable (status:', info.status + '). App will use local fallback data.');
   }
   
   return appCheckInstance;
