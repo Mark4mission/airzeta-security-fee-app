@@ -43,6 +43,13 @@ const app = initializeApp(firebaseConfig);
 // does NOT indicate whether it is Enterprise or not.
 
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY || '';
+// Emergency kill switch: set VITE_DISABLE_APP_CHECK=true to skip App Check entirely.
+// Use this when reCAPTCHA Enterprise is throttled (403 for 24h) or misconfigured.
+// NOTE: Even with App Check disabled client-side, if Firestore App Check enforcement
+// is ON in Firebase Console, Firestore will still reject requests server-side.
+// To fully fix: Firebase Console > App Check > Firestore > Unenforce
+const DISABLE_APP_CHECK = import.meta.env.VITE_DISABLE_APP_CHECK === 'true';
+
 let appCheckInstance = null;
 let appCheckStatus = 'disabled'; // 'disabled' | 'initializing' | 'active' | 'failed'
 let appCheckError = null;
@@ -53,7 +60,12 @@ const appCheckReady = new Promise((resolve) => {
   appCheckReadyResolve = resolve;
 });
 
-if (RECAPTCHA_SITE_KEY) {
+if (DISABLE_APP_CHECK) {
+  console.warn('[Config] App Check DISABLED via VITE_DISABLE_APP_CHECK=true');
+  console.warn('[Config] If Firestore App Check enforcement is ON in Firebase Console,');
+  console.warn('[Config] Firestore reads/writes will still fail. Fallback branches will be used.');
+  appCheckReadyResolve(appCheckStatus);
+} else if (RECAPTCHA_SITE_KEY) {
   appCheckStatus = 'initializing';
   console.log('[Config] App Check: Initializing with reCAPTCHA Enterprise key', RECAPTCHA_SITE_KEY.substring(0, 8) + '...');
   

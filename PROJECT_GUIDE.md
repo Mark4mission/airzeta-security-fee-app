@@ -1,6 +1,6 @@
 # AirZeta Security Portal - Project Guide
 
-> **Document Version**: 3.3
+> **Document Version**: 3.4
 > **Last Updated**: 2026-03-25
 > **Project Name**: AirZeta Station Security Portal (webapp)
 > **Repository**: https://github.com/Mark4mission/airzeta-security-fee-app
@@ -1151,6 +1151,60 @@ The fallback ensures users can register and log in, but full Firestore access re
 - `src/components/BranchSelection.jsx` — Fallback detection, simplified error UI, "Using cached station list" banner
 - `firestore.rules` — `exists()` guard in `isAdmin()` (from Session 25)
 - `PROJECT_GUIDE.md` — v3.3, Session 26 changelog
+- Build: **0 errors**, 2550 modules, ~15s
+
+---
+
+### 2026-03-25 (Session 26b - App Check Kill Switch & Deployment Fix v3.4)
+
+#### Problem: Fallback Code Not Deployed + reCAPTCHA 403 Throttle
+
+After Session 26 PR #83 was merged, **Vercel did not auto-deploy** the new code. The production site still served the old JS bundle (`index-DJz-z159.js`) without the fallback branch logic.
+
+Additionally, the user modified the reCAPTCHA Enterprise key settings in GCP Console (changed "도메인 확인 사용 중지" switch), which triggered a **24-hour 403 throttle** from Google:
+```
+AppCheck: 403 error. Attempts allowed again after 01d:00m:00s (appCheck/initial-throttle)
+```
+
+**Key finding**: Production Firestore rules are STILL `allow read, write: if true` (since 2026-02-17). Therefore, the `Missing or insufficient permissions` error is caused **entirely by Firestore App Check enforcement**, not by security rules.
+
+#### Fixes Applied
+
+1. **NEW: App Check emergency kill switch (`VITE_DISABLE_APP_CHECK`)**
+   - Set `VITE_DISABLE_APP_CHECK=true` in Vercel env vars to skip App Check initialization entirely
+   - Prevents 403 throttle errors and reCAPTCHA loading overhead
+   - When disabled, App Check token is not sent with Firestore requests
+   - **If Firestore App Check enforcement is OFF** → Firestore works normally ✅
+   - **If Firestore App Check enforcement is ON** → Firestore still blocked, fallback branches used
+   - **File**: `src/firebase/config.js`
+
+2. **PR #83 merged to main** for Vercel auto-deploy trigger
+
+#### Admin Checklist (Complete these steps in Firebase Console)
+
+**Step 1 (CRITICAL): Disable Firestore App Check enforcement**
+1. Go to https://console.firebase.google.com/project/airzeta-security-system/appcheck
+2. Click "APIs" tab
+3. Find **"Cloud Firestore"** in the list
+4. Toggle enforcement to **OFF** (unenforce)
+5. This allows Firestore to accept requests without valid App Check tokens
+
+**Step 2: Add `VITE_DISABLE_APP_CHECK=true` to Vercel env vars**
+1. Go to https://vercel.com → Project "airzeta-security-fee-app" → Settings → Environment Variables
+2. Add: `VITE_DISABLE_APP_CHECK` = `true`
+3. Redeploy (or it auto-deploys on next push)
+4. This prevents the 403 throttle from reCAPTCHA Enterprise
+
+**Step 3 (Later, when reCAPTCHA throttle expires): Re-enable App Check**
+1. Wait 24 hours for reCAPTCHA throttle to expire
+2. Verify GCP Console → reCAPTCHA Enterprise key → `airzeta-security-fee-app.vercel.app` is in allowed domains
+3. Remove `VITE_DISABLE_APP_CHECK` env var from Vercel
+4. Redeploy
+5. Re-enable Firestore App Check enforcement
+
+#### Modified Files
+- `src/firebase/config.js` — `VITE_DISABLE_APP_CHECK` kill switch
+- `PROJECT_GUIDE.md` — v3.4, Session 26b, admin checklist
 - Build: **0 errors**, 2550 modules, ~15s
 
 ---
