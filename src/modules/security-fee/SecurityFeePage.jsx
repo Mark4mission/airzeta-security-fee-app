@@ -145,8 +145,10 @@ function SecurityFeePage() {
           if (firestoreSettings.currencies?.length > 0) merged.currencies = firestoreSettings.currencies;
           if (firestoreSettings.paymentMethods?.length > 0) merged.paymentMethods = firestoreSettings.paymentMethods;
           setSettings(merged);
+          console.log('[SecurityFee] Settings loaded:', merged.branches.length, 'branches');
         } catch (error) {
           console.error('[SecurityFee] Settings load failed:', error);
+          // Settings load failed but we can still use DEFAULT_SETTINGS or localStorage cache
         }
       }
     };
@@ -276,10 +278,19 @@ function SecurityFeePage() {
         setTimeout(() => setAutoLoadMessage(''), 4000);
       } else {
         resetCostItems();
-        setAutoLoadMessage('No input available to load for this station/month.');
+        setAutoLoadMessage('No previous data for this station/month. Enter new cost items.');
       }
     } catch (error) {
-      setAutoLoadMessage('Failed to load data.');
+      console.warn('[SecurityFee] autoLoadCostData error:', error.message);
+      resetCostItems();
+      const isPermissionError = error.code === 'permission-denied' || 
+                                error.message?.includes('permission') ||
+                                error.message?.includes('Missing or insufficient');
+      if (isPermissionError) {
+        setAutoLoadMessage('Data access restricted. Please contact admin to check Firebase App Check settings.');
+      } else {
+        setAutoLoadMessage('Could not load previous data. You can still enter new cost items.');
+      }
     }
   }, [currency, defaultPaymentMethod]);
 
