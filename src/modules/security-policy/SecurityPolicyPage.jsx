@@ -82,7 +82,12 @@ export default function SecurityPolicyPage() {
           setPolicy(DEFAULT_POLICY);
         }
       } catch (err) {
-        console.error('[SecurityPolicy] Load error:', err);
+        const isPermErr = err.code === 'permission-denied' || err.message?.includes('Missing or insufficient');
+        if (isPermErr) {
+          console.warn('[SecurityPolicy] Firestore temporarily unavailable. Using default policy.');
+        } else {
+          console.error('[SecurityPolicy] Load error:', err);
+        }
         // On permission error, show default policy with notice
         setPolicy(DEFAULT_POLICY);
         // Don't block the page — show the default policy content

@@ -1125,7 +1125,9 @@ function SecurityPledgeCard() {
         // Save successful data to cache
         saveCache({ total: totalCount, recentSigners: recentSigners.map(r => ({ name: r.name, dept: r.dept, date: r.date?.toISOString() })), byDept });
       } catch (err) {
-        console.error('[Pledge] Sheet fetch error:', err);
+        // Google Sheets fetch often fails due to CORS (login redirect) — this is expected.
+        // Fall back to cache or hardcoded data silently.
+        console.warn('[Pledge] Sheet fetch failed (CORS/auth redirect expected):', err.message);
         // Try to load from cache first
         const cached = loadCache();
         if (cached && cached.total > 0) {

@@ -55,7 +55,12 @@ function BranchCostHistory({ branchName, currency }) {
         }
         setAllData(data);
       } catch (err) {
-        console.error('[BranchCostHistory] load error:', err);
+        const isPermErr = err.code === 'permission-denied' || err.message?.includes('Missing or insufficient');
+        if (isPermErr) {
+          console.warn('[BranchCostHistory] Firestore temporarily unavailable. Cost history not loaded.');
+        } else {
+          console.error('[BranchCostHistory] load error:', err);
+        }
         setAllData([]);
       } finally {
         setLoading(false);

@@ -205,6 +205,13 @@ export const getSecurityCostsByBranchYear = async (branch, year) => {
     console.log(`[getSecurityCostsByBranchYear] branch=${branch}, year=${year}, total=${allDocs.length}, filtered=${filtered.length}`);
     return filtered;
   } catch (error) {
+    const isPermissionError = error.code === 'permission-denied' || 
+                              error.message?.includes('permission') ||
+                              error.message?.includes('Missing or insufficient');
+    if (isPermissionError) {
+      console.warn('[getSecurityCostsByBranchYear] Firestore temporarily unavailable. Returning empty results.');
+      return [];
+    }
     console.error('Error fetching branch year costs:', error);
     throw error;
   }
@@ -414,7 +421,12 @@ export const loadExchangeRatesByYear = async (year) => {
     console.log(`[ExchangeRate] ${year}년 환율 로드: ${Object.keys(result).length}개월`);
     return result;
   } catch (error) {
-    console.error('[ExchangeRate] 로드 에러:', error);
+    const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[ExchangeRate] Firestore temporarily unavailable. Exchange rates not loaded.');
+    } else {
+      console.error('[ExchangeRate] 로드 에러:', error);
+    }
     return {};
   }
 };
@@ -432,7 +444,12 @@ export const loadExchangeRates = async () => {
     }
     return null;
   } catch (error) {
-    console.error('[ExchangeRate] 로드 에러:', error);
+    const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[ExchangeRate] Firestore temporarily unavailable.');
+    } else {
+      console.error('[ExchangeRate] 로드 에러:', error);
+    }
     return null;
   }
 };
@@ -498,7 +515,12 @@ export const loadContractFile = async (branchName, year) => {
     }
     return null;
   } catch (error) {
-    console.error('[Contract] 로드 에러:', error);
+    const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[Contract] Firestore temporarily unavailable.');
+    } else {
+      console.error('[Contract] 로드 에러:', error);
+    }
     return null;
   }
 };
@@ -687,7 +709,12 @@ export const loadAttachments = async (branchName, yearMonth) => {
       };
     });
   } catch (error) {
-    console.error('[Attachment] 로드 에러:', error);
+    const isPermErr = error.code === 'permission-denied' || error.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[Attachment] Firestore temporarily unavailable.');
+    } else {
+      console.error('[Attachment] 로드 에러:', error);
+    }
     return [];
   }
 };

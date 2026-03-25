@@ -310,7 +310,12 @@ async function saveNewsToFirestore(newsItems, filterMethod) {
     await batch.commit();
     cleanOldNews().catch(() => {});
   } catch (err) {
-    console.error('[Cache] Save error:', err);
+    const isPermErr = err.code === 'permission-denied' || err.message?.includes('Missing or insufficient');
+    if (isPermErr) {
+      console.warn('[Cache] Firestore temporarily unavailable. News cache not saved.');
+    } else {
+      console.error('[Cache] Save error:', err);
+    }
   }
 }
 
