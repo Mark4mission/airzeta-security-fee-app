@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../firebase/config';
+import { db, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { FolderOpen, Plus, Clock, Search, Eye, Pin, Lock, Users, Download } from 'lucide-react';
 
@@ -34,19 +34,22 @@ export default function DocumentDashboard() {
   const userRole = currentUser?.role || 'branch_user';
 
   useEffect(() => {
-    const q = query(collection(db, 'documentLibrary'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q,
-      (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setDocuments(docs);
-        setLoading(false);
-      },
-      (error) => {
-        console.warn('[DocumentDashboard] Firestore listener error:', error.message);
-        setDocuments([]);
-        setLoading(false);
-      }
-    );
+    let unsubscribe = () => {};
+    waitForFirestoreReady().then(() => {
+      const q = query(collection(db, 'documentLibrary'), orderBy('createdAt', 'desc'));
+      unsubscribe = onSnapshot(q,
+        (snapshot) => {
+          const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setDocuments(docs);
+          setLoading(false);
+        },
+        (error) => {
+          console.warn('[DocumentDashboard] Firestore listener error:', error.message);
+          setDocuments([]);
+          setLoading(false);
+        }
+      );
+    });
     return () => unsubscribe();
   }, []);
 

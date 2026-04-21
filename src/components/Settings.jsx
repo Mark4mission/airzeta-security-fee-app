@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Building2, DollarSign, Globe, CreditCard, Users, Edit2, Shield, UserPlus, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { collection, getDocs, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth } from '../firebase/config';
+import { db, auth, waitForFirestoreReady } from '../firebase/config';
 import { COLLECTIONS, saveSettingsToFirestore } from '../firebase/collections';
 import { deleteUserProfile, approvePendingAdmin, rejectPendingAdmin } from '../firebase/auth';
 
@@ -66,6 +66,7 @@ function Settings({ settings, onSave, onClose }) {
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
+      await waitForFirestoreReady();
       const querySnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
       const userList = querySnapshot.docs.map(doc => ({
         id: doc.id,

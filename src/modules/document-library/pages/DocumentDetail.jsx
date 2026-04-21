@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
-import { db } from '../../../firebase/config';
+import { db, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import {
   ArrowLeft, Download, Trash2, Edit, Pin, Lock, Users, FileText,
@@ -38,6 +38,7 @@ export default function DocumentDetail() {
 
   useEffect(() => {
     const fetchDocument = async () => {
+      await waitForFirestoreReady();
       const docSnap = await getDoc(doc(db, 'documentLibrary', id));
       if (docSnap.exists()) {
         setDocument({ id: docSnap.id, ...docSnap.data() });

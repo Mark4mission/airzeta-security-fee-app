@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, deleteDoc, arrayUnion, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, increment } from 'firebase/firestore';
-import { db } from '../../../firebase/config';
+import { db, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import DOMPurify from 'dompurify';
 import { useReactToPrint } from 'react-to-print';
@@ -122,6 +122,7 @@ export default function PostDetail({ boardType = 'directive' }) {
 
   useEffect(() => {
     const fetchPost = async () => {
+      await waitForFirestoreReady();
       const docSnap = await getDoc(doc(db, collectionName, id));
       if (docSnap.exists()) {
         const data = { id: docSnap.id, ...docSnap.data() };

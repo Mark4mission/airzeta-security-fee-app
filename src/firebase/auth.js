@@ -20,7 +20,7 @@ import {
   collection,
   getDocs
 } from 'firebase/firestore';
-import { auth, db } from './config';
+import { auth, db, appCheckReady } from './config';
 import { COLLECTIONS } from './collections';
 import {
   checkLoginRateLimit,
@@ -51,6 +51,9 @@ export const loginUser = async (email, password) => {
     
     recordLoginAttempt(true);
     logSecurityEvent(SECURITY_EVENTS.LOGIN_SUCCESS, { email: user.email });
+    
+    // Wait for App Check token before Firestore profile read
+    try { await appCheckReady; } catch (_) { /* non-fatal */ }
     
     // Firestore 프로필 확인
     try {
@@ -292,6 +295,11 @@ export const listenToAuthChanges = (callback) => {
   return onAuthStateChanged(auth, async (user) => {
     if (user) {
       console.log('[Auth] onAuthStateChanged: 사용자 감지됨:', user.email);
+      
+      // Wait for App Check token before accessing Firestore
+      // Without this, the first profile read fails with permission-denied
+      try { await appCheckReady; } catch (_) { /* non-fatal */ }
+      
       try {
         let profile = await getCurrentUserProfile(user.uid);
         

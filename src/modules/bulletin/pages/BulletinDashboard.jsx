@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../firebase/config';
+import { db, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { FileText, Plus, Clock, Search, Filter, Eye, MessageCircle } from 'lucide-react';
 
@@ -65,19 +65,23 @@ export default function BulletinDashboard({ boardType = 'directive' }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const q = query(collection(db, config.collection), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        setLoading(false);
-      },
-      (error) => {
-        console.warn('[BulletinDashboard] Firestore listener error:', error.message);
-        // On permission errors, stop loading and show empty state
-        setPosts([]);
-        setLoading(false);
-      }
-    );
+    let unsubscribe = () => {};
+    // Wait for App Check token before subscribing to Firestore
+    waitForFirestoreReady().then(() => {
+      const q = query(collection(db, config.collection), orderBy('createdAt', 'desc'));
+      unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          setLoading(false);
+        },
+        (error) => {
+          console.warn('[BulletinDashboard] Firestore listener error:', error.message);
+          // On permission errors, stop loading and show empty state
+          setPosts([]);
+          setLoading(false);
+        }
+      );
+    });
     return () => unsubscribe();
   }, [config.collection]);
 

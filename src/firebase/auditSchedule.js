@@ -15,7 +15,7 @@
  * All operations require authentication.
  */
 
-import { db, auth } from './config';
+import { db, auth, appCheckReady } from './config';
 import {
   collection, addDoc, getDocs, getDoc, setDoc, updateDoc, deleteDoc,
   doc, query, where, orderBy, limit, serverTimestamp
@@ -35,6 +35,7 @@ const AUDIT_FILES_COLLECTION = 'auditScheduleFiles';
 // ============================================================
 
 const ensureAuth = async () => {
+  try { await appCheckReady; } catch (_) { /* non-fatal */ }
   if (auth.currentUser) return auth.currentUser;
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Auth timeout')), 10000);

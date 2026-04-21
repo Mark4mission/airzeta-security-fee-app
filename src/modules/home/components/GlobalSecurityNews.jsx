@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, query, orderBy, limit, getDocs, doc, setDoc, getDoc, writeBatch, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../firebase/config';
+import { db, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { ShieldCheck, PlaneTakeoff, ExternalLink, AlertTriangle, Globe, RefreshCw, Loader, Sparkles, Search, ChevronRight } from 'lucide-react';
 
@@ -233,6 +233,7 @@ const CACHE_HOURS = 20;
 
 async function getCachedNews() {
   try {
+    await waitForFirestoreReady();
     const newsRef = collection(db, 'securityNews');
     const q = query(newsRef, orderBy('createdAt', 'desc'), limit(6));
     const snapshot = await getDocs(q);

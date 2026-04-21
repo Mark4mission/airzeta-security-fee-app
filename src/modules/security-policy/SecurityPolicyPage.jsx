@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../firebase/config';
+import { db, storage, waitForFirestoreReady } from '../../firebase/config';
 import { useAuth } from '../../core/AuthContext';
 import { FileText, Save, Edit, Download, Upload, CheckCircle, Printer, Eye } from 'lucide-react';
 import { useReactToPrint } from 'react-to-print';
@@ -72,6 +72,7 @@ export default function SecurityPolicyPage() {
   useEffect(() => {
     const load = async () => {
       try {
+        await waitForFirestoreReady();
         const snap = await getDoc(doc(db, 'systemConfig', 'securityPolicy'));
         if (snap.exists()) {
           const data = snap.data();

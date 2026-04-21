@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, getDocs, collection, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../../firebase/config';
+import { db, storage, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { ArrowLeft, AlertCircle, X, Paperclip, UploadCloud, Pin, Lock, Users, ChevronDown } from 'lucide-react';
 
@@ -42,6 +42,7 @@ export default function DocumentEdit() {
 
   useEffect(() => {
     const fetchDoc = async () => {
+      await waitForFirestoreReady();
       const docSnap = await getDoc(doc(db, 'documentLibrary', id));
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -62,7 +63,7 @@ export default function DocumentEdit() {
 
   useEffect(() => {
     if (isAdmin) {
-      getDocs(collection(db, 'branchCodes')).then(snap => {
+      waitForFirestoreReady().then(() => getDocs(collection(db, 'branchCodes'))).then(snap => {
         setAllBranches(snap.docs.map(d => d.id));
       });
     }
