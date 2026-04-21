@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../../firebase/config';
+import { db, storage, waitForFirestoreReady } from '../../../firebase/config';
 import DOMPurify from 'dompurify';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill, { Quill } from 'react-quill-new';

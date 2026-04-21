@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, addDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../../firebase/config';
+import { db, storage, waitForFirestoreReady } from '../../../firebase/config';
 import { useAuth } from '../../../core/AuthContext';
 import { ArrowLeft, UploadCloud, AlertCircle, X, Paperclip, Pin, Lock, Users, ChevronDown } from 'lucide-react';
 
@@ -50,7 +50,7 @@ export default function DocumentUpload() {
   // Load branches for admin IATA selector
   useEffect(() => {
     if (isAdmin) {
-      getDocs(collection(db, 'branchCodes')).then(snap => {
+      waitForFirestoreReady().then(() => getDocs(collection(db, 'branchCodes'))).then(snap => {
         const branches = snap.docs.map(d => d.id);
         setAllBranches(branches);
         if (branches.length > 0 && !iataCode) {

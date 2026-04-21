@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../../firebase/config';
+import { db, storage, waitForFirestoreReady } from '../../../firebase/config';
 import DOMPurify from 'dompurify';
 import { useAuth } from '../../../core/AuthContext';
 import ReactQuill, { Quill } from 'react-quill-new';
@@ -126,7 +126,7 @@ export default function PostEdit({ boardType = 'directive' }) {
   ];
 
   useEffect(() => {
-    getDoc(doc(db, collectionName, id)).then(snap => {
+    waitForFirestoreReady().then(() => getDoc(doc(db, collectionName, id))).then(snap => {
       if (snap.exists()) {
         setTitle(snap.data().title);
         setContent(snap.data().content);

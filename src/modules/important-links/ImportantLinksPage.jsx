@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { db, waitForFirestoreReady } from '../../firebase/config';
 import { useAuth } from '../../core/AuthContext';
 import { Link2, Plus, Trash2, Edit, ExternalLink, Globe2, X, Save, Loader, Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -91,6 +91,7 @@ export default function ImportantLinksPage() {
 
   const loadLinks = async () => {
     try {
+      await waitForFirestoreReady();
       const snap = await getDocs(collection(db, 'importantLinks'));
       setLinks(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
     } catch (err) {

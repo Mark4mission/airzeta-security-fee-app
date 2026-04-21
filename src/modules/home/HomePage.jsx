@@ -6,7 +6,7 @@ import * as topojson from 'topojson-client';
 import { QRCodeSVG } from 'qrcode.react';
 import GlobalSecurityNews from './components/GlobalSecurityNews';
 import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { db, waitForFirestoreReady } from '../../firebase/config';
 import { getUpcomingAudits } from '../../firebase/auditSchedule';
 
 const COLORS = {
@@ -449,19 +449,23 @@ function HomePage() {
     // Guard: only fetch data when user is authenticated
     if (!currentUser) return;
 
-    // Fetch bulletins — silently handle permission errors
-    getDocs(query(collection(db, 'bulletinPosts'), orderBy('createdAt', 'desc'), limit(5)))
-      .then(snap => setLatestBulletins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(() => setLatestBulletins([]));
+    // Wait for App Check token before any Firestore reads
+    waitForFirestoreReady().then(() => {
+      // Fetch bulletins — silently handle permission errors
+      getDocs(query(collection(db, 'bulletinPosts'), orderBy('createdAt', 'desc'), limit(5)))
+        .then(snap => setLatestBulletins(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+        .catch(() => setLatestBulletins([]));
 
-    // Fetch security levels (for mini map) — silently handle permission errors
-    getDocs(collection(db, 'securityLevels'))
-      .then(snap => setSecurityLevels(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-      .catch(() => setSecurityLevels([]));
+      // Fetch security levels (for mini map) — silently handle permission errors
+      getDocs(collection(db, 'securityLevels'))
+        .then(snap => setSecurityLevels(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+        .catch(() => setSecurityLevels([]));
+    });
 
     // Fetch fee data summary — silently handle permission errors
     const fetchFeeStats = async () => {
       try {
+        await waitForFirestoreReady();
         const now = new Date();
         const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const lastDate = new Date(now.getFullYear(), now.getMonth(), 0);

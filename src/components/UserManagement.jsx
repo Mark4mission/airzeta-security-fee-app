@@ -7,7 +7,7 @@ import {
   createUser 
 } from '../firebase/auth';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db, waitForFirestoreReady } from '../firebase/config';
 
 const COLORS = {
   primary: '#1B3A7D',

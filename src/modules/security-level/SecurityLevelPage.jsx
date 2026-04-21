@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { collection, doc, getDoc, setDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase/config';
+import { db, waitForFirestoreReady } from '../../firebase/config';
 import { useAuth } from '../../core/AuthContext';
 import { ShieldAlert, Plus, Trash2, Save, Calendar, AlertTriangle, CheckCircle, Globe2, Info, History, Palette, ChevronDown, ChevronUp, X, MapPin, ArrowLeft, Edit3, Eye, Plane } from 'lucide-react';
 import * as topojson from 'topojson-client';
@@ -235,6 +235,7 @@ function BranchUserView({ currentUser, stationId, onBack, isAdminEditing }) {
     if (!branchName) return;
     const loadData = async () => {
       try {
+        await waitForFirestoreReady();
         const snap = await getDoc(doc(db, 'securityLevels', branchName));
         if (snap.exists()) {
           const data = snap.data();
@@ -730,10 +731,10 @@ function AdminWorldMapView({ currentUser, onEditStation, isAdmin }) {
   }, [zoom, pan]);
 
   useEffect(() => {
-    // Load map data + Firestore data concurrently
+    // Load map data + Firestore data concurrently (wait for App Check first)
     Promise.all([
       fetch('/countries-110m.json').then(r => r.json()).catch(() => null),
-      getDocs(collection(db, 'securityLevels')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      waitForFirestoreReady().then(() => getDocs(collection(db, 'securityLevels'))).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
     ]).then(([topo, data]) => {
       if (topo) {
         try {

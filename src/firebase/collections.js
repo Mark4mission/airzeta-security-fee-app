@@ -1,4 +1,4 @@
-import { db } from './config';
+import { db, appCheckReady } from './config';
 import { auth } from './config';
 import { 
   collection, 
@@ -86,11 +86,18 @@ const waitForAuth = () => {
  * @throws {Error} If user is not authenticated
  */
 const ensureAuthenticated = async () => {
+  // 1. Wait for App Check token to be ready (prevents permission-denied on
+  //    the very first Firestore call after page load when App Check is enforced)
+  try {
+    await appCheckReady;
+  } catch (_) { /* token fetch failure is non-fatal */ }
+
+  // 2. Wait for Firebase Auth user
   const user = await waitForAuth();
   if (!user) {
     throw new Error('User must be authenticated to access this resource');
   }
-  // Ensure the auth token is fresh and available for Firestore operations.
+  // 3. Ensure the auth token is fresh and available for Firestore operations.
   // Without this, rapid Firestore reads immediately after auth state change
   // may fail with permission-denied because the token hasn't propagated.
   try {
